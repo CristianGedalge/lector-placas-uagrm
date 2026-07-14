@@ -1,0 +1,22 @@
+# Backlog
+
+- `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
+- `AI-001` | `done` | Prioridad `alta` | Confirmar y corregir el uso real de `supervision` dentro de la pipeline | Dependencias: ninguna
+- `AI-002` | `done` | Prioridad `alta` | Preparar fallback/migracion a YOLO local sin romper Roboflow Cloud | Dependencias: `DATA-001`
+- `DATA-001` | `done` | Prioridad `alta` | Confirmar `train/`, `valid/`, `test/` y `data.yaml` compatibles con la estructura YOLO | Dependencias: ninguna
+- `AI-003` | `blocked` | Prioridad `alta` | Entrenar y verificar `ml/models/best.pt` para reemplazar Roboflow Cloud | Dependencias: `DATA-001`
+- `BACK-001` | `done` | Prioridad `alta` | Validar formato de placa en backend antes de registrar vehiculo | Dependencias: ninguna
+- `BACK-002` | `done` | Prioridad `media` | Ejecutar pipeline sincrono fuera del event loop principal | Dependencias: ninguna
+- `SEC-001` | `done` | Prioridad `alta` | Eliminar secretos hardcodeados de defaults y documentar `.env.example` | Dependencias: ninguna
+- `TEST-001` | `pending` | Prioridad `media` | Anadir pruebas automatizadas de pipeline y registro | Dependencias: `AI-003`
+- `COMPAT-001` | `done` | Prioridad `alta` | Fijar matriz compatible de Supervision, Inference SDK, NumPy y OpenCV | Dependencias: ninguna
+- `HARNESS-002` | `done` | Prioridad `alta` | Automatizar inventario, compilacion y smoke test de APIs de Supervision | Dependencias: `COMPAT-001`
+- `LOCAL-001` | `done` | Prioridad `media` | Evitar escritura del cache Matplotlib/Ultralytics fuera del runtime local durante el harness | Dependencias: `HARNESS-002`
+- `LOCAL-002` | `done` | Prioridad `media` | Automatizar smoke HTTP con logs unicos y verificacion de liberacion del puerto | Dependencias: `HARNESS-002`
+- `LOCAL-003` | `blocked` | Prioridad `alta` | Validar migraciones contra PostgreSQL local; credenciales configuradas rechazadas | Dependencias: credencial local valida
+- `LOCAL-004` | `done` | Prioridad `alta` | Health ALPR debe reportar degradacion si faltan detector u OCR | Dependencias: ninguna
+- `LOCAL-005` | `done` | Prioridad `media` | Aislar caches Matplotlib/Ultralytics tambien en imports y scripts ML directos | Dependencias: `LOCAL-001`
+- `MONO-001` | `done` | Prioridad `alta` | Simplificar el acceso directo del repo a `backend/` y `frontend/` | Dependencias: ninguna
+- `MONO-002` | `done` | Prioridad `alta` | Restaurar el codigo fuente original del frontend directamente dentro de `frontend/` | Dependencias: ninguna
+- `SEC-002` | `pending` | Prioridad `media` | Revisar las 2 vulnerabilidades reportadas por `npm audit` sin aplicar actualizaciones incompatibles automaticamente | Dependencias: ninguna
+- `REPO-001` | `in_progress` | Prioridad `alta` | Crear y publicar el repositorio conjunto de backend y frontend | Dependencias: repositorio remoto vacio
