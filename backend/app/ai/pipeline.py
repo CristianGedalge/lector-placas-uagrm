@@ -1,46 +1,50 @@
+from __future__ import annotations
+
 import base64
 import logging
 import os
+import warnings
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = PROJECT_ROOT / ".runtime"
 MPLCONFIG_DIR = RUNTIME_DIR / "matplotlib"
-ULTRALYTICS_SETTINGS_DIR = RUNTIME_DIR / "ultralytics"
 MPLCONFIG_DIR.mkdir(parents=True, exist_ok=True)
-ULTRALYTICS_SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPLCONFIG_DIR))
-os.environ.setdefault("YOLO_CONFIG_DIR", str(ULTRALYTICS_SETTINGS_DIR))
 
 import cv2
 import numpy as np
 import supervision as sv
 
-try:
-    from inference_sdk import InferenceHTTPClient
-except ImportError:  # pragma: no cover - depends on local environment
-    InferenceHTTPClient = None
-
 from app.ai.validators import normalize_plate_text, validate_bolivian_plate
 from app.config.settings import settings
 
-try:
-    from ultralytics import YOLO
-except Exception:  # pragma: no cover - dependency may be intentionally absent or misconfigured
-    YOLO = None
-
 logger = logging.getLogger(__name__)
 
-PLATE_CLASS_KEYWORDS = (
-    "plate",
-    "license plate",
-    "license_plate",
-    "car plate",
-    "car_plate",
+PIPELINE_MODE = "OCR_SUPERVISION"
+OCR_ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
+MIN_CANDIDATE_LENGTH = 4
+MAX_CANDIDATE_LENGTH = 10
+TARGET_PLATE_LENGTH = 7
+
+box_annotator = sv.BoxAnnotator(thickness=2, color_lookup=sv.ColorLookup.INDEX)
+label_annotator = sv.LabelAnnotator(
+    text_scale=0.5,
+    color_lookup=sv.ColorLookup.INDEX,
 )
 
-LOCAL_MODEL_PATH = Path(settings.LOCAL_YOLO_MODEL_PATH)
+
+@dataclass(frozen=True)
+class OCRCandidate:
+    raw_text: str
+    normalized_text: str
+    confidence: float
+    xyxy: np.ndarray
+    valid_format: bool
+    score: float
+    source_count: int = 1
 
 
 def _error(message: str, http_status: int = 422, error_code: str = "pipeline_error") -> dict:
@@ -50,277 +54,372 @@ def _error(message: str, http_status: int = 422, error_code: str = "pipeline_err
         "http_status": http_status,
         "error_code": error_code,
         "requires_manual_review": False,
+        "detection_backend": PIPELINE_MODE,
     }
 
 
-def _matches_plate_class(class_name: str) -> bool:
-    normalized = class_name.strip().lower().replace("-", " ").replace("_", " ")
-    return any(keyword.replace("_", " ") in normalized for keyword in PLATE_CLASS_KEYWORDS)
+def get_pipeline_status() -> dict[str, object]:
+    return {
+        "supervision_available": True,
+        "camera_capture_supported": True,
+        "pipeline_mode": PIPELINE_MODE,
+    }
 
 
-def _resolve_plate_class_ids(model_names: object) -> set[int]:
-    if isinstance(model_names, dict):
-        items = model_names.items()
-    elif isinstance(model_names, Iterable):
-        items = enumerate(model_names)
+def _configured_roi() -> tuple[int, int, int, int] | None:
+    values = (
+        settings.OCR_ROI_X,
+        settings.OCR_ROI_Y,
+        settings.OCR_ROI_WIDTH,
+        settings.OCR_ROI_HEIGHT,
+    )
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise ValueError("La ROI requiere X, Y, WIDTH y HEIGHT.")
+    x, y, width, height = (int(value) for value in values)
+    if x < 0 or y < 0 or width <= 0 or height <= 0:
+        raise ValueError("La ROI contiene coordenadas o dimensiones invalidas.")
+    return x, y, width, height
+
+
+def _extract_analysis_region(image: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
+    roi = _configured_roi()
+    if roi is None:
+        return image, (0, 0)
+
+    x, y, width, height = roi
+    image_height, image_width = image.shape[:2]
+    if x + width > image_width or y + height > image_height:
+        raise ValueError(
+            f"La ROI ({x}, {y}, {width}, {height}) excede la imagen "
+            f"de {image_width}x{image_height}."
+        )
+    return image[y : y + height, x : x + width], (x, y)
+
+
+def _preprocess_image(image: np.ndarray) -> tuple[np.ndarray, float]:
+    processed: np.ndarray
+    if settings.OCR_USE_GRAYSCALE:
+        processed = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if settings.OCR_USE_CONTRAST:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            processed = clahe.apply(processed)
     else:
-        return set()
+        processed = image.copy()
+        if settings.OCR_USE_CONTRAST:
+            processed = cv2.convertScaleAbs(processed, alpha=1.15, beta=0)
 
-    return {
-        int(class_id)
-        for class_id, class_name in items
-        if isinstance(class_name, str) and _matches_plate_class(class_name)
-    }
+    if settings.OCR_DENOISE:
+        processed = cv2.GaussianBlur(processed, (3, 3), 0)
+
+    if settings.OCR_USE_THRESHOLD:
+        if processed.ndim == 3:
+            processed = cv2.cvtColor(processed, cv2.COLOR_BGR2GRAY)
+        _, processed = cv2.threshold(
+            processed,
+            0,
+            255,
+            cv2.THRESH_BINARY + cv2.THRESH_OTSU,
+        )
+
+    scale = 1.0
+    factor = float(settings.OCR_UPSCALE_FACTOR)
+    if factor > 1.0 and max(processed.shape[:2]) < 1200:
+        processed = cv2.resize(
+            processed,
+            None,
+            fx=factor,
+            fy=factor,
+            interpolation=cv2.INTER_CUBIC,
+        )
+        scale = factor
+    return processed, scale
 
 
-def _build_cloud_client() -> Any | None:
-    if InferenceHTTPClient is None:
-        logger.warning("inference-sdk is not installed. Roboflow Cloud fallback is unavailable.")
-        return None
-
-    api_key = settings.ROBOFLOW_API_KEY.strip()
-    if not api_key or api_key.lower() in {"replace_me", "changeme", "your_api_key"}:
-        logger.warning("ROBOFLOW_API_KEY not set. Roboflow Cloud fallback is unavailable.")
-        return None
-
-    return InferenceHTTPClient(
-        api_url="https://detect.roboflow.com",
-        api_key=api_key,
+def _manual_easyocr_conversion(easyocr_results: list[Any]) -> sv.Detections:
+    if not easyocr_results:
+        return sv.Detections.empty()
+    boxes = np.asarray([result[0] for result in easyocr_results], dtype=np.float32)
+    xyxy = np.hstack((np.min(boxes, axis=1), np.max(boxes, axis=1)))
+    confidence = np.asarray(
+        [float(result[2]) if len(result) > 2 else 0.0 for result in easyocr_results],
+        dtype=np.float32,
+    )
+    texts = np.asarray([str(result[1]) for result in easyocr_results])
+    return sv.Detections(
+        xyxy=xyxy,
+        confidence=confidence,
+        data={"class_name": texts},
     )
 
 
-def _build_local_model() -> Any | None:
-    if YOLO is None:
-        logger.info("ultralytics is not installed. Local YOLO is unavailable.")
-        return None
-
-    if not LOCAL_MODEL_PATH.exists():
-        logger.info("Local YOLO model not found at %s", LOCAL_MODEL_PATH)
-        return None
-
-    try:
-        return YOLO(str(LOCAL_MODEL_PATH))
-    except Exception as exc:  # pragma: no cover - model loading depends on environment
-        logger.error("Unable to load local YOLO model at %s: %s", LOCAL_MODEL_PATH, exc)
-        return None
+def _detections_from_easyocr(easyocr_results: list[Any]) -> sv.Detections:
+    converter = getattr(sv.Detections, "from_easyocr", None)
+    if converter is not None:
+        try:
+            return converter(easyocr_results)
+        except (TypeError, ValueError, IndexError) as exc:
+            logger.warning("Supervision no pudo convertir EasyOCR; usando fallback: %s", exc)
+    return _manual_easyocr_conversion(easyocr_results)
 
 
-cloud_client = _build_cloud_client()
-local_model = _build_local_model()
-box_annotator = sv.BoxAnnotator(thickness=2)
-label_annotator = sv.LabelAnnotator(text_scale=0.5)
-
-
-def get_detection_status() -> dict[str, object]:
-    """Return detector readiness without running inference or exposing secrets."""
-    local_available = local_model is not None
-    cloud_available = cloud_client is not None
-    return {
-        "detector_available": local_available or cloud_available,
-        "local_yolo_available": local_available,
-        "roboflow_cloud_available": cloud_available,
-        "local_model_path": str(LOCAL_MODEL_PATH),
-    }
-
-
-def _filter_cloud_plate_detections(detections: sv.Detections) -> sv.Detections:
-    class_names = detections.data.get("class_name") if detections.data else None
-    if class_names is None:
-        return detections
-
-    plate_mask = np.array(
-        [_matches_plate_class(str(class_name)) for class_name in class_names],
-        dtype=bool,
-    )
-    return detections[plate_mask]
-
-
-def _filter_local_plate_detections(
+def _map_detections_to_image(
     detections: sv.Detections,
-    model_names: object,
+    scale: float,
+    offset: tuple[int, int],
+    image_shape: tuple[int, ...],
 ) -> sv.Detections:
-    if detections.class_id is None:
-        return detections
-
-    plate_class_ids = _resolve_plate_class_ids(model_names)
-    if not plate_class_ids:
-        logger.warning("No plate class name was resolved from local model names: %s", model_names)
-        return detections
-
-    plate_mask = np.isin(detections.class_id, list(plate_class_ids))
-    return detections[plate_mask]
-
-
-def _select_best_detection(detections: sv.Detections) -> tuple[sv.Detections, float]:
     if len(detections) == 0:
-        raise ValueError("No se detectó ninguna placa en la imagen.")
-
-    if detections.confidence is None or len(detections.confidence) == 0:
-        best_idx = 0
-        confidence = 0.0
-    else:
-        best_idx = int(detections.confidence.argmax())
-        confidence = float(detections.confidence[best_idx])
-
-    return detections[[best_idx]], confidence
-
-
-def _detect_with_local_yolo(image: np.ndarray) -> tuple[sv.Detections, float, str]:
-    if local_model is None:
-        raise RuntimeError("Local YOLO model is unavailable.")
-
-    results = local_model.predict(
-        source=image,
-        conf=settings.DETECTION_CONFIDENCE_THRESHOLD,
-        verbose=False,
+        return detections
+    xyxy = detections.xyxy.astype(np.float32).copy() / scale
+    xyxy[:, [0, 2]] += offset[0]
+    xyxy[:, [1, 3]] += offset[1]
+    image_height, image_width = image_shape[:2]
+    xyxy[:, [0, 2]] = np.clip(xyxy[:, [0, 2]], 0, image_width)
+    xyxy[:, [1, 3]] = np.clip(xyxy[:, [1, 3]], 0, image_height)
+    return sv.Detections(
+        xyxy=xyxy,
+        confidence=detections.confidence,
+        data=detections.data,
     )
-    if not results:
-        raise RuntimeError("La inferencia local no devolvió resultados.")
-
-    result = results[0]
-    detections = sv.Detections.from_ultralytics(result)
-    plate_detections = _filter_local_plate_detections(detections, result.names)
-    best_detection, confidence = _select_best_detection(plate_detections)
-    return best_detection, confidence, "YOLO_LOCAL"
 
 
-def _detect_with_roboflow_cloud(image: np.ndarray) -> tuple[sv.Detections, float, str]:
-    if cloud_client is None:
-        raise RuntimeError("Roboflow Cloud is unavailable.")
-
-    result = cloud_client.infer(image, model_id=settings.ROBOFLOW_MODEL_ID)
-    detections = sv.Detections.from_inference(result)
-    plate_detections = _filter_cloud_plate_detections(detections)
-    best_detection, confidence = _select_best_detection(plate_detections)
-    return best_detection, confidence, "ROBOFLOW_CLOUD"
-
-
-def _run_detection(image: np.ndarray) -> tuple[sv.Detections, float, str]:
-    if local_model is not None:
-        return _detect_with_local_yolo(image)
-
-    if cloud_client is not None:
-        return _detect_with_roboflow_cloud(image)
-
-    raise RuntimeError(
-        "No hay backend de detección disponible. Falta un modelo local válido o ROBOFLOW_API_KEY."
+def _candidate_score(
+    normalized: str,
+    confidence: float,
+    xyxy: np.ndarray,
+    image_shape: tuple[int, ...],
+) -> tuple[bool, float]:
+    valid = validate_bolivian_plate(normalized)
+    length_score = max(0.0, 1.0 - abs(len(normalized) - TARGET_PLATE_LENGTH) / 4.0)
+    width = max(0.0, float(xyxy[2] - xyxy[0]))
+    height = max(0.0, float(xyxy[3] - xyxy[1]))
+    aspect_ratio = width / height if height else 0.0
+    aspect_score = 1.0 if 1.5 <= aspect_ratio <= 6.5 else 0.25
+    image_area = max(1.0, float(image_shape[0] * image_shape[1]))
+    area_ratio = (width * height) / image_area
+    size_score = min(1.0, area_ratio / 0.01) if area_ratio > 0 else 0.0
+    center_x = float(xyxy[0] + xyxy[2]) / 2.0 / max(1.0, float(image_shape[1]))
+    center_y = float(xyxy[1] + xyxy[3]) / 2.0 / max(1.0, float(image_shape[0]))
+    position_score = 1.0 if 0.03 <= center_x <= 0.97 and 0.03 <= center_y <= 0.97 else 0.5
+    score = (
+        (0.55 if valid else 0.0)
+        + 0.30 * float(np.clip(confidence, 0.0, 1.0))
+        + 0.08 * length_score
+        + 0.03 * aspect_score
+        + 0.02 * size_score
+        + 0.02 * position_score
     )
+    return valid, float(np.clip(score, 0.0, 1.0))
+
+
+def _make_candidate(
+    raw_text: str,
+    confidence: float,
+    xyxy: np.ndarray,
+    image_shape: tuple[int, ...],
+    source_count: int = 1,
+) -> OCRCandidate | None:
+    normalized = normalize_plate_text(raw_text)
+    if not MIN_CANDIDATE_LENGTH <= len(normalized) <= MAX_CANDIDATE_LENGTH:
+        return None
+    width = float(xyxy[2] - xyxy[0])
+    height = float(xyxy[3] - xyxy[1])
+    if width < 4 or height < 4:
+        return None
+    valid, score = _candidate_score(normalized, confidence, xyxy, image_shape)
+    return OCRCandidate(
+        raw_text=raw_text.strip(),
+        normalized_text=normalized,
+        confidence=float(np.clip(confidence, 0.0, 1.0)),
+        xyxy=xyxy.astype(np.float32),
+        valid_format=valid,
+        score=score,
+        source_count=source_count,
+    )
+
+
+def _boxes_are_near(left: np.ndarray, right: np.ndarray) -> bool:
+    if right[0] < left[0]:
+        left, right = right, left
+    left_height = max(1.0, float(left[3] - left[1]))
+    right_height = max(1.0, float(right[3] - right[1]))
+    vertical_overlap = max(0.0, min(left[3], right[3]) - max(left[1], right[1]))
+    overlap_ratio = vertical_overlap / min(left_height, right_height)
+    horizontal_gap = float(right[0] - left[2])
+    max_width = max(float(left[2] - left[0]), float(right[2] - right[0]), 1.0)
+    return overlap_ratio >= 0.4 and -0.25 * max_width <= horizontal_gap <= 1.25 * max_width
+
+
+def _build_candidates(
+    detections: sv.Detections,
+    image_shape: tuple[int, ...],
+) -> list[OCRCandidate]:
+    if len(detections) == 0:
+        return []
+    texts = detections.data.get("class_name") if detections.data else None
+    if texts is None:
+        return []
+    confidences = (
+        detections.confidence
+        if detections.confidence is not None
+        else np.zeros(len(detections), dtype=np.float32)
+    )
+    candidates: list[OCRCandidate] = []
+    for index, text in enumerate(texts):
+        candidate = _make_candidate(
+            str(text),
+            float(confidences[index]),
+            detections.xyxy[index],
+            image_shape,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+
+    for first_index in range(len(detections)):
+        for second_index in range(first_index + 1, len(detections)):
+            first_box = detections.xyxy[first_index]
+            second_box = detections.xyxy[second_index]
+            if not _boxes_are_near(first_box, second_box):
+                continue
+            ordered = sorted(
+                ((first_box, str(texts[first_index]), float(confidences[first_index])),
+                 (second_box, str(texts[second_index]), float(confidences[second_index]))),
+                key=lambda item: float(item[0][0]),
+            )
+            raw_text = " ".join(item[1].strip() for item in ordered)
+            weights = [max(1, len(normalize_plate_text(item[1]))) for item in ordered]
+            confidence = float(np.average([item[2] for item in ordered], weights=weights))
+            union = np.asarray(
+                [
+                    min(first_box[0], second_box[0]),
+                    min(first_box[1], second_box[1]),
+                    max(first_box[2], second_box[2]),
+                    max(first_box[3], second_box[3]),
+                ],
+                dtype=np.float32,
+            )
+            candidate = _make_candidate(raw_text, confidence, union, image_shape, source_count=2)
+            if candidate is not None:
+                candidates.append(candidate)
+
+    unique: dict[tuple[str, int, int, int, int], OCRCandidate] = {}
+    for candidate in candidates:
+        key = (candidate.normalized_text, *(int(value) for value in candidate.xyxy))
+        previous = unique.get(key)
+        if previous is None or candidate.score > previous.score:
+            unique[key] = candidate
+    return sorted(
+        unique.values(),
+        key=lambda item: (item.valid_format, item.score, item.confidence),
+        reverse=True,
+    )
+
+
+def _encode_image(image: np.ndarray) -> str | None:
+    encoded, buffer = cv2.imencode(".jpg", image)
+    if not encoded:
+        return None
+    return f"data:image/jpeg;base64,{base64.b64encode(buffer).decode('utf-8')}"
 
 
 def analyze_plate(image_bytes: bytes, ocr_reader=None) -> dict:
     if not image_bytes:
-        return _error("La imagen está vacía.", http_status=400, error_code="empty_image")
+        return _error("La imagen esta vacia.", http_status=400, error_code="empty_image")
 
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
     if image is None:
         return _error(
             "No se pudo decodificar la imagen enviada.",
             http_status=400,
             error_code="invalid_image",
         )
-
-    try:
-        best_detection, detection_confidence, detector_backend = _run_detection(image)
-    except ValueError as exc:
-        return _error(str(exc), http_status=422, error_code="no_plate_detected")
-    except Exception as exc:
-        logger.error("Detection pipeline failed: %s", exc)
-        return _error(
-            f"Error durante la inferencia de detección: {exc}",
-            http_status=503,
-            error_code="detection_error",
-        )
-
-    if detection_confidence < settings.DETECTION_CONFIDENCE_THRESHOLD:
-        return {
-            "status": "LOW_CONFIDENCE",
-            "message": "La placa fue detectada con confianza baja.",
-            "detection_backend": detector_backend,
-            "detection_confidence": detection_confidence,
-            "requires_manual_review": True,
-        }
-
-    plate_crop = sv.crop_image(image=image, xyxy=best_detection.xyxy[0])
-    if plate_crop.size == 0:
-        return _error(
-            "La detección de la placa no produjo un recorte válido.",
-            http_status=422,
-            error_code="empty_crop",
-        )
-
     if ocr_reader is None:
         return _error("Motor OCR no inicializado.", http_status=503, error_code="ocr_unavailable")
 
     try:
-        ocr_results = ocr_reader.readtext(plate_crop, detail=1)
+        analysis_region, offset = _extract_analysis_region(image)
+    except ValueError as exc:
+        return _error(str(exc), http_status=422, error_code="invalid_roi")
+
+    processed, scale = _preprocess_image(analysis_region)
+    try:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=".*'pin_memory' argument is set as true but no accelerator is found.*",
+                category=UserWarning,
+            )
+            easyocr_results = ocr_reader.readtext(
+                processed,
+                detail=1,
+                paragraph=False,
+                allowlist=OCR_ALLOWLIST,
+            )
     except Exception as exc:
-        logger.error("OCR failed: %s", exc)
+        logger.error("EasyOCR fallo: %s", exc)
         return _error(
             f"Error durante OCR: {exc}",
             http_status=503,
             error_code="ocr_error",
         )
 
-    if not ocr_results:
+    detections = _detections_from_easyocr(easyocr_results or [])
+    detections = _map_detections_to_image(detections, scale, offset, image.shape)
+    candidates = _build_candidates(detections, image.shape)
+    if not candidates:
         return {
             "status": "LOW_CONFIDENCE",
-            "message": "Placa detectada pero OCR no pudo leer caracteres.",
-            "detection_backend": detector_backend,
-            "detection_confidence": detection_confidence,
+            "message": "EasyOCR no encontro un candidato de placa util.",
+            "detection_backend": PIPELINE_MODE,
             "requires_manual_review": True,
         }
 
-    raw_text = " ".join(str(item[1]).strip() for item in ocr_results if len(item) > 1).strip()
-    normalized = normalize_plate_text(raw_text)
-    if not normalized:
-        return {
-            "status": "LOW_CONFIDENCE",
-            "message": "OCR devolvió texto vacío después de normalizar.",
-            "detection_backend": detector_backend,
-            "detection_confidence": detection_confidence,
-            "requires_manual_review": True,
-        }
+    selected = candidates[0]
+    selected_detection = sv.Detections(
+        xyxy=np.asarray([selected.xyxy], dtype=np.float32),
+        confidence=np.asarray([selected.confidence], dtype=np.float32),
+        data={"class_name": np.asarray([selected.normalized_text])},
+    )
+    crop = sv.crop_image(image=image, xyxy=selected.xyxy)
+    if crop.size == 0:
+        return _error(
+            "El candidato OCR no produjo un recorte valido.",
+            http_status=422,
+            error_code="empty_crop",
+        )
 
-    ocr_scores = [float(item[2]) for item in ocr_results if len(item) > 2]
-    ocr_confidence = float(np.mean(ocr_scores)) if ocr_scores else 0.0
-    combined_confidence = detection_confidence * ocr_confidence
-    is_valid = validate_bolivian_plate(normalized)
+    confirmed = selected.valid_format and selected.confidence >= settings.OCR_CONFIDENCE_THRESHOLD
+    status = "DETECTED" if confirmed else "LOW_CONFIDENCE"
+    message = None
+    if not selected.valid_format:
+        message = "El mejor texto OCR no coincide con un formato boliviano valido."
+    elif not confirmed:
+        message = "La lectura requiere revision manual por baja confianza OCR."
 
-    if not is_valid:
-        status = "LOW_CONFIDENCE"
-        requires_manual_review = True
-        message = "OCR detectó texto, pero no coincide con un formato boliviano válido."
-    elif combined_confidence < settings.CONFIDENCE_THRESHOLD:
-        status = "LOW_CONFIDENCE"
-        requires_manual_review = True
-        message = "La lectura requiere revisión manual por baja confianza."
-    else:
-        status = "DETECTED"
-        requires_manual_review = False
-        message = None
-
-    labels = [f"{normalized} ({combined_confidence:.0%})"]
-    annotated = box_annotator.annotate(scene=image.copy(), detections=best_detection)
-    annotated = label_annotator.annotate(scene=annotated, detections=best_detection, labels=labels)
-
-    _, buffer = cv2.imencode(".jpg", annotated)
-    annotated_b64 = base64.b64encode(buffer).decode("utf-8")
-
-    _, crop_buffer = cv2.imencode(".jpg", plate_crop)
-    crop_b64 = base64.b64encode(crop_buffer).decode("utf-8")
+    label = f"{selected.normalized_text} ({selected.confidence:.0%})"
+    annotated = box_annotator.annotate(
+        scene=image.copy(),
+        detections=selected_detection,
+    )
+    annotated = label_annotator.annotate(
+        scene=annotated,
+        detections=selected_detection,
+        labels=[label],
+    )
 
     return {
         "status": status,
         "message": message,
-        "detected_plate": raw_text,
-        "normalized_plate": normalized,
-        "is_valid_bolivian_format": is_valid,
-        "detection_backend": detector_backend,
-        "detection_confidence": detection_confidence,
-        "ocr_confidence": ocr_confidence,
-        "combined_confidence": combined_confidence,
-        "requires_manual_review": requires_manual_review,
-        "annotated_image": f"data:image/jpeg;base64,{annotated_b64}",
-        "plate_crop": f"data:image/jpeg;base64,{crop_b64}",
+        "detected_plate": selected.raw_text,
+        "normalized_plate": selected.normalized_text if confirmed else None,
+        "is_valid_bolivian_format": selected.valid_format,
+        "detection_backend": PIPELINE_MODE,
+        "detection_confidence": selected.score,
+        "ocr_confidence": selected.confidence,
+        "combined_confidence": selected.score,
+        "requires_manual_review": not confirmed,
+        "annotated_image": _encode_image(annotated),
+        "plate_crop": _encode_image(crop),
     }

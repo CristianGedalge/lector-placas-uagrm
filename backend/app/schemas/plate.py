@@ -6,6 +6,7 @@ class PlateAnalysisResponse(BaseModel):
     detected_plate: Optional[str] = None
     normalized_plate: Optional[str] = None
     is_valid_bolivian_format: bool = False
+    detection_backend: Optional[str] = None
     detection_confidence: Optional[float] = None
     ocr_confidence: Optional[float] = None
     combined_confidence: Optional[float] = None

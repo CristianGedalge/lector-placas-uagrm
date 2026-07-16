@@ -8,8 +8,8 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 
 - Backend: FastAPI
 - Base de datos: PostgreSQL + SQLAlchemy + Alembic
-- IA actual: Roboflow Cloud + Supervision + EasyOCR, con fallback local si existe un modelo entrenado valido
-- IA preparada para evolucion local: YOLOv8 local cuando exista `ml/models/best.pt`
+- IA actual: OpenCV + EasyOCR + Supervision, completamente local
+- Captura automatica: agente separado para webcam USB o RTSP
 - Frontend separado: React 18 + JavaScript/JSX + CSS, construido con Vite
 
 ## Arquitectura real
@@ -18,7 +18,7 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 - `backend/app/ai/`: pipeline IA y validadores
 - `backend/app/db/`: modelos y sesion
 - `backend/app/config/`: settings
-- `backend/ml/`: dataset, scripts y futuros modelos locales
+- `backend/app/services/`: servicios locales separados, incluido el agente de camara USB/RTSP
 - `frontend/`: aplicacion React/Vite del cliente web
 - `.agents/`: memoria operativa del proyecto
 
@@ -46,7 +46,7 @@ Despues de cambios en Python, dependencias o pipeline IA, ejecutar desde la raiz
 powershell -ExecutionPolicy Bypass -File .agents/scripts/verify-project.ps1
 ```
 
-El comando es local y determinista: no entrena, no llama Roboflow y no modifica la base de datos.
+El comando es local y determinista: no usa servicios cloud ni modifica la base de datos.
 
 Para probar el arranque HTTP en un puerto aislado y cerrarlo automaticamente:
 
@@ -64,17 +64,19 @@ Al cerrar una sesion:
 
 ## Reglas de IA
 
-- Supervision debe participar realmente en la pipeline.
-- No reemplazar Roboflow Cloud por YOLO local si no existe un `best.pt` verificable.
-- No entrenar dentro de una request HTTP.
-- No asumir `class_id` fijo para la clase placa.
+- EasyOCR es responsable de localizar y leer texto.
+- Supervision representa, filtra, recorta y anota los resultados de EasyOCR; no es un motor OCR.
+- El pipeline no usa detectores, entrenamiento, datasets ni servicios cloud.
+- Preferir una ROI configurada para camaras fijas y reducir falsos positivos.
 - Preferir rutas portables con `pathlib.Path`.
 - Mantener la matriz documentada en `.agents/compatibility/supervision.md`.
-- No ampliar versiones de Supervision, Inference SDK, NumPy u OpenCV sin ejecutar el verificador.
+- No ampliar versiones de Supervision, EasyOCR, NumPy u OpenCV sin ejecutar el verificador.
+- La captura automatica debe ejecutarse fuera del proceso FastAPI y reutilizar `POST /api/v1/plates/analyze`.
+- No usar `cv2.imshow()` ni registrar URLs RTSP, porque pueden contener credenciales.
 
 ## Prohibiciones
 
 - No subir secretos al repositorio.
-- No inventar `data.yaml`, labels ni resultados de entrenamiento.
+- No guardar imagenes privadas, capturas de camara ni credenciales RTSP en el repositorio.
 - No marcar una funcionalidad como terminada si no se verifico.
 - No introducir rutas absolutas de Windows en codigo de aplicacion.

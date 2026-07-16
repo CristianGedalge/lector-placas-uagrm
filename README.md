@@ -4,7 +4,7 @@ Repositorio con acceso directo por raiz.
 
 ## Estructura
 
-- `backend`: API FastAPI, migraciones, pipeline IA y dataset local.
+- `backend`: API FastAPI, migraciones y pipeline OCR local.
 - `frontend`: cliente React/Vite.
 - `.agents`: automatizacion operativa, memoria y scripts de verificacion.
 
@@ -15,7 +15,7 @@ Repositorio con acceso directo por raiz.
 - Los historiales heredados se preservaron como `backend/.git-legacy-backend` y `frontend/.git-legacy-frontend` para evitar repositorios anidados.
 - Los scripts `.agents/scripts/verify-project.ps1` y `.agents/scripts/smoke-local.ps1` ya apuntan al layout directo.
 - La raiz tiene un repositorio Git nuevo para versionar backend y frontend juntos.
-- Las particiones locales del dataset (`train/`, `valid/` y `test/`) no se suben a Git por su tamano; se conserva `data.yaml` y la automatizacion necesaria para reconstruirlas.
+- El reconocimiento usa OpenCV, EasyOCR y Supervision sin dataset, entrenamiento ni servicios cloud.
 
 ## Comandos utiles
 

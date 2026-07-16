@@ -51,6 +51,11 @@ powershell -ExecutionPolicy Bypass -File .agents/scripts/smoke-local.ps1
 ## Estado conocido
 
 - El backend arranca en local.
-- El health ALPR reporta `degraded` cuando falta detector real.
-- Para inferencia local entrenada sigue faltando `ml/models/best.pt`.
+- El pipeline usa OpenCV, EasyOCR y Supervision sin servicios externos.
+- El health reporta `degraded` solo cuando EasyOCR no puede inicializarse.
+- Una ROI opcional reduce falsos positivos en camaras fijas.
 - La validacion completa con base de datos sigue bloqueada hasta disponer de una `DATABASE_URL` valida.
+
+## Captura automatica de camara
+
+La webcam USB y RTSP se ejecutan mediante un agente local separado. Consulta [CAMERA_CAPTURE.md](CAMERA_CAPTURE.md) para arquitectura, OCR, ROI, configuracion, pruebas y limitaciones.

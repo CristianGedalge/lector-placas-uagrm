@@ -1,26 +1,14 @@
-"""
-Punto de entrada principal de la aplicacion FastAPI.
+"""Punto de entrada principal de la aplicacion FastAPI."""
 
-Configura la instancia de FastAPI, middleware CORS, eventos de ciclo de vida
-e incluye los routers de la API.
-"""
+from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import AsyncGenerator
 import asyncio
 import logging
 import os
 import sys
-from unittest.mock import MagicMock
-
-try:
-    import easyocr
-except ImportError as exc:  # pragma: no cover - depends on local environment
-    easyocr = None
-    EASYOCR_IMPORT_ERROR = exc
-else:
-    EASYOCR_IMPORT_ERROR = None
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import AsyncGenerator
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_ROOT / ".runtime"
@@ -28,15 +16,15 @@ EASYOCR_DIR = RUNTIME_DIR / "easyocr"
 MPLCONFIG_DIR = RUNTIME_DIR / "matplotlib"
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
 
-RUNTIME_DIR.mkdir(exist_ok=True)
-EASYOCR_DIR.mkdir(exist_ok=True)
-MPLCONFIG_DIR.mkdir(exist_ok=True)
-UPLOADS_DIR.mkdir(exist_ok=True)
-os.environ["MPLCONFIGDIR"] = str(MPLCONFIG_DIR)
+for directory in (RUNTIME_DIR, EASYOCR_DIR, MPLCONFIG_DIR, UPLOADS_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(MPLCONFIG_DIR))
 
-logger = logging.getLogger(__name__)
+try:
+    import easyocr
+except ImportError:  # pragma: no cover - depends on the installed environment
+    easyocr = None
 
-import easyocr
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -48,35 +36,29 @@ from app.api.v1.university_persons import router as university_persons_router
 from app.api.v1.vehicles import router as vehicles_router
 from app.config.settings import settings
 
+logger = logging.getLogger(__name__)
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-sys.modules["matplotlib"] = MagicMock()
-sys.modules["matplotlib.pyplot"] = MagicMock()
-sys.modules["matplotlib.colors"] = MagicMock()
-sys.modules["matplotlib.patches"] = MagicMock()
-sys.modules["matplotlib.figure"] = MagicMock()
+
+def _ocr_languages() -> list[str]:
+    languages = [item.strip() for item in settings.OCR_LANGUAGES.split(",") if item.strip()]
+    return languages or ["es", "en"]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Gestiona el ciclo de vida de la aplicación.
-
-    Al iniciar: intenta inicializar el lector de EasyOCR y lo deja en
-    `app.state.ocr_reader`. Si EasyOCR no está disponible o falla durante
-    la inicialización, registra una advertencia y continúa (reader=None).
-    Al finalizar: elimina el lector si existe.
-    """
+    """Inicializa EasyOCR una vez y libera la referencia al apagar."""
     if easyocr is None:
-        logger.warning(
-            "easyocr no está instalado; la funcionalidad OCR estará deshabilitada."
-        )
+        logger.warning("EasyOCR no esta instalado; el pipeline OCR estara deshabilitado.")
         app.state.ocr_reader = None
     else:
         try:
             app.state.ocr_reader = easyocr.Reader(
-                ["es", "en"],
-                gpu=False,
+                _ocr_languages(),
+                gpu=settings.OCR_GPU,
+                quantize=settings.OCR_QUANTIZE,
                 verbose=False,
                 model_storage_directory=str(EASYOCR_DIR),
                 user_network_directory=str(EASYOCR_DIR),
@@ -92,10 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
-        "API para la deteccion y lectura de placas vehiculares bolivianas "
-        "usando vision por computadora (Roboflow + EasyOCR)."
+        "API para localizar y leer placas bolivianas localmente con "
+        "OpenCV, EasyOCR y Supervision."
     ),
-    version="1.0.0",
+    version=settings.APP_VERSION,
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
@@ -110,26 +92,10 @@ app.add_middleware(
 
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
-app.include_router(
-    auth_router,
-    prefix="/api/auth",
-    tags=["Auth"],
-)
-app.include_router(
-    dashboard_router,
-    prefix="/api/v1/dashboard",
-    tags=["Dashboard"],
-)
-app.include_router(
-    plates.router,
-    prefix="/api/v1/plates",
-    tags=["Placas"],
-)
-app.include_router(
-    vehicles_router,
-    prefix="/api/v1/vehicles",
-    tags=["Vehicles"],
-)
+app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(plates.router, prefix="/api/v1/plates", tags=["Placas"])
+app.include_router(vehicles_router, prefix="/api/v1/vehicles", tags=["Vehicles"])
 app.include_router(
     university_persons_router,
     prefix="/api/v1/university-persons",

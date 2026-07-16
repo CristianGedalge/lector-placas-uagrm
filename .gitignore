@@ -9,12 +9,7 @@ backend/.venv/
 backend/__pycache__/
 backend/.runtime/
 backend/.pytest_cache/
-backend/.ultralytics/
 backend/uploads/
-backend/ml/runs/
-backend/ml/datasets/blpr/train/
-backend/ml/datasets/blpr/valid/
-backend/ml/datasets/blpr/test/
 backend/.git-legacy-backend/
 frontend/.git-legacy-frontend/
 frontend/node_modules/

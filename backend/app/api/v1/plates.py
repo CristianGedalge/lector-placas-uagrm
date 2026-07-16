@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from app.schemas.plate import PlateAnalysisResponse
-from app.ai.pipeline import analyze_plate, get_detection_status
+from app.ai.pipeline import analyze_plate, get_pipeline_status
 
 router = APIRouter()
 
@@ -52,16 +52,16 @@ async def health_check(request: Request):
     """
     Endpoint simple para verificar que la API está funcionando.
     """
-    detection = get_detection_status()
     ocr_available = getattr(request.app.state, "ocr_reader", None) is not None
-    ready = bool(detection["detector_available"] and ocr_available)
+    pipeline = get_pipeline_status()
+    ready = bool(ocr_available and pipeline["supervision_available"])
     return {
         "status": "ok" if ready else "degraded",
         "message": (
             "API de ALPR lista para inferencia."
             if ready
-            else "API disponible, pero el pipeline ALPR no esta completamente configurado."
+            else "API disponible, pero EasyOCR no esta inicializado."
         ),
-        **detection,
         "ocr_available": ocr_available,
+        **pipeline,
     }

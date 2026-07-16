@@ -1,22 +1,29 @@
 # Backlog
 
 - `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
-- `AI-001` | `done` | Prioridad `alta` | Confirmar y corregir el uso real de `supervision` dentro de la pipeline | Dependencias: ninguna
-- `AI-002` | `done` | Prioridad `alta` | Preparar fallback/migracion a YOLO local sin romper Roboflow Cloud | Dependencias: `DATA-001`
-- `DATA-001` | `done` | Prioridad `alta` | Confirmar `train/`, `valid/`, `test/` y `data.yaml` compatibles con la estructura YOLO | Dependencias: ninguna
-- `AI-003` | `blocked` | Prioridad `alta` | Entrenar y verificar `ml/models/best.pt` para reemplazar Roboflow Cloud | Dependencias: `DATA-001`
+- `AI-001` | `done` | Prioridad `alta` | Usar Supervision para representar, filtrar, recortar y anotar resultados EasyOCR | Dependencias: ninguna
+- `AI-002` | `done` | Prioridad `alta` | Retirar detectores locales, servicios cloud y sus configuraciones | Dependencias: ninguna
+- `DATA-001` | `done` | Prioridad `alta` | Eliminar dataset, pesos y configuracion de entrenamiento sin consumidores vigentes | Dependencias: `AI-002`
+- `AI-003` | `done` | Prioridad `alta` | Implementar pipeline EasyOCR local con seleccion de candidatos y revision manual | Dependencias: `AI-001`
 - `BACK-001` | `done` | Prioridad `alta` | Validar formato de placa en backend antes de registrar vehiculo | Dependencias: ninguna
 - `BACK-002` | `done` | Prioridad `media` | Ejecutar pipeline sincrono fuera del event loop principal | Dependencias: ninguna
 - `SEC-001` | `done` | Prioridad `alta` | Eliminar secretos hardcodeados de defaults y documentar `.env.example` | Dependencias: ninguna
-- `TEST-001` | `pending` | Prioridad `media` | Anadir pruebas automatizadas de pipeline y registro | Dependencias: `AI-003`
-- `COMPAT-001` | `done` | Prioridad `alta` | Fijar matriz compatible de Supervision, Inference SDK, NumPy y OpenCV | Dependencias: ninguna
-- `HARNESS-002` | `done` | Prioridad `alta` | Automatizar inventario, compilacion y smoke test de APIs de Supervision | Dependencias: `COMPAT-001`
-- `LOCAL-001` | `done` | Prioridad `media` | Evitar escritura del cache Matplotlib/Ultralytics fuera del runtime local durante el harness | Dependencias: `HARNESS-002`
+- `TEST-001` | `done` | Prioridad `alta` | Cubrir pipeline OCR, API, esquema, ROI y camara sin hardware fisico | Dependencias: `AI-003`
+- `COMPAT-001` | `done` | Prioridad `alta` | Fijar matriz local compatible de Supervision, EasyOCR, NumPy y OpenCV | Dependencias: ninguna
+- `HARNESS-002` | `done` | Prioridad `alta` | Automatizar compilacion, pruebas, APIs OCR de Supervision y dependencias prohibidas | Dependencias: `COMPAT-001`
+- `LOCAL-001` | `done` | Prioridad `media` | Evitar escritura del cache Matplotlib fuera del runtime local durante el harness | Dependencias: `HARNESS-002`
 - `LOCAL-002` | `done` | Prioridad `media` | Automatizar smoke HTTP con logs unicos y verificacion de liberacion del puerto | Dependencias: `HARNESS-002`
 - `LOCAL-003` | `blocked` | Prioridad `alta` | Validar migraciones contra PostgreSQL local; credenciales configuradas rechazadas | Dependencias: credencial local valida
-- `LOCAL-004` | `done` | Prioridad `alta` | Health ALPR debe reportar degradacion si faltan detector u OCR | Dependencias: ninguna
-- `LOCAL-005` | `done` | Prioridad `media` | Aislar caches Matplotlib/Ultralytics tambien en imports y scripts ML directos | Dependencias: `LOCAL-001`
+- `LOCAL-004` | `done` | Prioridad `alta` | Health depende solo de EasyOCR y Supervision esenciales | Dependencias: ninguna
+- `LOCAL-005` | `done` | Prioridad `media` | Aislar cache Matplotlib del pipeline local | Dependencias: `LOCAL-001`
 - `MONO-001` | `done` | Prioridad `alta` | Simplificar el acceso directo del repo a `backend/` y `frontend/` | Dependencias: ninguna
 - `MONO-002` | `done` | Prioridad `alta` | Restaurar el codigo fuente original del frontend directamente dentro de `frontend/` | Dependencias: ninguna
-- `SEC-002` | `pending` | Prioridad `media` | Revisar las 2 vulnerabilidades reportadas por `npm audit` sin aplicar actualizaciones incompatibles automaticamente | Dependencias: ninguna
+- `SEC-002` | `done` | Prioridad `alta` | Actualizar Vite y plugin React; `npm audit` queda sin vulnerabilidades | Dependencias: ninguna
 - `REPO-001` | `in_progress` | Prioridad `alta` | Crear y publicar el repositorio conjunto de backend y frontend | Dependencias: repositorio remoto vacio
+- `CAM-001` | `done` | Prioridad `alta` | Implementar agente local USB/RTSP separado que reutiliza el endpoint de analisis | Dependencias: ninguna
+- `CAM-002` | `done` | Prioridad `alta` | Agregar intervalo, timeout, reintentos, reconexion, deduplicacion y liberacion segura | Dependencias: `CAM-001`
+- `CAM-003` | `done` | Prioridad `media` | Probar captura y fallos de red con fotogramas y camaras simuladas | Dependencias: `CAM-001`
+- `CAM-004` | `blocked` | Prioridad `media` | Validar captura continua con webcam USB y RTSP reales | Dependencias: hardware y stream reales
+- `HARNESS-003` | `done` | Prioridad `media` | Ejecutar unit tests y smoke del endpoint analyze desde los scripts operativos | Dependencias: `CAM-003`
+- `OCR-ROI-001` | `done` | Prioridad `alta` | Permitir ROI opcional validada para camaras fijas | Dependencias: `AI-003`
+- `OCR-PHYSICAL-001` | `blocked` | Prioridad `alta` | Calibrar OCR, ROI e iluminacion con placas y camaras fisicas | Dependencias: hardware real
