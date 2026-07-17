@@ -3,16 +3,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Required environment variables (must be defined in .env)
+    BACKEND_HOST: str
+    BACKEND_PORT: int
+    ALLOWED_ORIGINS: list[str]
+    DATABASE_URL: str
+    CAMERA_API_URL: str
+
     # App Settings
     APP_NAME: str = "Lector de Placas UAGRM"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
-
-    # CORS
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-
-    # Database
-    DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@localhost:5432/alpr_db"
 
     # Auth configuration
     SECRET_KEY: str = "change-this-in-env"
@@ -36,7 +37,6 @@ class Settings(BaseSettings):
     # Local camera agent configuration. The agent runs as a separate process.
     CAMERA_INDEX: int = 0
     CAMERA_RTSP_URL: str = ""
-    CAMERA_API_URL: str = "http://127.0.0.1:8000/api/v1/plates/analyze"
     CAMERA_ANALYSIS_INTERVAL_SECONDS: float = 2.0
     CAMERA_DUPLICATE_COOLDOWN_SECONDS: float = 30.0
     CAMERA_RECONNECT_DELAY_SECONDS: float = 5.0
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     def empty_roi_to_none(cls, value: object) -> object:
         return None if value == "" else value
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()

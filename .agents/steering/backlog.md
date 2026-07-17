@@ -13,7 +13,7 @@
 - `HARNESS-002` | `done` | Prioridad `alta` | Automatizar compilacion, pruebas, APIs OCR de Supervision y dependencias prohibidas | Dependencias: `COMPAT-001`
 - `LOCAL-001` | `done` | Prioridad `media` | Evitar escritura del cache Matplotlib fuera del runtime local durante el harness | Dependencias: `HARNESS-002`
 - `LOCAL-002` | `done` | Prioridad `media` | Automatizar smoke HTTP con logs unicos y verificacion de liberacion del puerto | Dependencias: `HARNESS-002`
-- `LOCAL-003` | `blocked` | Prioridad `alta` | Validar migraciones contra PostgreSQL local; credenciales configuradas rechazadas | Dependencias: credencial local valida
+- `LOCAL-003` | `done` | Prioridad `alta` | Validar migraciones contra PostgreSQL local; resuelto al orquestar base de datos en Docker | Dependencias: docker-compose
 - `LOCAL-004` | `done` | Prioridad `alta` | Health depende solo de EasyOCR y Supervision esenciales | Dependencias: ninguna
 - `LOCAL-005` | `done` | Prioridad `media` | Aislar cache Matplotlib del pipeline local | Dependencias: `LOCAL-001`
 - `MONO-001` | `done` | Prioridad `alta` | Simplificar el acceso directo del repo a `backend/` y `frontend/` | Dependencias: ninguna
@@ -23,7 +23,15 @@
 - `CAM-001` | `done` | Prioridad `alta` | Implementar agente local USB/RTSP separado que reutiliza el endpoint de analisis | Dependencias: ninguna
 - `CAM-002` | `done` | Prioridad `alta` | Agregar intervalo, timeout, reintentos, reconexion, deduplicacion y liberacion segura | Dependencias: `CAM-001`
 - `CAM-003` | `done` | Prioridad `media` | Probar captura y fallos de red con fotogramas y camaras simuladas | Dependencias: `CAM-001`
+- `UI-001` | `done` | Prioridad `alta` | Implementar seguimiento en vivo de la placa (backend polling) y animaciones láser sin TFJS | Dependencias: ninguna
+- `AI-004` | `done` | Prioridad `alta` | Ajustar preprocesamiento EasyOCR (mag_ratio) y validador (Q->D) para precisión en placas bolivianas | Dependencias: ninguna
 - `CAM-004` | `blocked` | Prioridad `media` | Validar captura continua con webcam USB y RTSP reales | Dependencias: hardware y stream reales
 - `HARNESS-003` | `done` | Prioridad `media` | Ejecutar unit tests y smoke del endpoint analyze desde los scripts operativos | Dependencias: `CAM-003`
 - `OCR-ROI-001` | `done` | Prioridad `alta` | Permitir ROI opcional validada para camaras fijas | Dependencias: `AI-003`
 - `OCR-PHYSICAL-001` | `blocked` | Prioridad `alta` | Calibrar OCR, ROI e iluminacion con placas y camaras fisicas | Dependencias: hardware real
+- `DOCKER-001` | `done` | Prioridad `alta` | Crear Dockerfile para el frontend en Node 20 alpine | Dependencias: ninguna
+- `DOCKER-002` | `done` | Prioridad `alta` | Crear docker-compose.yml orquestando Postgres 17, Backend y Frontend | Dependencias: ninguna
+- `DOCKER-003` | `done` | Prioridad `alta` | Corregir compatibilidad OpenGL en slim Debian reemplazando libgl1-mesa-glx por libgl1 | Dependencias: ninguna
+- `ENV-001` | `done` | Prioridad `alta` | Deshardcodear host y puerto de run.py usando os.environ | Dependencias: ninguna
+- `ENV-002` | `done` | Prioridad `alta` | Configurar variables Host/Port en Pydantic settings e ignorar inputs extras del .env | Dependencias: ninguna
+

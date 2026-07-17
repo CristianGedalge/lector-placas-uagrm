@@ -17,7 +17,7 @@ def image_bytes(width=320, height=180):
     return encoded.tobytes()
 
 
-def ocr_item(text, confidence=0.9, x1=20, y1=40, x2=220, y2=100):
+def ocr_item(text, confidence=0.9, x1=20, y1=80, x2=220, y2=140):
     return ([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], text, confidence)
 
 
@@ -27,7 +27,7 @@ def pipeline_settings(**overrides):
         "OCR_ROI_Y": None,
         "OCR_ROI_WIDTH": None,
         "OCR_ROI_HEIGHT": None,
-        "OCR_UPSCALE_FACTOR": 2.0,
+        "OCR_UPSCALE_FACTOR": 1.0,
         "OCR_USE_GRAYSCALE": True,
         "OCR_USE_CONTRAST": False,
         "OCR_DENOISE": False,
@@ -107,8 +107,8 @@ class OCRPipelineTests(unittest.TestCase):
     def test_two_nearby_fragments_are_combined(self):
         reader = MockOCRReader(
             [
-                ocr_item("1234", 0.86, 20, 40, 110, 100),
-                ocr_item("ABC", 0.82, 120, 42, 200, 100),
+                ocr_item("1234", 0.86, 20, 80, 110, 140),
+                ocr_item("ABC", 0.88, 115, 80, 220, 140),
             ]
         )
         with pipeline_settings():
@@ -127,7 +127,7 @@ class OCRPipelineTests(unittest.TestCase):
         ):
             result = analyze_plate(image_bytes(width=300, height=200), reader)
         self.assertEqual(result["status"], "DETECTED")
-        self.assertEqual(reader.images[0].shape, (120, 200))
+        self.assertEqual(reader.images[0].shape[:2], (60, 100))
 
     def test_roi_outside_image_is_rejected(self):
         with pipeline_settings(

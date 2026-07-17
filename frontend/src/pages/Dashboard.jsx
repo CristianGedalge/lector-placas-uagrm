@@ -191,7 +191,7 @@ function Dashboard() {
             {selectedVehicle.vehicle_photo_path && (
               <img
                 className="vehicle-photo"
-                src={`http://127.0.0.1:8000${selectedVehicle.vehicle_photo_path}`}
+                src={selectedVehicle.vehicle_photo_path}
                 alt={`Vehiculo ${selectedVehicle.license_plate}`}
               />
             )}

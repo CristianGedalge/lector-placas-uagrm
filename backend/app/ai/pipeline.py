@@ -18,7 +18,11 @@ import cv2
 import numpy as np
 import supervision as sv
 
-from app.ai.validators import normalize_plate_text, validate_bolivian_plate
+from app.ai.validators import (
+    is_blocklisted,
+    normalize_plate_text,
+    validate_bolivian_plate,
+)
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -164,6 +168,31 @@ def _detections_from_easyocr(easyocr_results: list[Any]) -> sv.Detections:
     return _manual_easyocr_conversion(easyocr_results)
 
 
+def _filter_upper_text(detections: sv.Detections, image_height: int) -> sv.Detections:
+    """
+    Descarta detecciones cuyo centro Y está en el 40% superior de la imagen.
+
+    Fundamento: en placas bolivianas, "BOLIVIA" siempre ocupa la parte superior
+    y el número de placa ocupa la mitad-inferior. Usar sv.Detections con
+    indexación booleana (supervision 0.29.1) para el filtro es la forma
+    correcta de hacerlo sin romper la estructura de datos.
+    """
+    if len(detections) == 0 or image_height <= 0:
+        return detections
+    # Centro Y normalizado de cada detección
+    center_y = (detections.xyxy[:, 1] + detections.xyxy[:, 3]) / 2.0
+    # Mantener solo las que están en el 60% inferior
+    threshold = image_height * 0.40
+    mask: np.ndarray = center_y >= threshold  # booleano por elemento
+    filtered = detections[mask]               # sv.Detections soporta bool-indexing
+    if len(filtered) < len(detections):
+        logger.debug(
+            "_filter_upper_text: descartadas %d detecciones del tercio superior",
+            len(detections) - len(filtered),
+        )
+    return filtered
+
+
 def _map_detections_to_image(
     detections: sv.Detections,
     scale: float,
@@ -223,6 +252,10 @@ def _make_candidate(
 ) -> OCRCandidate | None:
     normalized = normalize_plate_text(raw_text)
     if not MIN_CANDIDATE_LENGTH <= len(normalized) <= MAX_CANDIDATE_LENGTH:
+        return None
+    # Descartar palabras del entorno de la placa (BOLIVIA, POLICIA, etc.)
+    if is_blocklisted(normalized) or is_blocklisted(raw_text.strip()):
+        logger.debug("_make_candidate: descartado por blocklist -> %r", normalized)
         return None
     width = float(xyxy[2] - xyxy[0])
     height = float(xyxy[3] - xyxy[1])
@@ -324,6 +357,90 @@ def _encode_image(image: np.ndarray) -> str | None:
     return f"data:image/jpeg;base64,{base64.b64encode(buffer).decode('utf-8')}"
 
 
+def _run_ocr(
+    ocr_reader,
+    processed: np.ndarray,
+    text_threshold: float = 0.7,
+    low_text: float = 0.4,
+) -> list:
+    """Ejecuta EasyOCR con parámetros optimizados para números de placa."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=".*'pin_memory' argument is set as true but no accelerator is found.*",
+            category=UserWarning,
+        )
+        return ocr_reader.readtext(
+            processed,
+            detail=1,
+            paragraph=False,
+            allowlist=OCR_ALLOWLIST,
+            text_threshold=text_threshold,
+            low_text=low_text,
+            # width_ths: fusionar fragmentos horizontales cercanos
+            # (el número de la placa suele estar partido en 2+ cajas)
+            width_ths=2.0,
+            # height_ths: tolerancia vertical al fusionar cajas
+            height_ths=0.5,
+            mag_ratio=1.5,         # magnifica internamente 1.5x (ayuda a distinguir detalles como D vs Q)
+            adjust_contrast=0.5,   # ajusta el contraste de la imagen
+        )
+
+
+def _generate_preprocessing_variants(
+    image: np.ndarray,
+) -> list[tuple[str, np.ndarray, float]]:
+    """
+    Genera múltiples variantes de preprocesamiento de la imagen.
+    Retorna lista de (nombre, imagen_procesada, escala).
+    Intentar varias variantes aumenta la probabilidad de que EasyOCR lea bien la placa.
+    """
+    variants: list[tuple[str, np.ndarray, float]] = []
+
+    def _upscale(img: np.ndarray, factor: float) -> tuple[np.ndarray, float]:
+        h, w = img.shape[:2]
+        if factor > 1.0 and max(h, w) < 1200:
+            img = cv2.resize(img, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+            return img, factor
+        return img, 1.0
+
+    factor = float(settings.OCR_UPSCALE_FACTOR)
+
+    # Variante 1: imagen original sin modificar (upscale si es pequeña)
+    v1, s1 = _upscale(image.copy(), factor)
+    variants.append(("original", v1, s1))
+
+    # Variante 2: escala de grises + CLAHE (preprocesamiento actual)
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    gray_clahe = clahe.apply(gray)
+    v2, s2 = _upscale(gray_clahe, factor)
+    variants.append(("gray_clahe", v2, s2))
+
+    # Variante 3: bilateral filter (preserva bordes) + sharpening
+    bilateral = cv2.bilateralFilter(image, d=9, sigmaColor=75, sigmaSpace=75)
+    kernel_sharp = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+    sharpened = cv2.filter2D(bilateral, -1, kernel_sharp)
+    v3, s3 = _upscale(sharpened, factor)
+    variants.append(("bilateral_sharp", v3, s3))
+
+    # Variante 4: escala de grises + threshold adaptativo (bueno para placas con luz desigual)
+    gray2 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    v4_base = cv2.adaptiveThreshold(
+        gray2, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5
+    )
+    v4, s4 = _upscale(v4_base, factor)
+    variants.append(("adaptive_thresh", v4, s4))
+
+    # Variante 5: erosión leve (engrosa caracteres oscuros sobre fondo claro, une trazos rotos de la 'D')
+    kernel_erode = np.ones((2, 2), np.uint8)
+    eroded = cv2.erode(gray, kernel_erode, iterations=1)
+    v5, s5 = _upscale(eroded, factor)
+    variants.append(("morph_erode", v5, s5))
+
+    return variants
+
+
 def analyze_plate(image_bytes: bytes, ocr_reader=None) -> dict:
     if not image_bytes:
         return _error("La imagen esta vacia.", http_status=400, error_code="empty_image")
@@ -343,40 +460,86 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None) -> dict:
     except ValueError as exc:
         return _error(str(exc), http_status=422, error_code="invalid_roi")
 
-    processed, scale = _preprocess_image(analysis_region)
-    try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message=".*'pin_memory' argument is set as true but no accelerator is found.*",
-                category=UserWarning,
-            )
-            easyocr_results = ocr_reader.readtext(
-                processed,
-                detail=1,
-                paragraph=False,
-                allowlist=OCR_ALLOWLIST,
-            )
-    except Exception as exc:
-        logger.error("EasyOCR fallo: %s", exc)
-        return _error(
-            f"Error durante OCR: {exc}",
-            http_status=503,
-            error_code="ocr_error",
-        )
+    # --- Intentos multi-variante de preprocesamiento ---
+    # Probamos 4 variantes de imagen y 2 configuraciones OCR (normal y sensible).
+    # Elegimos el candidato válido con mayor score compuesto.
+    variants = _generate_preprocessing_variants(analysis_region)
 
-    detections = _detections_from_easyocr(easyocr_results or [])
-    detections = _map_detections_to_image(detections, scale, offset, image.shape)
-    candidates = _build_candidates(detections, image.shape)
-    if not candidates:
+    # Configuraciones de umbrales EasyOCR: (text_threshold, low_text)
+    ocr_configs = [
+        (0.7, 0.4),   # Normal
+        (0.4, 0.2),   # Sensible: detecta texto de baja confianza
+    ]
+
+    all_candidates: list[OCRCandidate] = []
+
+    for var_name, processed, scale in variants:
+        for text_thr, low_thr in ocr_configs:
+            try:
+                results = _run_ocr(ocr_reader, processed, text_thr, low_thr)
+            except Exception as exc:
+                logger.warning("OCR fallo en variante '%s' cfg=(%.1f,%.1f): %s", var_name, text_thr, low_thr, exc)
+                continue
+
+            logger.debug(
+                "Variante '%s' cfg=(%.1f,%.1f): %d detecciones %s",
+                var_name,
+                text_thr,
+                low_thr,
+                len(results or []),
+                [(r[1], round(r[2], 2)) for r in (results or [])],
+            )
+
+            if not results:
+                continue
+
+            det = _detections_from_easyocr(results)
+            det = _map_detections_to_image(det, scale, offset, image.shape)
+            # --- FILTRO POSICIONAL: descartar texto en el 40% superior ---
+            # "BOLIVIA" siempre aparece en la parte superior de la placa.
+            # Supervision sv.Detections soporta indexación booleana (0.29.1).
+            det = _filter_upper_text(det, image.shape[0])
+            candidates = _build_candidates(det, image.shape)
+            all_candidates.extend(candidates)
+
+            # Si ya encontramos un candidato válido con buena confianza, no seguimos
+            if any(
+                c.valid_format and c.confidence >= settings.OCR_CONFIDENCE_THRESHOLD
+                for c in candidates
+            ):
+                logger.debug("Candidato válido encontrado en variante '%s', deteniendo búsqueda.", var_name)
+                break
+
+        else:
+            continue
+        break
+
+    if not all_candidates:
         return {
             "status": "LOW_CONFIDENCE",
-            "message": "EasyOCR no encontro un candidato de placa util.",
+            "message": "EasyOCR no encontro texto legible en la imagen.",
             "detection_backend": PIPELINE_MODE,
             "requires_manual_review": True,
         }
 
-    selected = candidates[0]
+    # Ordenar: primero válidos, luego por score
+    all_candidates.sort(key=lambda c: (c.valid_format, c.score, c.confidence), reverse=True)
+    # Deduplicar por texto normalizado: quedarse con el de mayor score
+    seen: dict[str, OCRCandidate] = {}
+    for c in all_candidates:
+        if c.normalized_text not in seen or c.score > seen[c.normalized_text].score:
+            seen[c.normalized_text] = c
+    unique_candidates = sorted(seen.values(), key=lambda c: (c.valid_format, c.score), reverse=True)
+
+    selected = unique_candidates[0]
+    logger.debug(
+        "Candidato seleccionado: '%s' | valido=%s | ocr_conf=%.2f | score=%.2f",
+        selected.normalized_text,
+        selected.valid_format,
+        selected.confidence,
+        selected.score,
+    )
+
     selected_detection = sv.Detections(
         xyxy=np.asarray([selected.xyxy], dtype=np.float32),
         confidence=np.asarray([selected.confidence], dtype=np.float32),
@@ -399,14 +562,9 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None) -> dict:
         message = "La lectura requiere revision manual por baja confianza OCR."
 
     label = f"{selected.normalized_text} ({selected.confidence:.0%})"
-    annotated = box_annotator.annotate(
-        scene=image.copy(),
-        detections=selected_detection,
-    )
+    annotated = box_annotator.annotate(scene=image.copy(), detections=selected_detection)
     annotated = label_annotator.annotate(
-        scene=annotated,
-        detections=selected_detection,
-        labels=[label],
+        scene=annotated, detections=selected_detection, labels=[label]
     )
 
     return {
@@ -422,4 +580,5 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None) -> dict:
         "requires_manual_review": not confirmed,
         "annotated_image": _encode_image(annotated),
         "plate_crop": _encode_image(crop),
+        "plate_bbox": [float(c) for c in selected.xyxy],
     }

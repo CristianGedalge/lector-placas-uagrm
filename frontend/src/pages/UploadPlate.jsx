@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import UploadImage from "../components/UploadImage";
 import {
   createVehicleWithPhoto,
@@ -36,7 +35,11 @@ function UploadPlate() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  const modelRef = useRef(null);
+  const requestRef = useRef(null);
 
+  const [modelLoading, setModelLoading] = useState(false);
+  const [trackingBoxes, setTrackingBoxes] = useState([]);
   const [fileName, setFileName] = useState("");
   const [manualPlate, setManualPlate] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -117,16 +120,32 @@ function UploadPlate() {
       return;
     }
 
+    const ALLOWED_TYPES = ["image/jpeg", "image/png"];
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setLookupError("Formato no permitido. Por favor selecciona una imagen JPG o PNG.");
+      return;
+    }
+
     const formData = new FormData();
     formData.append("file", file);
 
     try {
       setLookupLoading(true);
+      resetLookupState();
       const analysis = await uploadPlateImage(formData);
       setAnalysisPreview(analysis);
+
       if (analysis?.normalized_plate) {
+        // OCR exitoso con formato boliviano confirmado
         setManualPlate(analysis.normalized_plate);
         await handleLookupPlate(analysis.normalized_plate);
+      } else if (analysis?.detected_plate) {
+        // OCR detectó texto pero no cumple el formato: rellenar campo para corrección manual
+        const rawClean = analysis.detected_plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+        setManualPlate(rawClean);
+        setLookupError(
+          `OCR detecto: "${analysis.detected_plate}" — ${analysis.message || "Verifica y corrige el numero de placa si es necesario."}`
+        );
       } else {
         setLookupError(analysis?.message || "No se pudo detectar una placa en la imagen.");
       }
@@ -135,6 +154,50 @@ function UploadPlate() {
     } finally {
       setLookupLoading(false);
     }
+  };
+
+  useEffect(() => {
+    if (cameraOpen && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+    }
+  }, [cameraOpen]);
+
+  const detectFrame = async () => {
+    if (!videoRef.current || !canvasRef.current || !streamRef.current) return;
+    if (requestRef.current === "processing") return;
+    
+    requestRef.current = "processing";
+    const canvas = canvasRef.current;
+    canvas.width = videoRef.current.videoWidth || 640;
+    canvas.height = videoRef.current.videoHeight || 480;
+    
+    if (canvas.width === 0) {
+      requestRef.current = null;
+      return;
+    }
+
+    const context = canvas.getContext("2d");
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    
+    try {
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.6));
+      if (blob) {
+        const file = new File([blob], "frame.jpg", { type: "image/jpeg" });
+        const analysis = await uploadPlateImage(file);
+        
+        if ((analysis.status === "DETECTED" || analysis.status === "LOW_CONFIDENCE") && analysis.plate_bbox) {
+           const [x1, y1, x2, y2] = analysis.plate_bbox;
+           const w = x2 - x1;
+           const h = y2 - y1;
+           setTrackingBoxes([{ bbox: [x1, y1, w, h], score: analysis.ocr_confidence, text: analysis.detected_plate }]);
+        } else {
+           setTrackingBoxes([]);
+        }
+      }
+    } catch (e) {
+      setTrackingBoxes([]);
+    }
+    requestRef.current = null;
   };
 
   const startCamera = async () => {
@@ -146,9 +209,9 @@ function UploadPlate() {
       });
       streamRef.current = stream;
       setCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
+      
+      modelRef.current = setInterval(detectFrame, 1500);
+      
     } catch (error) {
       setCameraError("No se pudo abrir la camara del dispositivo.");
       console.error(error);
@@ -156,11 +219,17 @@ function UploadPlate() {
   };
 
   const stopCamera = () => {
+    if (modelRef.current) {
+      clearInterval(modelRef.current);
+      modelRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     setCameraOpen(false);
+    setTrackingBoxes([]);
+    requestRef.current = null;
   };
 
   const captureFromCamera = async () => {
@@ -250,6 +319,43 @@ function UploadPlate() {
             Abrir camara
           </button>
         </div>
+
+        {/* Resultados del análisis OCR — visibles incluso en LOW_CONFIDENCE */}
+        {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
+          <div className="analysis-preview">
+            <p className="eyebrow">
+              {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Revisión manual"}
+            </p>
+            <div className="analysis-images">
+              {analysisPreview.annotated_image && (
+                <div>
+                  <p className="muted-text">Imagen analizada</p>
+                  <img
+                    className="vehicle-photo"
+                    src={analysisPreview.annotated_image}
+                    alt="Imagen anotada por OCR"
+                  />
+                </div>
+              )}
+              {analysisPreview.plate_crop && (
+                <div>
+                  <p className="muted-text">Recorte de placa</p>
+                  <img
+                    className="plate-crop-preview"
+                    src={analysisPreview.plate_crop}
+                    alt="Recorte de placa detectada"
+                  />
+                </div>
+              )}
+            </div>
+            {analysisPreview.detected_plate && (
+              <p className="muted-text">
+                Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
+                {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="card">
@@ -289,7 +395,54 @@ function UploadPlate() {
               </button>
             </div>
 
-            <video ref={videoRef} autoPlay playsInline className="camera-preview" />
+            <div className="camera-container" style={{ position: "relative" }}>
+              <video ref={videoRef} autoPlay playsInline className="camera-preview" />
+              {trackingBoxes.map((box, i) => {
+                const [x, y, width, height] = box.bbox;
+                const videoW = videoRef.current ? videoRef.current.videoWidth : 640;
+                const videoH = videoRef.current ? videoRef.current.videoHeight : 480;
+                const pctX = (x / videoW) * 100;
+                const pctY = (y / videoH) * 100;
+                const pctW = (width / videoW) * 100;
+                const pctH = (height / videoH) * 100;
+
+                return (
+                  <div key={i} style={{
+                    position: "absolute",
+                    left: `${pctX}%`,
+                    top: `${pctY}%`,
+                    width: `${pctW}%`,
+                    height: `${pctH}%`,
+                    border: "3px solid #a855f7",
+                    backgroundColor: "rgba(168, 85, 247, 0.1)",
+                    zIndex: 10,
+                    pointerEvents: "none"
+                  }}>
+                    <span style={{
+                      backgroundColor: "#a855f7",
+                      color: "white",
+                      padding: "2px 8px",
+                      fontSize: "12px",
+                      position: "absolute",
+                      top: "-20px",
+                      left: "-3px",
+                      fontWeight: "bold",
+                      borderRadius: "2px"
+                    }}>Placa {box.text} ({Math.round(box.score * 100)}%)</span>
+                  </div>
+                );
+              })}
+              
+              <div className="camera-overlay">
+                <div className="camera-frame">
+                  {trackingBoxes.length === 0 && <div className="scanner-laser"></div>}
+                  <div className="camera-frame-corners"></div>
+                </div>
+                <p className="camera-instruction">
+                  {trackingBoxes.length > 0 ? "Placa detectada. Verifique y capture." : "Buscando placa..."}
+                </p>
+              </div>
+            </div>
             <canvas ref={canvasRef} hidden />
             {cameraError && <p className="error-text">{cameraError}</p>}
 
@@ -318,7 +471,7 @@ function UploadPlate() {
             {lookupResult.vehicle_photo_path && (
               <img
                 className="vehicle-photo"
-                src={`http://127.0.0.1:8000${lookupResult.vehicle_photo_path}`}
+                src={lookupResult.vehicle_photo_path}
                 alt={`Vehiculo ${lookupResult.license_plate}`}
               />
             )}
@@ -442,10 +595,10 @@ function UploadPlate() {
                     />
                   </label>
                   <label className="field-group">
-                    <span>Foto del vehiculo</span>
+                    <span>Foto del vehiculo (JPG o PNG)</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/jpeg,image/png"
                       onChange={(event) => setVehiclePhoto(event.target.files?.[0] || null)}
                     />
                   </label>

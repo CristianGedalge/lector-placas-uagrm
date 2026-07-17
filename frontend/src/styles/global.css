@@ -696,3 +696,159 @@ textarea:focus {
     flex-direction: column;
   }
 }
+
+/* ===================== ANÁLISIS OCR PREVIEW ===================== */
+
+.vehicle-photo {
+  width: 100%;
+  max-width: 480px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  object-fit: contain;
+  display: block;
+}
+
+.plate-crop-preview {
+  max-height: 80px;
+  border-radius: 8px;
+  border: 2px solid var(--color-primary);
+  object-fit: contain;
+  display: block;
+}
+
+.analysis-preview {
+  margin-top: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: rgba(21, 62, 117, 0.04);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.analysis-images {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.analysis-images > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+
+/* Camera Scanner Overlay */
+.camera-container {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0f172a;
+  display: flex;
+}
+
+.camera-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.camera-frame {
+  width: 75%;
+  height: 40%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.65);
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Corner accents for scanner look */
+.camera-frame::before,
+.camera-frame::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 4px solid #ffffff;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.camera-frame::before {
+  clip-path: polygon(0 0, 15% 0, 15% 100%, 0 100%, 0 85%, 100% 85%, 100% 100%, 85% 100%, 85% 0, 100% 0, 100% 15%, 0 15%);
+}
+
+.camera-frame::after {
+  border-color: rgba(220, 38, 38, 0.7); /* subtle red scanning accent */
+  clip-path: polygon(0 0, 15% 0, 15% 15%, 0 15%); /* just top left corner as an example, wait actually the before takes care of all corners with clip path */
+  display: none; 
+}
+
+/* Better corner accents using 4 absolute elements would be cleaner, but let's just do a nice border for now */
+.camera-frame-corners {
+  position: absolute;
+  inset: -2px;
+  border: 4px solid #ffffff;
+  border-radius: 14px;
+  clip-path: polygon(
+    0 0, 20% 0, 20% 4px, 4px 4px, 4px 20%, 0 20%, /* Top Left */
+    80% 0, 100% 0, 100% 20%, calc(100% - 4px) 20%, calc(100% - 4px) 4px, 80% 4px, /* Top Right */
+    0 80%, 4px 80%, 4px calc(100% - 4px), 20% calc(100% - 4px), 20% 100%, 0 100%, /* Bottom Left */
+    100% 80%, 100% 100%, 80% 100%, 80% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 80% /* Bottom Right */
+  );
+}
+
+.camera-instruction {
+  margin-top: 1.5rem;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.5px;
+  text-shadow: 0px 2px 8px rgba(0, 0, 0, 0.9);
+  z-index: 10;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+}
+
+/* Dynamic Scanning Animations */
+@keyframes pulse-frame {
+  0% { box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.65), inset 0 0 0 rgba(255, 255, 255, 0); }
+  50% { box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.65), inset 0 0 20px rgba(255, 255, 255, 0.2); }
+  100% { box-shadow: 0 0 0 4000px rgba(15, 23, 42, 0.65), inset 0 0 0 rgba(255, 255, 255, 0); }
+}
+
+@keyframes scan-laser {
+  0% { top: 5%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 95%; opacity: 0; }
+}
+
+.camera-frame {
+  animation: pulse-frame 2s infinite ease-in-out;
+}
+
+.scanner-laser {
+  position: absolute;
+  width: 90%;
+  height: 2px;
+  background: #ef4444; /* red laser */
+  box-shadow: 0 0 10px #ef4444, 0 0 20px #ef4444;
+  left: 5%;
+  animation: scan-laser 2.5s infinite linear alternate;
+  z-index: 5;
+}

@@ -1,5 +1,21 @@
 # MEMORY
 
+## 2026-07-17 - Mejoras UI y Seguimiento en Vivo de Placas
+
+- **Validación Posicional OCR**: Se añadió `Q -> D` al diccionario del corrector en `validators.py` para arreglar falsos positivos donde la letra D en placas bolivianas es confundida con Q.
+- **Preprocesamiento OCR**: Se añadieron parámetros `mag_ratio=1.5`, `adjust_contrast=0.5` a EasyOCR y una variante morfológica extra (`morph_erode`) para engrosar trazos y mejorar la lectura.
+- **Bug UI de React**: Se solucionó un bug en `UploadPlate.jsx` (pantalla negra) asegurando mediante `useEffect` que la cámara reciba el stream cuando el modal ya esté montado.
+- **Rastreo de Placa (Polling)**: Tras analizar la inviabilidad de detectores reales de placa en navegador (como YOLO o TFJS, que solo detecta autos), se implementó un bucle que envía una imagen al backend cada 1.5s.
+- **Recuadro de Precisión**: Se modificó `pipeline.py` para devolver el `plate_bbox` y `UploadPlate.jsx` ahora dibuja el recuadro dinámico morado persiguiendo a la placa con base en el OCR real.
+
+## 2026-07-17 - Dockerizacion y dinamizacion de variables
+
+- **Dockerización completa**: Creado `frontend/Dockerfile` sobre Node 20 y `docker-compose.yml` en la raíz que orquesta Postgres 17 (DB `Placas`), Backend y Frontend de forma integrada.
+- **OpenGL en Docker**: Corregido fallo de compilación del backend en Docker reemplazando `libgl1-mesa-glx` (obsoleto en Debian nuevo) con `libgl1`, solucionando la dependencia gráfica de OpenCV.
+- **Base de datos Postgres**: Ejecutadas y aplicadas con éxito todas las migraciones de Alembic dentro de la base de datos Postgres orquestada en Docker.
+- **Variables dinámicas**: Modificado `run.py` y `settings.py` del backend para leer dinámicamente host y puerto desde las variables de entorno (`BACKEND_HOST`, `BACKEND_PORT`) vía `os.environ` (obligatorio) sin tener valores por defecto de desarrollo local hardcodeados en el código de Python.
+- **Pydantic ignore extra variables**: Configurada la clase `Settings` con `extra="ignore"` para evitar fallos de validación por variables adicionales definidas en el `.env` (como configuraciones de la cámara y del host).
+
 ## 2026-07-16 - Ejecucion local posterior a migracion OCR
 
 - Backend y frontend arrancaron en puertos aislados y liberaron recursos correctamente.
