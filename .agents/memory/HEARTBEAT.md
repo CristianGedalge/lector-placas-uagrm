@@ -1,10 +1,9 @@
 # HEARTBEAT
 
-- Foco actual: Optimización de la experiencia de usuario (tracking en tiempo real) y preprocesamiento OCR para placas bolivianas.
-- Ultimo avance: Se implementó un bucle de escaneo silencioso en el frontend (React) que sondea el backend (EasyOCR) para dibujar un recuadro de seguimiento preciso sobre la placa en tiempo real. Todas las pruebas unitarias pasaron satisfactoriamente verificando la tolerancia al preprocesamiento OCR.
-- Estructura actual: el proyecto usa `backend/` y `frontend/` directos en la raiz; docker-compose.yml en la raiz para despliegue rapido.
-- Inventario confirmado: backend Dockerfile actualizado para usar `libgl1`; frontend Dockerfile creado sobre Node 20.
-- Bloqueos: Ninguno. Todos los test de verificación pasaron en local (23 pruebas backend OK).
-- Proximo paso: conectar hardware físico (cámara) y probar detección de placa en el mundo real utilizando el reporte de hardware generado.
-- Estado del Alpha: pipeline OCR local, API, frontend, base de datos Postgres y dockerizacion orquestados y probados.
-
+- Foco actual: Implementación estricta de Reglas de Negocio y Seguridad de Datos.
+- Ultimo avance: Se implementó la restricción de unicidad para el CI (`document_id`) en base de datos. Se restringió la creación de vehículos para que los operadores solo puedan registrar a su nombre, y el registro de salidas (`EXIT`) únicamente al propietario del vehículo o administradores. Se bloqueó el formulario de registro de vehículos en el frontend para operadores.
+- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz para despliegue rápido.
+- Inventario confirmado: Reglas de negocio enforcing en backend, frontend y nivel de base de datos (migración Alembic).
+- Bloqueos: Ninguno. Todos los tests locales y revisiones de seguridad en roles son exitosos.
+- Proximo paso: Calibrar e integrar el pipeline ALPR de EasyOCR/Supervision con cámaras físicas de prueba y configurar ROI definitiva.
+- Estado del Alpha: Registro, control de accesos y validaciones de negocio 100% integrados y funcionales.

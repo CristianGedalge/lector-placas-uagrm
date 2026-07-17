@@ -8,16 +8,13 @@ const DEFAULT_TIMEOUT = 30_000; // 30 segundos para el resto de peticiones
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   timeout: DEFAULT_TIMEOUT,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json"
   }
 });
 
 apiClient.interceptors.request.use((config) => {
-  const session = readSession();
-  if (session?.token) {
-    config.headers.Authorization = `Bearer ${session.token}`;
-  }
   // Rutas de análisis de imagen necesitan más tiempo
   if (config.url?.includes("/plates/analyze")) {
     config.timeout = OCR_TIMEOUT;

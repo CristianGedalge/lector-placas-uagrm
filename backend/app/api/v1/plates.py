@@ -1,8 +1,21 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
-from app.schemas.plate import PlateAnalysisResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from app.schemas.plate import PlateAnalysisResponse, PlateScanResponse
 from app.ai.pipeline import analyze_plate, get_pipeline_status
+from app.core.limiter import limiter
+from app.db.session import get_db
+from app.db.models import AuthUser, PlateScan, AuthRoleEnum
+from app.api.v1.auth import get_current_user, require_admin
+
+async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser | None:
+    try:
+        return await get_current_user(request, db=db)
+    except Exception:
+        return None
+
 
 router = APIRouter()
 
@@ -10,7 +23,14 @@ MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png"]
 
 @router.post("/analyze", response_model=PlateAnalysisResponse)
-async def analyze_plate_endpoint(request: Request, file: UploadFile = File(...)):
+@limiter.limit("60/minute")
+async def analyze_plate_endpoint(
+    request: Request, 
+    file: UploadFile = File(...), 
+    realtime: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser | None = Depends(get_current_user_optional)
+):
     """
     Recibe una imagen, valida tamaño/formato, y ejecuta el pipeline ALPR.
     """
@@ -34,6 +54,7 @@ async def analyze_plate_endpoint(request: Request, file: UploadFile = File(...))
         analyze_plate,
         image_bytes,
         request.app.state.ocr_reader,
+        realtime,
     )
 
     if result_dict.get("status") == "ERROR":
@@ -45,7 +66,49 @@ async def analyze_plate_endpoint(request: Request, file: UploadFile = File(...))
             ).model_dump(),
         )
     
+    # Guardar en base de datos el escaneo de placa si se detectó texto
+    status_val = result_dict.get("status")
+    if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
+        from app.db.models import Vehicle, ScanStatusEnum
+        normalized = result_dict.get("normalized_plate")
+        
+        # Buscar si el vehículo ya existe
+        vehicle_id = None
+        if normalized:
+            v_res = await db.execute(select(Vehicle).where(Vehicle.license_plate == normalized))
+            vehicle = v_res.scalars().first()
+            if vehicle:
+                vehicle_id = vehicle.id
+
+        scan = PlateScan(
+            detected_plate=result_dict.get("detected_plate"),
+            normalized_plate=normalized,
+            confidence=result_dict.get("combined_confidence") or result_dict.get("ocr_confidence") or 0.0,
+            scan_status=ScanStatusEnum.DETECTED if status_val == "DETECTED" else ScanStatusEnum.LOW_CONFIDENCE,
+            vehicle_id=vehicle_id,
+            scanned_by_user_id=current_user.id if current_user else None
+        )
+        db.add(scan)
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+
     return PlateAnalysisResponse(**result_dict)
+
+
+@router.get("/scans", response_model=list[PlateScanResponse])
+async def list_plate_scans(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    """Retorna el historial de lecturas de placas. Administradores ven todo; Operadores ven lo suyo."""
+    query = select(PlateScan).order_by(PlateScan.created_at.desc())
+    if current_user.role != AuthRoleEnum.ADMIN:
+        query = query.where(PlateScan.scanned_by_user_id == current_user.id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
 
 @router.get("/health")
 async def health_check(request: Request):

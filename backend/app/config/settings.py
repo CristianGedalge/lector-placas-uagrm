@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OCR_LANGUAGES: str = "es,en"
     OCR_GPU: bool = False
     OCR_QUANTIZE: bool = False
-    OCR_CONFIDENCE_THRESHOLD: float = 0.40
+    OCR_CONFIDENCE_THRESHOLD: float = 0.55
     OCR_UPSCALE_FACTOR: float = 2.0
     OCR_USE_GRAYSCALE: bool = True
     OCR_USE_CONTRAST: bool = True

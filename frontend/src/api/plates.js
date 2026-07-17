@@ -1,10 +1,12 @@
 import apiClient from "./axios";
 
-export async function uploadPlateImage(formData) {
-  const { data } = await apiClient.post("/v1/plates/analyze", formData, {
+export async function uploadPlateImage(formData, realtime = false, signal = undefined) {
+  const endpoint = realtime ? "/v1/plates/analyze?realtime=true" : "/v1/plates/analyze";
+  const { data } = await apiClient.post(endpoint, formData, {
     headers: {
       "Content-Type": "multipart/form-data"
-    }
+    },
+    signal
   });
 
   return data;
@@ -21,7 +23,7 @@ export async function getVehicleDetail(vehicleId) {
 }
 
 export async function getMyVehicles(registeredByUserId) {
-  const { data } = await apiClient.get("/v1/vehicles", {
+  const { data } = await apiClient.get("/v1/vehicles/", {
     params: {
       registered_by_user_id: registeredByUserId
     }
@@ -39,7 +41,7 @@ export async function getDashboardSummary(registeredByUserId) {
 }
 
 export async function createVehicle(payload) {
-  const { data } = await apiClient.post("/v1/vehicles", payload);
+  const { data } = await apiClient.post("/v1/vehicles/", payload);
   return data;
 }
 
@@ -75,4 +77,24 @@ export async function updateVehicleWithPhoto(vehicleId, payload, photoFile) {
 
 export async function deleteVehicle(vehicleId) {
   await apiClient.delete(`/v1/vehicles/${vehicleId}`);
+}
+
+export async function getPlateScans() {
+  const { data } = await apiClient.get("/v1/plates/scans");
+  return data;
+}
+
+export async function getAccessLogs() {
+  const { data } = await apiClient.get("/v1/access-logs/");
+  return data;
+}
+
+export async function createAccessLog(payload) {
+  const { data } = await apiClient.post("/v1/access-logs/", payload);
+  return data;
+}
+
+export async function createAutoAccessLog(payload) {
+  const { data } = await apiClient.post("/v1/access-logs/auto", payload);
+  return data;
 }

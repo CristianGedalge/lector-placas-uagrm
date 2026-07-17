@@ -3,7 +3,9 @@ import UploadImage from "../components/UploadImage";
 import {
   createVehicleWithPhoto,
   lookupVehicleByPlate,
-  uploadPlateImage
+  uploadPlateImage,
+  createAccessLog,
+  createAutoAccessLog
 } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import { formatPlate } from "../utils/formatters";
@@ -37,6 +39,9 @@ function UploadPlate() {
   const streamRef = useRef(null);
   const modelRef = useRef(null);
   const requestRef = useRef(null);
+  // Mapa de votos: texto_normalizado -> { count, bbox, score, text, lastFrameTs }
+  const voteMapRef = useRef(new Map());
+  const VOTES_NEEDED = 3; // Frames consecutivos con el mismo texto para confirmar
 
   const [modelLoading, setModelLoading] = useState(false);
   const [trackingBoxes, setTrackingBoxes] = useState([]);
@@ -54,8 +59,15 @@ function UploadPlate() {
   const [ownerForm, setOwnerForm] = useState(ownerInitialState);
   const [vehiclePhoto, setVehiclePhoto] = useState(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [accessZone, setAccessZone] = useState("Portería Principal");
+  const [accessNotes, setAccessNotes] = useState("");
+  const [accessSuccess, setAccessSuccess] = useState("");
+  const [accessError, setAccessError] = useState("");
+  const [autoAccessLog, setAutoAccessLog] = useState(null);
+  const [registeringAccess, setRegisteringAccess] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [analysisPreview, setAnalysisPreview] = useState(null);
+  const [scanError, setScanError] = useState("");
 
   useEffect(() => {
     return () => {
@@ -72,12 +84,16 @@ function UploadPlate() {
     setRegisterError("");
     setAnalysisPreview(null);
     setShowFoundModal(false);
+    setAutoAccessLog(null);
   };
 
   const openFoundModal = (result) => {
     setLookupResult(result);
     setShowFoundModal(true);
     setShowRegistrationModal(false);
+    setAccessSuccess("");
+    setAccessError("");
+    setAccessNotes("");
   };
 
   const openRegistrationModal = (plateValue) => {
@@ -96,6 +112,25 @@ function UploadPlate() {
     try {
       const result = await lookupVehicleByPlate(plateValue);
       openFoundModal(result);
+      
+      // Auto register access log
+      try {
+        const autoLog = await createAutoAccessLog({
+          vehicle_id: result.id,
+          zone: accessZone,
+          notes: ""
+        });
+        setAutoAccessLog(autoLog);
+        
+        // Auto-close modal after 4 seconds to speed up flow
+        setTimeout(() => {
+          setShowFoundModal(false);
+          setAutoAccessLog(null);
+        }, 4000);
+      } catch (autoErr) {
+        setAccessError(autoErr.response?.data?.detail || autoErr.message || "No se pudo auto-registrar el acceso.");
+      }
+
     } catch (error) {
       setLookupError(
         error?.response?.data?.detail ||
@@ -165,39 +200,143 @@ function UploadPlate() {
   const detectFrame = async () => {
     if (!videoRef.current || !canvasRef.current || !streamRef.current) return;
     if (requestRef.current === "processing") return;
-    
+
     requestRef.current = "processing";
     const canvas = canvasRef.current;
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    
-    if (canvas.width === 0) {
+
+    // Resolución equilibrada: 640px, suficiente para leer texto de placa con precisión
+    const MAX_DETECTION_DIM = 640;
+    let videoW = videoRef.current.videoWidth || 640;
+    let videoH = videoRef.current.videoHeight || 480;
+
+    if (videoW === 0) {
       requestRef.current = null;
+      if (streamRef.current) setTimeout(detectFrame, 1000);
       return;
     }
 
+    if (videoW > MAX_DETECTION_DIM || videoH > MAX_DETECTION_DIM) {
+      if (videoW > videoH) {
+        videoH = Math.round((videoH * MAX_DETECTION_DIM) / videoW);
+        videoW = MAX_DETECTION_DIM;
+      } else {
+        videoW = Math.round((videoW * MAX_DETECTION_DIM) / videoH);
+        videoH = MAX_DETECTION_DIM;
+      }
+    }
+
+    canvas.width = videoW;
+    canvas.height = videoH;
     const context = canvas.getContext("2d");
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    let nextInterval = 1000; // Throttle base: 1s (estable, sin detección)
+
     try {
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.6));
+      // JPEG 80%: balance entre tamaño de archivo y calidad para OCR
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.80));
       if (blob) {
-        const file = new File([blob], "frame.jpg", { type: "image/jpeg" });
-        const analysis = await uploadPlateImage(file);
-        
-        if ((analysis.status === "DETECTED" || analysis.status === "LOW_CONFIDENCE") && analysis.plate_bbox) {
-           const [x1, y1, x2, y2] = analysis.plate_bbox;
-           const w = x2 - x1;
-           const h = y2 - y1;
-           setTrackingBoxes([{ bbox: [x1, y1, w, h], score: analysis.ocr_confidence, text: analysis.detected_plate }]);
+        const formData = new FormData();
+        formData.append("file", blob, "frame.jpg");
+        const analysis = await uploadPlateImage(formData, true, controller.signal);
+
+        const normalizedText = analysis.detected_plate
+          ? analysis.detected_plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()
+          : null;
+
+        // --- Sistema de votación por consenso ---
+        // Un texto solo se confirma cuando aparece N veces seguidas
+        const voteMap = voteMapRef.current;
+        const now = Date.now();
+
+        if (normalizedText && normalizedText.length >= 4) {
+          // Texto detectado: sumar voto
+          const existing = voteMap.get(normalizedText);
+          const newCount = existing ? existing.count + 1 : 1;
+          voteMap.set(normalizedText, {
+            count: newCount,
+            bbox: analysis.plate_bbox,
+            score: analysis.ocr_confidence,
+            text: analysis.detected_plate,
+            isValidFormat: analysis.is_valid_bolivian_format,
+            lastFrameTs: now,
+          });
+
+          // Limpiar textos que no han aparecido en los últimos 4 frames (~4s)
+          for (const [key, val] of voteMap.entries()) {
+            if (key !== normalizedText && now - val.lastFrameTs > 4000) {
+              voteMap.delete(key);
+            }
+          }
+
+          // Verificar si algún texto alcanzó el umbral de votos
+          const winner = [...voteMap.entries()].find(
+            ([, v]) => v.count >= VOTES_NEEDED && v.isValidFormat
+          );
+
+          if (winner) {
+            // Confirmado por consenso → auto-captura
+            const [, winnerData] = winner;
+            voteMap.clear();
+            stopCamera();
+            setAnalysisPreview(analysis);
+            setManualPlate(normalizedText);
+            handleLookupPlate(normalizedText);
+            return;
+          }
+
+          // Mostrar caja con contador de votos
+          let newBoxes = [];
+          if (analysis.raw_bboxes && analysis.raw_bboxes.length > 0) {
+            newBoxes = analysis.raw_bboxes.map(bbox => {
+              const [x1, y1, x2, y2] = bbox;
+              return { bbox: [x1, y1, x2 - x1, y2 - y1], type: 'raw' };
+            });
+          }
+          if (analysis.plate_bbox) {
+            const [x1, y1, x2, y2] = analysis.plate_bbox;
+            const entry = voteMap.get(normalizedText);
+            newBoxes.push({
+              bbox: [x1, y1, x2 - x1, y2 - y1],
+              score: analysis.ocr_confidence,
+              text: analysis.detected_plate,
+              votes: entry ? entry.count : 1,
+              votesNeeded: VOTES_NEEDED,
+              type: 'plate-voting',
+            });
+          }
+          setScanError("");
+          setTrackingBoxes(newBoxes);
+
+          // Throttle adaptativo: si hay texto parcial, analizar más seguido
+          nextInterval = 600;
+
         } else {
-           setTrackingBoxes([]);
+          // Sin texto válido: limpiar votos viejos y reducir frecuencia
+          for (const [key, val] of voteMap.entries()) {
+            if (now - val.lastFrameTs > 3000) voteMap.delete(key);
+          }
+          setScanError("");
+          setTrackingBoxes([]);
+          nextInterval = 1000;
         }
       }
     } catch (e) {
-      setTrackingBoxes([]);
+      if (e.name !== "AbortError" && e.code !== "ERR_CANCELED") {
+        console.error("Error en detectFrame:", e);
+        setScanError(e.response?.data?.detail || e.message || String(e));
+        setTrackingBoxes([]);
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
     requestRef.current = null;
+    if (streamRef.current) {
+      setTimeout(detectFrame, nextInterval);
+    }
   };
 
   const startCamera = async () => {
@@ -210,7 +349,8 @@ function UploadPlate() {
       streamRef.current = stream;
       setCameraOpen(true);
       
-      modelRef.current = setInterval(detectFrame, 1500);
+      // Iniciar bucle con throttle (no requestAnimationFrame)
+      setTimeout(detectFrame, 300);
       
     } catch (error) {
       setCameraError("No se pudo abrir la camara del dispositivo.");
@@ -219,10 +359,6 @@ function UploadPlate() {
   };
 
   const stopCamera = () => {
-    if (modelRef.current) {
-      clearInterval(modelRef.current);
-      modelRef.current = null;
-    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -230,6 +366,7 @@ function UploadPlate() {
     setCameraOpen(false);
     setTrackingBoxes([]);
     requestRef.current = null;
+    voteMapRef.current.clear(); // Limpiar votos acumulados al cerrar
   };
 
   const captureFromCamera = async () => {
@@ -291,11 +428,35 @@ function UploadPlate() {
       setVehiclePhoto(null);
       setManualPlate(createdVehicle.license_plate);
       setShowRegistrationModal(false);
-      openFoundModal(createdVehicle);
+      setShowFoundModal(true);
+      setAccessSuccess("");
+      setAccessError("");
+      setAccessNotes("");
     } catch (error) {
-      setRegisterError(
-        error?.response?.data?.detail || "No se pudo registrar el vehiculo."
-      );
+      setRegisterError(error.message || "Error al guardar el vehiculo.");
+    }
+  };
+
+  const handleRegisterAccess = async (direction) => {
+    if (!lookupResult?.id) return;
+    try {
+      setRegisteringAccess(true);
+      setAccessError("");
+      setAccessSuccess("");
+      await createAccessLog({
+        vehicle_id: lookupResult.id,
+        direction: direction,
+        zone: accessZone,
+        notes: accessNotes
+      });
+      setAccessSuccess(`Movimiento de ${direction === "ENTRY" ? "INGRESO" : "SALIDA"} registrado con éxito.`);
+      setTimeout(() => {
+        setShowFoundModal(false);
+      }, 1500);
+    } catch (err) {
+      setAccessError(err.message || "No se pudo registrar el acceso.");
+    } finally {
+      setRegisteringAccess(false);
     }
   };
 
@@ -396,6 +557,24 @@ function UploadPlate() {
             </div>
 
             <div className="camera-container" style={{ position: "relative" }}>
+              {scanError && (
+                <div style={{
+                  position: "absolute",
+                  top: "10px",
+                  left: "10px",
+                  right: "10px",
+                  background: "rgba(220, 38, 38, 0.95)",
+                  color: "white",
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  zIndex: 30,
+                  fontSize: "13px",
+                  fontWeight: "bold",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+                }}>
+                  ⚠️ Error del servidor: {scanError}
+                </div>
+              )}
               <video ref={videoRef} autoPlay playsInline className="camera-preview" />
               {trackingBoxes.map((box, i) => {
                 const [x, y, width, height] = box.bbox;
@@ -406,51 +585,98 @@ function UploadPlate() {
                 const pctW = (width / videoW) * 100;
                 const pctH = (height / videoH) * 100;
 
-                return (
-                  <div key={i} style={{
-                    position: "absolute",
-                    left: `${pctX}%`,
-                    top: `${pctY}%`,
-                    width: `${pctW}%`,
-                    height: `${pctH}%`,
-                    border: "3px solid #a855f7",
-                    backgroundColor: "rgba(168, 85, 247, 0.1)",
-                    zIndex: 10,
-                    pointerEvents: "none"
-                  }}>
-                    <span style={{
-                      backgroundColor: "#a855f7",
-                      color: "white",
-                      padding: "2px 8px",
-                      fontSize: "12px",
+                if (box.type === 'raw') {
+                  return (
+                    <div key={i} style={{
                       position: "absolute",
-                      top: "-20px",
-                      left: "-3px",
-                      fontWeight: "bold",
-                      borderRadius: "2px"
-                    }}>Placa {box.text} ({Math.round(box.score * 100)}%)</span>
-                  </div>
-                );
+                      left: `${pctX}%`,
+                      top: `${pctY}%`,
+                      width: `${pctW}%`,
+                      height: `${pctH}%`,
+                      border: "2px solid rgba(255, 204, 0, 0.35)",
+                      backgroundColor: "rgba(255, 204, 0, 0.04)",
+                      zIndex: 5,
+                      pointerEvents: "none",
+                      borderRadius: "4px"
+                    }} />
+                  );
+                }
+
+                if (box.type === 'plate-voting') {
+                  // Color progresivo: amarillo (1/3) → naranja (2/3) → verde (3/3)
+                  const progress = (box.votes || 1) / (box.votesNeeded || VOTES_NEEDED);
+                  const colors = [
+                    "#eab308", // 1/3 — amarillo
+                    "#f97316", // 2/3 — naranja
+                    "#22c55e", // 3/3 — verde
+                  ];
+                  const colorIdx = Math.min(Math.floor(progress * 3), 2);
+                  const borderColor = colors[colorIdx];
+                  const dotsTotal = box.votesNeeded || VOTES_NEEDED;
+                  const dotsFilled = box.votes || 1;
+                  const dots = Array.from({ length: dotsTotal }, (_, di) =>
+                    di < dotsFilled ? "●" : "○"
+                  ).join(" ");
+
+                  return (
+                    <div key={i} style={{
+                      position: "absolute",
+                      left: `${pctX}%`,
+                      top: `${pctY}%`,
+                      width: `${pctW}%`,
+                      height: `${pctH}%`,
+                      border: `3px solid ${borderColor}`,
+                      backgroundColor: `${borderColor}18`,
+                      zIndex: 10,
+                      pointerEvents: "none",
+                      borderRadius: "6px",
+                      boxShadow: `0 0 10px ${borderColor}60`,
+                      transition: "border-color 0.3s, box-shadow 0.3s",
+                    }}>
+                      <span style={{
+                        backgroundColor: borderColor,
+                        color: "white",
+                        padding: "2px 10px",
+                        fontSize: "12px",
+                        position: "absolute",
+                        top: "-22px",
+                        left: "-3px",
+                        fontWeight: "bold",
+                        borderRadius: "3px",
+                        whiteSpace: "nowrap",
+                        letterSpacing: "0.5px",
+                      }}>
+                        {box.text} &nbsp; {dots}
+                      </span>
+                    </div>
+                  );
+                }
               })}
-              
-              <div className="camera-overlay">
-                <div className="camera-frame">
-                  {trackingBoxes.length === 0 && <div className="scanner-laser"></div>}
-                  <div className="camera-frame-corners"></div>
-                </div>
-                <p className="camera-instruction">
-                  {trackingBoxes.length > 0 ? "Placa detectada. Verifique y capture." : "Buscando placa..."}
+
+              {/* Láser de escaneo — visible solo cuando no hay nada detectado */}
+              {trackingBoxes.length === 0 && (
+                <div style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: "2px",
+                  backgroundColor: "rgba(239, 68, 68, 0.8)",
+                  boxShadow: "0 0 10px 2px rgba(239, 68, 68, 0.8)",
+                  animation: "scan-fullscreen 2s infinite linear"
+                }}></div>
+              )}
+
+              <div style={{ position: "absolute", bottom: "20px", left: "0", right: "0", textAlign: "center", zIndex: 20 }}>
+                <p className="camera-instruction" style={{ display: "inline-block", background: "rgba(0,0,0,0.75)", color: "white", padding: "8px 18px", borderRadius: "20px", margin: 0 }}>
+                  {trackingBoxes.some(b => b.type === 'plate-voting')
+                    ? `Leyendo placa — mantén la cámara firme`
+                    : "Buscando placa... apunta al vehículo"}
                 </p>
               </div>
             </div>
             <canvas ref={canvasRef} hidden />
             {cameraError && <p className="error-text">{cameraError}</p>}
-
-            <div className="modal-actions">
-              <button type="button" onClick={captureFromCamera}>
-                Capturar y analizar
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -506,6 +732,32 @@ function UploadPlate() {
                 </div>
               </>
             )}
+
+            {/* Registro de Acceso Automático */}
+            <div style={{ marginTop: "1.5rem", borderTop: "2px solid rgba(21, 62, 117, 0.1)", paddingTop: "1rem" }}>
+              {autoAccessLog ? (
+                <div style={{
+                  background: autoAccessLog.direction === "ENTRY" ? "#e6ffe6" : "#fff0e6",
+                  border: `2px solid ${autoAccessLog.direction === "ENTRY" ? "green" : "#d46b08"}`,
+                  padding: "1rem",
+                  borderRadius: "8px",
+                  textAlign: "center"
+                }}>
+                  <h2 style={{ color: autoAccessLog.direction === "ENTRY" ? "green" : "#d46b08", margin: "0 0 0.5rem 0" }}>
+                    ✅ {autoAccessLog.direction === "ENTRY" ? "INGRESO REGISTRADO" : "SALIDA REGISTRADA"}
+                  </h2>
+                  <p style={{ margin: 0, fontWeight: "bold" }}>
+                    {autoAccessLog.zone} - {new Date(autoAccessLog.timestamp).toLocaleTimeString()}
+                  </p>
+                </div>
+              ) : accessError ? (
+                <p className="error-text" style={{ background: "#ffe6e6", padding: "0.6rem", borderRadius: "4px", textAlign: "center", fontWeight: "bold" }}>
+                  ⚠️ {accessError}
+                </p>
+              ) : (
+                <p style={{ textAlign: "center", color: "#666" }}>Registrando acceso automáticamente...</p>
+              )}
+            </div>
           </div>
         </div>
       )}

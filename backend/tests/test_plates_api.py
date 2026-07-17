@@ -46,6 +46,8 @@ class PlatesAPITests(unittest.TestCase):
             "annotated_image": "data:image/jpeg;base64,AA==",
             "plate_crop": "data:image/jpeg;base64,AA==",
             "message": None,
+            "plate_bbox": None,
+            "raw_bboxes": None,
         }
         image = np.zeros((20, 40, 3), dtype=np.uint8)
         ok, encoded = cv2.imencode(".jpg", image)

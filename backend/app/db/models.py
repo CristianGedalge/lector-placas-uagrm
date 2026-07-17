@@ -46,6 +46,11 @@ class NotificationTypeEnum(str, enum.Enum):
     ALERT = "ALERT"
 
 
+class AccessDirectionEnum(str, enum.Enum):
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+
 class UniversityPerson(Base):
     __tablename__ = "university_persons"
 
@@ -53,7 +58,7 @@ class UniversityPerson(Base):
     code = Column(String, unique=True, index=True, nullable=False)
     role = Column(Enum(RoleEnum), nullable=False)
     full_name = Column(String, nullable=False)
-    document_id = Column(String, nullable=True)
+    document_id = Column(String, unique=True, index=True, nullable=True)
     faculty = Column(String, nullable=True)
     contact_info = Column(String, nullable=True)
     status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
@@ -142,3 +147,28 @@ class Notification(Base):
 
     user = relationship("AuthUser", back_populates="notifications")
     plate_scan = relationship("PlateScan", back_populates="notifications")
+
+
+class RevokedToken(Base):
+    __tablename__ = "revoked_tokens"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    token = Column(String, unique=True, index=True, nullable=False)
+    revoked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class AccessLog(Base):
+    __tablename__ = "access_logs"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    vehicle_id = Column(Uuid, ForeignKey("vehicles.id"), nullable=False)
+    direction = Column(Enum(AccessDirectionEnum), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    zone = Column(String, nullable=False)
+    operator_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=False)
+    plate_scan_id = Column(Uuid, ForeignKey("plate_scans.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+
+    vehicle = relationship("Vehicle")
+    operator = relationship("AuthUser")
+    plate_scan = relationship("PlateScan")

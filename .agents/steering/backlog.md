@@ -24,6 +24,7 @@
 - `CAM-002` | `done` | Prioridad `alta` | Agregar intervalo, timeout, reintentos, reconexion, deduplicacion y liberacion segura | Dependencias: `CAM-001`
 - `CAM-003` | `done` | Prioridad `media` | Probar captura y fallos de red con fotogramas y camaras simuladas | Dependencias: `CAM-001`
 - `UI-001` | `done` | Prioridad `alta` | Implementar seguimiento en vivo de la placa (backend polling) y animaciones láser sin TFJS | Dependencias: ninguna
+- `OPT-001` | `done` | Prioridad `alta` | Optimizar latencia de detección en tiempo real a < 1 segundo (14.9x speedup) separando el path estático del en vivo (throttle, un solo OCR, downscale a 480px) | Dependencias: `UI-001`
 - `AI-004` | `done` | Prioridad `alta` | Ajustar preprocesamiento EasyOCR (mag_ratio) y validador (Q->D) para precisión en placas bolivianas | Dependencias: ninguna
 - `CAM-004` | `blocked` | Prioridad `media` | Validar captura continua con webcam USB y RTSP reales | Dependencias: hardware y stream reales
 - `HARNESS-003` | `done` | Prioridad `media` | Ejecutar unit tests y smoke del endpoint analyze desde los scripts operativos | Dependencias: `CAM-003`
@@ -34,4 +35,9 @@
 - `DOCKER-003` | `done` | Prioridad `alta` | Corregir compatibilidad OpenGL en slim Debian reemplazando libgl1-mesa-glx por libgl1 | Dependencias: ninguna
 - `ENV-001` | `done` | Prioridad `alta` | Deshardcodear host y puerto de run.py usando os.environ | Dependencias: ninguna
 - `ENV-002` | `done` | Prioridad `alta` | Configurar variables Host/Port en Pydantic settings e ignorar inputs extras del .env | Dependencias: ninguna
-
+- `SEC-003` | `done` | Prioridad `alta` | Implementar Rate Limiting global y validar extensiones/tamanos de imagen en subida | Dependencias: ninguna
+- `SEC-004` | `done` | Prioridad `alta` | Asegurar JWT en Cookies HttpOnly y agregar Lista de Bloqueo de Sesion a BD | Dependencias: ninguna
+- `SEC-005` | `done` | Prioridad `critica` | Desactivar registro publico, evitar Mass Assignment y solucionar Path Traversal de imagenes | Dependencias: `SEC-004`
+- `ADMIN-PANEL-001` | `done` | Prioridad `alta` | Implementar CRUD de Gestion de Usuarios, Gestion de Personas del SIARP e Historial de Escaneos persistido en BD | Dependencias: `SEC-005`
+- `BUSINESS-001` | `done` | Prioridad `alta` | Forzar unicidad de CI en BD, restringir creación de vehículos a nombre propio para operadores y proteger registro de salidas (EXIT) solo al propietario o admin | Dependencias: `ADMIN-PANEL-001`
+- `UI-002` | `done` | Prioridad `media` | Pre-llenar y bloquear como read-only los campos del propietario en formulario de vehículos para el rol de Operador | Dependencias: `BUSINESS-001`

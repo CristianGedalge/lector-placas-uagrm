@@ -107,7 +107,7 @@ function normalizeSession(data, credentials) {
     };
   }
 
-  return buildMockSession(credentials);
+  throw new Error("El servidor devolvió una respuesta de autenticación inválida. Contacta al administrador.");
 }
 
 export async function loginUser(credentials) {
@@ -186,5 +186,77 @@ export async function deleteProfile() {
 }
 
 export async function logoutUser() {
-  return Promise.resolve(true);
+  try {
+    if (import.meta.env.VITE_USE_MOCK_AUTH !== "true") {
+      await apiClient.post("/auth/logout");
+    }
+  } catch (error) {
+    console.warn("Error al hacer logout en el backend:", error);
+  }
+  return true;
+}
+
+// Funciones de administración para usuarios (auth_users)
+export async function listUsers() {
+  try {
+    const { data } = await apiClient.get("/auth/users");
+    return data;
+  } catch (error) {
+    mapAuthError(error, "No se pudo cargar la lista de usuarios.");
+  }
+}
+
+export async function updateUserByAdmin(userId, payload) {
+  try {
+    const { data } = await apiClient.put(`/auth/users/${userId}`, payload);
+    return data;
+  } catch (error) {
+    mapAuthError(error, "No se pudo actualizar el usuario.");
+  }
+}
+
+export async function deleteUserByAdmin(userId) {
+  try {
+    await apiClient.delete(`/auth/users/${userId}`);
+    return true;
+  } catch (error) {
+    mapAuthError(error, "No se pudo eliminar el usuario.");
+  }
+}
+
+// Funciones de administración para personas universitarias (university_persons)
+export async function listUniversityPersons() {
+  try {
+    const { data } = await apiClient.get("/v1/university-persons/");
+    return data;
+  } catch (error) {
+    mapAuthError(error, "No se pudo cargar el registro de personas universitarias.");
+  }
+}
+
+export async function createUniversityPerson(payload) {
+  try {
+    const { data } = await apiClient.post("/v1/university-persons/", payload);
+    return data;
+  } catch (error) {
+    mapAuthError(error, "No se pudo crear la persona universitaria.");
+  }
+}
+
+export async function updateUniversityPerson(personId, payload) {
+  try {
+    const { data } = await apiClient.put(`/v1/university-persons/${personId}`, payload);
+    return data;
+  } catch (error) {
+    mapAuthError(error, "No se pudo actualizar la persona universitaria.");
+  }
+}
+
+export async function deleteUniversityPerson(personId) {
+  try {
+    await apiClient.delete(`/v1/university-persons/${personId}`);
+    return true;
+  } catch (error) {
+    mapAuthError(error, "No se pudo eliminar la persona universitaria.");
+  }
 }

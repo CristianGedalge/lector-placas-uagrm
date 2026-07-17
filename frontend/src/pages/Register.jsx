@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
+import { registerUser } from "../api/auth";
 
 const CAREER_OPTIONS = [
   "Ingenieria en Redes",
@@ -12,7 +13,9 @@ const CAREER_OPTIONS = [
 ];
 
 function Register() {
-  const { user, authLoading, signUpLoading, signUp } = useAuth();
+  const { user, signIn, authLoading } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
   const [formData, setFormData] = useState({
     full_name: "",
     email: "",
@@ -21,7 +24,8 @@ function Register() {
     faculty: "",
     contact_info: "",
     password: "",
-    confirmPassword: ""
+    confirmPassword: "",
+    is_admin: false
   });
   const [error, setError] = useState("");
   const requiresFaculty = formData.role === "STUDENT";
@@ -41,6 +45,7 @@ function Register() {
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
+    setSuccess("");
 
     if (formData.password !== formData.confirmPassword) {
       setError("Las contrasenas no coinciden.");
@@ -48,7 +53,8 @@ function Register() {
     }
 
     try {
-      await signUp({
+      setLoading(true);
+      await registerUser({
         full_name: formData.full_name,
         email: formData.email,
         code: formData.code,
@@ -56,45 +62,52 @@ function Register() {
         faculty: requiresFaculty ? formData.faculty : null,
         contact_info: formData.contact_info,
         phone: formData.contact_info,
+        password: formData.password,
+        is_admin: false
+      });
+      
+      setSuccess("Operador registrado con éxito. Iniciando sesión...");
+      
+      // Auto login user
+      await signIn({
+        email: formData.email,
         password: formData.password
+      });
+
+      setFormData({
+        full_name: "",
+        email: "",
+        code: "",
+        role: "STUDENT",
+        faculty: "",
+        contact_info: "",
+        password: "",
+        confirmPassword: "",
+        is_admin: false
       });
     } catch (submitError) {
       setError(submitError.message || "No se pudo completar el registro.");
       console.error(submitError);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <main className="auth-screen">
-      <section className="auth-layout">
-        <div className="auth-panel auth-copy">
-          <p className="eyebrow">SIARP</p>
-          <h1>Crea tu cuenta para empezar a operar en la plataforma</h1>
-          <p className="auth-description">
-            Registra usuarios administrativos para gestionar accesos, analizar
-            placas y consultar reportes desde el dashboard.
-          </p>
-          <div className="auth-highlights">
-            <div className="highlight-card">
-              <strong>Acceso centralizado</strong>
-              <span>Autenticacion unificada para login, historial y reportes.</span>
-            </div>
-            <div className="highlight-card">
-              <strong>Preparado para JWT</strong>
-              <span>Flujo listo para trabajar con backend real en FastAPI.</span>
-            </div>
-          </div>
-        </div>
+    <section className="page-stack" style={{ maxWidth: "800px", margin: "0 auto" }}>
+      <div className="hero card">
+        <p className="eyebrow">Administracion</p>
+        <h2>Registrar Operador</h2>
+        <p className="muted-text">
+          Completa todos los datos para crear una nueva cuenta de Operador.
+        </p>
+      </div>
 
-        <form className="card auth-panel auth-card" onSubmit={handleSubmit}>
-          <div>
-            <p className="eyebrow">Nuevo usuario</p>
-            <h2>Crear cuenta</h2>
-            <p className="muted-text">
-              Completa todos los datos para crear un acceso dentro de la plataforma.
-            </p>
-          </div>
+      <form className="card registration-form" onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {success && <p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.8rem", borderRadius: "8px", border: "1px solid green" }}>{success}</p>}
+        {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
 
+        <div className="form-block" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <label className="field-group">
             <span>Nombre completo</span>
             <input
@@ -112,10 +125,10 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Correo</span>
+            <span>Correo Electronico</span>
             <input
               type="email"
-              placeholder="admin@siarp.com"
+              placeholder="operador@siarp.com"
               value={formData.email}
               onChange={(event) =>
                 setFormData((current) => ({
@@ -128,7 +141,7 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Registro</span>
+            <span>Registro / Codigo Universitario</span>
             <input
               type="text"
               placeholder="202400123"
@@ -144,7 +157,7 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Rol</span>
+            <span>Tipo de Persona (Rol Catalogo)</span>
             <select
               value={formData.role}
               onChange={(event) =>
@@ -186,7 +199,7 @@ function Register() {
           )}
 
           <label className="field-group">
-            <span>Telefono</span>
+            <span>Telefono / Contacto</span>
             <input
               type="text"
               placeholder="70000000"
@@ -221,7 +234,7 @@ function Register() {
             <span>Confirmar contrasena</span>
             <input
               type="password"
-              placeholder="Repite tu contrasena"
+              placeholder="Repite la contrasena"
               value={formData.confirmPassword}
               onChange={(event) =>
                 setFormData((current) => ({
@@ -232,22 +245,22 @@ function Register() {
               required
             />
           </label>
+        </div>
 
-          {error && <p className="error-text">{error}</p>}
-
-          <button type="submit" disabled={signUpLoading}>
-            {signUpLoading ? "Creando cuenta..." : "Registrarme"}
+        <div style={{ display: "flex", alignItems: "center", gap: "2rem", marginTop: "1rem" }}>
+          <button type="submit" disabled={loading} style={{ padding: "0.8rem 2rem" }}>
+            {loading ? "Creando cuenta..." : "Crear cuenta de Operador"}
           </button>
-
-          <p className="helper-text">
-            Ya tienes cuenta?{" "}
+          
+          <p className="helper-text" style={{ margin: 0 }}>
+            ¿Ya tienes cuenta?{" "}
             <Link className="text-link" to="/login">
-              Inicia sesion
+              Iniciar sesión
             </Link>
           </p>
-        </form>
-      </section>
-    </main>
+        </div>
+      </form>
+    </section>
   );
 }
 

@@ -1,5 +1,42 @@
 # MEMORY
 
+## 2026-07-17 - Control de Accesos (Ingreso y Salida de Vehículos)
+
+- **Persistencia en PostgreSQL**: Creada la tabla `access_logs` mapeando registros de ingresos (`ENTRY`) y salidas (`EXIT`) vinculados a vehículos y operadores en campus, incluyendo marcas de tiempo y zonas/porterías de control. Aplicadas las migraciones exitosamente con Alembic.
+- **Filtrado por Rol**: El endpoint `GET /access-logs` filtra automáticamente según el rol del usuario actual. Los Operadores únicamente tienen visibilidad de los logs de accesos relacionados con vehículos que ellos mismos registraron (`Vehicle.registered_by_user_id == current_user.id`), mientras que los Administradores auditan el histórico global de la universidad.
+- **Acceso Rápido desde la Cámara**: Se modificó la pantalla de escaneo (`UploadPlate.jsx`) para que los operadores puedan registrar entradas y salidas rápidas directamente desde el modal del vehículo encontrado tras la lectura exitosa del OCR.
+- **Página de Bitácora de Accesos**: Creado el componente frontend `AccessLogs.jsx` que permite consultar la bitácora con marcas de tiempo, porterías, datos de vehículos y propietarios, además de registrar ingresos/salidas de forma manual.
+
+## 2026-07-17 - Dashboard KPI Enriquecido y Flujo de Operador/Administrador Consolidado
+
+- **Filtros de Propiedad por Rol**: Implementados filtros condicionales en "Mis Vehículos" y "Mi Historial" en `Vehicles.jsx` y `History.jsx` respectivamente. Para Operadores, el sistema fuerza la vista de su propia bitácora (`s.scanned_by_user_id === user.id`) e inhabilita las pestañas de selección de filtro que solo corresponden al Administrador.
+- **Consolidación de Creación de Usuarios**: Integrado el formulario de registro de nuevos operadores/administradores directamente dentro de un modal en la vista de administración "Gestionar Usuarios". Esto permitió inhabilitar la ruta `/registro` y remover el enlace redundante "Registrar Operador" del menú lateral (`Sidebar/index.jsx`).
+- **Dashboard Telemetría de 6 KPIs y Feed en vivo**: Modificado el endpoint `/api/v1/dashboard/summary` y rediseñada la vista principal `Dashboard.jsx`. Ahora provee un resumen rico y completo que contiene:
+  1. Total Vehículos Registrados
+  2. Vehículos Activos para ingreso
+  3. Lecturas hoy (24 horas)
+  4. Escaneos Históricos
+  5. Confianza Promedio del motor OCR
+  6. Operadores UAGRM del sistema
+  Adicionalmente se despliega una bitácora en vivo con los últimos 5 escaneos reales persistidos en la base de datos (con su hora, placas, porcentaje de confianza, estado y validación en la BD).
+
+## 2026-07-17 - Panel de Gestión Completa del Administrador (Fase 5)
+
+- **Gestión de Usuarios (auth_users)**: Añadidos endpoints backend (`GET /users`, `PUT /users/{user_id}`, `DELETE /users/{user_id}`) e interfaz frontend (`Users.jsx`) que permite al Administrador promover o degradar permisos del sistema (ADMIN / OPERATOR), activar/desactivar cuentas y eliminarlas permanentemente.
+- **Gestión de Personas SIARP (university_persons)**: Añadido soporte CRUD completo en backend y frontend (`UniversityPersons.jsx`) para que el Administrador registre, edite y elimine de forma directa códigos universitarios autorizados, asociando nombres completos, CI y tipos de personas (Administrativo, Docente, Estudiante).
+- **Bitácora de Escaneos (plate_scans)**: Conectado el endpoint `/analyze` para que registre automáticamente cada detección de placa con formato válido o de baja confianza en la tabla `plate_scans`. Implementado el endpoint `GET /scans` y la interfaz de auditoría real en `History.jsx` para visualizar el historial cronológico de todas las porterías.
+- **Segregación de Roles**: Modificado el `Sidebar` y la protección de rutas (`AdminRoute`) para que las secciones de gestión (`Registrar Operador`, `Gestionar Usuarios`, `Gestionar Personas`, `Historial`, `Reportes`) solo sean renderizadas y accedidas por cuentas autorizadas de Administradores, manteniendo para los Operadores un flujo limpio limitado al escáner y su perfil.
+
+
+- **Fase 1 (Limpieza de Secretos)**: Se configuró una `SECRET_KEY` segura generada de 64 bytes. Se parametrizó la clave de Postgres en `docker-compose.yml` (`${POSTGRES_PASSWORD}`) y se inhabilitó `DEBUG=true` para ocultar trazas de stack de los errores 500.
+- **Fase 2 (Control de Acceso y Límites)**: Se implementó la librería `slowapi` limitando `/login` (10/min), `/register` (5/min) y `/analyze` (60/min). Se restringió severamente la carga de imágenes limitando a 5MB y formatos JPEG/PNG/WebP explícitos.
+- **Fase 3 (Sesiones y Cookies JWT)**: Se mitigó la inyección de XSS eliminando el JWT de `localStorage` y transitando hacia una cookie `HttpOnly` y `SameSite=lax`. Se ocultó el directorio estático de uploads, pasando a servir imágenes autenticadas mediante `/api/v1/vehicles/photos/{filename}`.
+- **Fase 3 (Lista de Revocación JWT)**: Se integró un esquema de revocación estricto. Al llamar `/logout`, el token se añade a la tabla `revoked_tokens` bloqueando inmediatamente la sesión aunque no haya expirado de forma natural.
+- **Fase 4 (Parches Críticos)**: Se descubrió y reparó una vulnerabilidad de **Mass Assignment** (Escalamiento de Privilegios) donde un usuario podía enviarse `role: "ADMIN"` en `/register` o `/me`.
+- **Fase 4 (Cierre de Registro Público)**: Dado que el rol de Guardia/Operador expone las listas globales de estudiantes y vehículos para permitir comparativas cruzadas con la cámara, se protegió `/register` con `require_admin`. Esto cancela el registro público, evitando la Fuga de Datos (IDOR).
+- **Fase 4 (LFI Mitigado)**: Se corrigió una vulnerabilidad de Path Traversal grave asegurando el UUID generado de fotos solicitadas con `os.path.basename` para bloquear secuencias `../../../`.
+
+
 ## 2026-07-17 - Mejoras UI y Seguimiento en Vivo de Placas
 
 - **Validación Posicional OCR**: Se añadió `Q -> D` al diccionario del corrector en `validators.py` para arreglar falsos positivos donde la letra D en placas bolivianas es confundida con Q.

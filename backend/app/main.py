@@ -34,6 +34,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.university_persons import router as university_persons_router
 from app.api.v1.vehicles import router as vehicles_router
+from app.api.v1.access_logs import router as access_logs_router
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -89,8 +97,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
-app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
@@ -100,4 +106,9 @@ app.include_router(
     university_persons_router,
     prefix="/api/v1/university-persons",
     tags=["University Persons"],
+)
+app.include_router(
+    access_logs_router,
+    prefix="/api/v1/access-logs",
+    tags=["Access Logs"],
 )

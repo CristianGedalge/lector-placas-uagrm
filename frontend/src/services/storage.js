@@ -1,12 +1,19 @@
-const AUTH_KEY = "plates-auth";
+const AUTH_KEY = "lector_placas_session";
 
 export function saveSession(session) {
-  localStorage.setItem(AUTH_KEY, JSON.stringify(session));
+  // Solo guardamos el usuario, no el token
+  const safeSession = { user: session.user };
+  localStorage.setItem(AUTH_KEY, JSON.stringify(safeSession));
 }
 
 export function readSession() {
   const raw = localStorage.getItem(AUTH_KEY);
-  return raw ? JSON.parse(raw) : null;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
 }
 
 export function clearSession() {

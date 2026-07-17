@@ -1,56 +1,22 @@
 import { useEffect, useState } from "react";
-
-import PlateCard from "../components/PlateCard";
 import Loader from "../components/Loader";
-import {
-  deleteVehicle,
-  getDashboardSummary,
-  getVehicleDetail,
-  updateVehicleWithPhoto
-} from "../api/plates";
+import { getDashboardSummary } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
-import { formatPlate } from "../utils/formatters";
-
-function mapVehicleToForm(vehicle) {
-  return {
-    license_plate: vehicle?.license_plate || "",
-    brand: vehicle?.brand || "",
-    model: vehicle?.model || "",
-    color: vehicle?.color || "",
-    vehicle_type: vehicle?.vehicle_type || "CAR",
-    year: vehicle?.year || "",
-    observation: vehicle?.observation || "",
-    owner: {
-      code: vehicle?.owner?.code || "",
-      full_name: vehicle?.owner?.full_name || "",
-      document_id: vehicle?.owner?.document_id || "",
-      role: vehicle?.owner?.role || "STUDENT",
-      faculty: vehicle?.owner?.faculty || "",
-      contact_info: vehicle?.owner?.contact_info || "",
-      status: vehicle?.owner?.status || "ACTIVE",
-      is_active: vehicle?.owner?.is_active ?? true
-    }
-  };
-}
 
 function Dashboard() {
   const { user } = useAuth();
   const [dashboardData, setDashboardData] = useState(null);
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
-  const [editingVehicle, setEditingVehicle] = useState(null);
-  const [editingPhoto, setEditingPhoto] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const loadDashboard = async () => {
     try {
       setLoading(true);
-      const data = await getDashboardSummary(user?.id);
+      const filterId = user?.role === "ADMIN" ? undefined : user?.id;
+      const data = await getDashboardSummary(filterId);
       setDashboardData(data);
     } catch (loadError) {
-      setError("No se pudo cargar la informacion del dashboard desde el backend.");
+      setError("No se pudo cargar el resumen del dashboard.");
       console.error(loadError);
     } finally {
       setLoading(false);
@@ -63,347 +29,189 @@ function Dashboard() {
     }
   }, [user?.id]);
 
-  const handleVehicleSelect = async (vehicle) => {
-    try {
-      setDetailLoading(true);
-      const detail = await getVehicleDetail(vehicle.id);
-      setSelectedVehicle(detail);
-    } catch (detailError) {
-      console.error(detailError);
-      setSelectedVehicle(vehicle);
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const handleOpenEdit = () => {
-    setEditingVehicle(mapVehicleToForm(selectedVehicle));
-    setEditingPhoto(null);
-  };
-
-  const handleSaveEdit = async (event) => {
-    event.preventDefault();
-    if (!selectedVehicle?.id || !editingVehicle) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const updated = await updateVehicleWithPhoto(
-        selectedVehicle.id,
-        {
-          ...editingVehicle,
-          license_plate: formatPlate(editingVehicle.license_plate),
-          registered_by_user_id: user?.id
-        },
-        editingPhoto
-      );
-      setSelectedVehicle(updated);
-      setEditingVehicle(null);
-      await loadDashboard();
-    } catch (saveError) {
-      setError(saveError?.response?.data?.detail || "No se pudo actualizar el vehiculo.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteVehicle = async () => {
-    if (!selectedVehicle?.id) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await deleteVehicle(selectedVehicle.id);
-      setSelectedVehicle(null);
-      setEditingVehicle(null);
-      await loadDashboard();
-    } catch (deleteError) {
-      setError(deleteError?.response?.data?.detail || "No se pudo eliminar el vehiculo.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   if (loading) {
-    return <Loader label="Cargando dashboard..." />;
+    return <Loader label="Cargando resumen de telemetría..." />;
   }
 
-  if (error && !dashboardData) {
-    return <section className="card"><p className="error-text">{error}</p></section>;
-  }
-
-  const myVehicles = dashboardData?.my_vehicles || [];
+  const recentScans = dashboardData?.recent_scans || [];
 
   return (
     <section className="page-stack">
       <div className="hero card">
-        <p className="eyebrow">Resumen</p>
-        <h2>Panel principal</h2>
-        <div className="details-grid summary-grid">
-          <p><strong>Total registrados:</strong> {dashboardData?.total_vehicles || 0}</p>
-          <p><strong>Activos:</strong> {dashboardData?.active_vehicles || 0}</p>
-          <p><strong>Mis vehiculos:</strong> {myVehicles.length}</p>
-        </div>
+        <p className="eyebrow">Resumen de Telemetría</p>
+        <h2>Panel de Control ({user?.role === "ADMIN" ? "Administrador" : "Operador"})</h2>
+        <p className="muted-text">
+          Estadísticas y bitácora en tiempo real de los accesos vehiculares controlados por Inteligencia Artificial local.
+        </p>
       </div>
 
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Vehiculos</p>
-          <h3>Mis vehiculos</h3>
+      {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
+
+      {/* Grid de KPIs Premium */}
+      <div className="details-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem" }}>
+        
+        {/* KPI 1: Vehículos Registrados */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid var(--color-primary)" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Vehículos Registrados</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "var(--color-primary)" }}>
+            {dashboardData?.total_vehicles || 0}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            {user?.role === "ADMIN" ? "Total en base de datos global" : "Tus vehículos registrados"}
+          </p>
         </div>
-        <p className="muted-text">Puedes ver, editar o eliminar tus vehiculos registrados.</p>
+
+        {/* KPI 2: Vehículos Activos */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid green" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Vehículos Activos</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "green" }}>
+            {dashboardData?.active_vehicles || 0}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            Habilitados con ingreso automático
+          </p>
+        </div>
+
+        {/* KPI 3: Lecturas Hoy */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid #f2a104" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Lecturas (Últimas 24h)</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#f2a104" }}>
+            {dashboardData?.today_scans || 0}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            Placas escaneadas hoy en campus
+          </p>
+        </div>
+
+        {/* KPI 4: Total Lecturas */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid #722ed1" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Escaneos Históricos</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#722ed1" }}>
+            {dashboardData?.total_scans || 0}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            Total acumulado registrado
+          </p>
+        </div>
+
+        {/* KPI 5: Confianza Promedio */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid #13c2c2" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Confianza OCR Promedio</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#13c2c2" }}>
+            {dashboardData?.avg_confidence ? `${(dashboardData.avg_confidence * 100).toFixed(1)}%` : "0.0%"}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            Fiabilidad del motor de lectura
+          </p>
+        </div>
+
+        {/* KPI 6: Cuentas del Sistema */}
+        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "0.5rem", borderLeft: "4px solid #fa8c16" }}>
+          <p className="eyebrow" style={{ margin: 0 }}>Operadores UAGRM</p>
+          <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#fa8c16" }}>
+            {dashboardData?.total_users || 0}
+          </span>
+          <p className="muted-text" style={{ fontSize: "0.85rem", margin: 0 }}>
+            Guardias y administradores
+          </p>
+        </div>
+
       </div>
 
-      {!myVehicles.length && (
-        <div className="card">
-          <p className="muted-text">Todavia no tienes vehiculos registrados en el backend.</p>
-        </div>
-      )}
-
-      <div className="grid two-columns">
-        {myVehicles.map((vehicle) => (
-          <PlateCard
-            key={vehicle.id}
-            plate={vehicle}
-            isActive={selectedVehicle?.id === vehicle.id}
-            onClick={() => handleVehicleSelect(vehicle)}
-          />
-        ))}
-      </div>
-
-      {selectedVehicle && (
-        <div className="modal-backdrop">
-          <div className="modal-card modal-large">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Detalle</p>
-                <h2>Vehiculo encontrado</h2>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => setSelectedVehicle(null)}>
-                Cerrar
-              </button>
-            </div>
-
-            {detailLoading && <Loader label="Cargando detalle..." />}
-
-            {selectedVehicle.vehicle_photo_path && (
-              <img
-                className="vehicle-photo"
-                src={selectedVehicle.vehicle_photo_path}
-                alt={`Vehiculo ${selectedVehicle.license_plate}`}
-              />
-            )}
-
-            <div className="details-grid">
-              <p><strong>Placa:</strong> {selectedVehicle.license_plate}</p>
-              <p><strong>Marca:</strong> {selectedVehicle.brand}</p>
-              <p><strong>Modelo:</strong> {selectedVehicle.model}</p>
-              <p><strong>Color:</strong> {selectedVehicle.color}</p>
-              <p><strong>Tipo:</strong> {selectedVehicle.vehicle_type}</p>
-              <p><strong>Anio:</strong> {selectedVehicle.year || "No registrado"}</p>
-              <p><strong>Estado:</strong> {selectedVehicle.status}</p>
-              <p><strong>Registrado:</strong> {String(selectedVehicle.created_at).slice(0, 10)}</p>
-            </div>
-
-            {selectedVehicle.owner && (
-              <>
-                <h3>Datos del dueno</h3>
-                <div className="details-grid">
-                  <p><strong>Nombre:</strong> {selectedVehicle.owner.full_name}</p>
-                  <p><strong>Codigo:</strong> {selectedVehicle.owner.code}</p>
-                  <p><strong>Documento:</strong> {selectedVehicle.owner.document_id || "No registrado"}</p>
-                  <p><strong>Facultad:</strong> {selectedVehicle.owner.faculty || "No registrada"}</p>
-                  <p><strong>Rol:</strong> {selectedVehicle.owner.role}</p>
-                  <p><strong>Contacto:</strong> {selectedVehicle.owner.contact_info || "No registrado"}</p>
-                </div>
-              </>
-            )}
-
-            {selectedVehicle.observation && (
-              <p><strong>Observacion:</strong> {selectedVehicle.observation}</p>
-            )}
-
-            {error && <p className="error-text">{error}</p>}
-
-            <div className="modal-actions">
-              <button type="button" onClick={handleOpenEdit}>Editar</button>
-              <button type="button" className="danger-button" onClick={handleDeleteVehicle} disabled={saving}>
-                {saving ? "Eliminando..." : "Eliminar"}
-              </button>
-            </div>
+      {/* Feed de Detecciones Recientes */}
+      <div className="card" style={{ marginTop: "1.5rem" }}>
+        <div className="section-heading" style={{ margin: 0, paddingBottom: "1rem" }}>
+          <div>
+            <p className="eyebrow">Bitácora en vivo</p>
+            <h3 style={{ color: "#153e75" }}>Últimos Escaneos Detectados</h3>
           </div>
         </div>
-      )}
 
-      {editingVehicle && (
-        <div className="modal-backdrop">
-          <form className="modal-card modal-large registration-form" onSubmit={handleSaveEdit}>
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Edicion</p>
-                <h2>Editar mi vehiculo</h2>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => setEditingVehicle(null)}>
-                Cerrar
-              </button>
-            </div>
-
-            <div className="form-block">
-              <h4>Datos del vehiculo</h4>
-              <div className="details-grid">
-                <label className="field-group">
-                  <span>Placa</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.license_plate}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        license_plate: event.target.value
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Marca</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.brand}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        brand: event.target.value
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Modelo</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.model}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        model: event.target.value
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Color</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.color}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        color: event.target.value
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Foto nueva</span>
-                  <input type="file" accept="image/*" onChange={(event) => setEditingPhoto(event.target.files?.[0] || null)} />
-                </label>
-                <label className="field-group">
-                  <span>Tipo</span>
-                  <select
-                    value={editingVehicle.vehicle_type}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        vehicle_type: event.target.value
-                      }))
-                    }
-                  >
-                    <option value="CAR">Auto</option>
-                    <option value="MOTORCYCLE">Motocicleta</option>
-                    <option value="VAN">Vagoneta</option>
-                    <option value="TRUCK">Camioneta</option>
-                    <option value="OTHER">Otro</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="form-block">
-              <h4>Datos del dueno</h4>
-              <div className="details-grid">
-                <label className="field-group">
-                  <span>Codigo universitario</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.owner.code}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        owner: { ...current.owner, code: event.target.value }
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Nombre completo</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.owner.full_name}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        owner: { ...current.owner, full_name: event.target.value }
-                      }))
-                    }
-                    required
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Documento</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.owner.document_id}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        owner: { ...current.owner, document_id: event.target.value }
-                      }))
-                    }
-                  />
-                </label>
-                <label className="field-group">
-                  <span>Facultad</span>
-                  <input
-                    type="text"
-                    value={editingVehicle.owner.faculty}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        owner: { ...current.owner, faculty: event.target.value }
-                      }))
-                    }
-                  />
-                </label>
-              </div>
-            </div>
-
-            {error && <p className="error-text">{error}</p>}
-
-            <div className="modal-actions">
-              <button type="submit" disabled={saving}>
-                {saving ? "Guardando..." : "Guardar cambios"}
-              </button>
-            </div>
-          </form>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid rgba(21, 62, 117, 0.1)", color: "#153e75" }}>
+                <th style={{ padding: "0.8rem" }}>Hora / Fecha</th>
+                <th style={{ padding: "0.8rem" }}>Placa Detectada</th>
+                <th style={{ padding: "0.8rem" }}>Placa Normalizada</th>
+                <th style={{ padding: "0.8rem" }}>Confianza</th>
+                <th style={{ padding: "0.8rem" }}>Estado</th>
+                <th style={{ padding: "0.8rem" }}>BD Vehículo</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentScans.map((s) => (
+                <tr key={s.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                  <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
+                    {new Date(s.created_at).toLocaleString()}
+                  </td>
+                  <td style={{ padding: "0.8rem", fontFamily: "monospace", fontWeight: "bold" }}>
+                    {s.detected_plate || "N/A"}
+                  </td>
+                  <td style={{ padding: "0.8rem", fontFamily: "monospace", color: "#153e75", fontWeight: "bold" }}>
+                    {s.normalized_plate || "N/A"}
+                  </td>
+                  <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
+                    {s.confidence ? `${(s.confidence * 100).toFixed(1)}%` : "N/A"}
+                  </td>
+                  <td style={{ padding: "0.8rem" }}>
+                    <span style={{
+                      padding: "0.2rem 0.4rem",
+                      borderRadius: "4px",
+                      fontSize: "0.7rem",
+                      fontWeight: "bold",
+                      background: s.scan_status === "DETECTED" ? "#e6ffe6" : s.scan_status === "LOW_CONFIDENCE" ? "#fff7e6" : "#ffe6e6",
+                      color: s.scan_status === "DETECTED" ? "green" : s.scan_status === "LOW_CONFIDENCE" ? "#d46b08" : "#b22234"
+                    }}>
+                      {s.scan_status}
+                    </span>
+                  </td>
+                  <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
+                    {s.has_vehicle ? (
+                      <span style={{ color: "green", fontWeight: "bold" }}>✓ En Regla</span>
+                    ) : (
+                      <span style={{ color: "#b22234", fontWeight: "bold" }}>✗ Desconocido</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {!recentScans.length && (
+                <tr>
+                  <td colSpan="6" style={{ padding: "1.5rem", textAlign: "center", color: "#666" }}>
+                    No hay escaneos recientes en la bitácora.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
+
+      {/* Accesos Rápidos */}
+      <div className="card" style={{ marginTop: "1.5rem" }}>
+        <h3 style={{ color: "#153e75", marginBottom: "1rem" }}>Accesos Rápidos</h3>
+        <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap" }}>
+          <a href="/subir-placa" className="button" style={{ display: "inline-block", textDecoration: "none", color: "white", padding: "0.6rem 1.2rem", borderRadius: "4px", background: "var(--color-primary)" }}>
+            Escanear Placa
+          </a>
+          <a href="/vehiculos" className="button" style={{ display: "inline-block", textDecoration: "none", color: "white", padding: "0.6rem 1.2rem", borderRadius: "4px", background: "var(--color-primary)" }}>
+            Mis Vehículos
+          </a>
+          <a href="/historial" className="button" style={{ display: "inline-block", textDecoration: "none", color: "white", padding: "0.6rem 1.2rem", borderRadius: "4px", background: "var(--color-primary)" }}>
+            Mi Historial
+          </a>
+          {user?.role === "ADMIN" && (
+            <>
+              <a href="/usuarios" className="button" style={{ display: "inline-block", textDecoration: "none", color: "white", padding: "0.6rem 1.2rem", borderRadius: "4px", background: "var(--color-primary)" }}>
+                Gestionar Usuarios
+              </a>
+              <a href="/personas" className="button" style={{ display: "inline-block", textDecoration: "none", color: "white", padding: "0.6rem 1.2rem", borderRadius: "4px", background: "var(--color-primary)" }}>
+                Gestionar Personas (SIARP)
+              </a>
+            </>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

@@ -1,14 +1,15 @@
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.config.settings import settings
 from app.core.security import ALGORITHM, create_access_token, hash_password, verify_password
-from app.db.models import AuthRoleEnum, AuthUser, RecordStatusEnum, RoleEnum, UniversityPerson
+from app.db.models import AuthRoleEnum, AuthUser, RecordStatusEnum, RoleEnum, UniversityPerson, RevokedToken
 from app.db.session import get_db
 from app.schemas.auth import (
     AuthResponse,
@@ -16,17 +17,21 @@ from app.schemas.auth import (
     UserLoginRequest,
     UserProfileUpdateRequest,
     UserRegisterRequest,
+    UserAdminUpdateRequest,
 )
 
 router = APIRouter()
+from app.core.limiter import limiter
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 
 def normalize_selected_role(raw_role: str) -> tuple[AuthRoleEnum, RoleEnum, str]:
     role = (raw_role or "").strip().upper()
     role_map = {
-        "ADMIN": (AuthRoleEnum.ADMIN, RoleEnum.ADMIN, "ADMINISTRATIVO"),
-        "ADMINISTRATIVE": (AuthRoleEnum.ADMIN, RoleEnum.ADMIN, "ADMINISTRATIVO"),
-        "ADMINISTRATIVO": (AuthRoleEnum.ADMIN, RoleEnum.ADMIN, "ADMINISTRATIVO"),
+        "ADMIN": (AuthRoleEnum.OPERATOR, RoleEnum.ADMIN, "ADMINISTRATIVO"),
+        "ADMINISTRATIVE": (AuthRoleEnum.OPERATOR, RoleEnum.ADMIN, "ADMINISTRATIVO"),
+        "ADMINISTRATIVO": (AuthRoleEnum.OPERATOR, RoleEnum.ADMIN, "ADMINISTRATIVO"),
         "OPERATOR": (AuthRoleEnum.OPERATOR, RoleEnum.STUDENT, "ESTUDIANTE"),
         "STUDENT": (AuthRoleEnum.OPERATOR, RoleEnum.STUDENT, "ESTUDIANTE"),
         "ESTUDIANTE": (AuthRoleEnum.OPERATOR, RoleEnum.STUDENT, "ESTUDIANTE"),
@@ -80,6 +85,7 @@ def build_user_response(user: AuthUser) -> AuthUserResponse:
         is_active=user.is_active,
         university_person_id=user.university_person_id,
         code=person.code if person else None,
+        document_id=person.document_id if person else None,
         faculty=person.faculty if person else None,
         contact_info=phone,
         created_at=user.created_at,
@@ -88,18 +94,31 @@ def build_user_response(user: AuthUser) -> AuthUserResponse:
 
 
 async def get_current_user(
-    authorization: str = Header(default=""),
-    db: AsyncSession = Depends(get_db),
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
 ) -> AuthUser:
-    if not authorization.startswith("Bearer "):
+    cookie_token = request.cookies.get("session_token")
+    active_token = cookie_token or token
+
+    if not active_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No autorizado.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # Verificar si el token está revocado
+    revoked_result = await db.execute(select(RevokedToken).where(RevokedToken.token == active_token))
+    if revoked_result.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesión expirada o revocada.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token = authorization.removeprefix("Bearer ").strip()
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -130,10 +149,67 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> AuthUser | None:
+    cookie_token = request.cookies.get("session_token")
+    auth_header = request.headers.get("Authorization")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    active_token = cookie_token or token
+
+    if not active_token:
+        return None
+
+    try:
+        payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+        user_uuid = UUID(user_id)
+        result = await db.execute(select(AuthUser).where(AuthUser.id == user_uuid))
+        user = result.scalars().first()
+        if user and user.is_active:
+            return user
+    except Exception:
+        return None
+    return None
+
+
+async def require_admin(current_user: AuthUser = Depends(get_current_user)) -> AuthUser:
+    if current_user.role != AuthRoleEnum.ADMIN:
+        raise HTTPException(status_code=403, detail="Se requiere rol administrativo.")
+    return current_user
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout_user(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db)
+):
+    token = request.cookies.get("session_token") or request.headers.get("Authorization", "").replace("Bearer ", "")
+    if token:
+        revoked = RevokedToken(token=token)
+        db.add(revoked)
+        try:
+            await db.commit()
+        except Exception:
+            pass  # Ya estaba revocado o error menor de DB
+
+    response.delete_cookie("session_token", samesite="lax", path="/")
+    return {"message": "Sesión cerrada correctamente."}
+
+
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def register_user(
+    request: Request,
     user_in: UserRegisterRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: AuthUser | None = Depends(get_current_user_optional)
 ):
     result = await db.execute(
         select(AuthUser).where(AuthUser.email == user_in.email.lower().strip())
@@ -141,10 +217,17 @@ async def register_user(
     if result.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Este correo ya se encuentra registrado.",
+            detail="No se pudo completar el registro. Verifica los datos ingresados.",
         )
 
+    # Forzar is_admin=False si la petición de registro no viene de un Administrador autenticado
+    is_requester_admin = current_user is not None and current_user.role == AuthRoleEnum.ADMIN
+    is_admin_flag = user_in.is_admin if is_requester_admin else False
+
     auth_role, person_role, _ = normalize_selected_role(user_in.role)
+    if is_admin_flag:
+        auth_role = AuthRoleEnum.ADMIN
+        
     faculty_value = normalize_faculty(person_role, user_in.faculty)
     phone_value = (user_in.phone or user_in.contact_info).strip()
 
@@ -204,7 +287,9 @@ async def register_user(
 
 
 @router.post("/login", response_model=AuthResponse)
+@limiter.limit("10/minute")
 async def login_user(
+    request: Request,
     credentials: UserLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -231,10 +316,26 @@ async def login_user(
         )
         user.university_person = person_result.scalars().first()
 
-    return AuthResponse(
-        token=create_access_token(str(user.id)),
+    access_token = create_access_token(subject=str(user.id))
+    
+    response = AuthResponse(
+        token=access_token,
         user=build_user_response(user),
     )
+    
+    from fastapi.responses import JSONResponse
+    json_response = JSONResponse(content=response.model_dump(mode="json"))
+    json_response.set_cookie(
+        key="session_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    
+    return json_response
 
 
 @router.get("/me", response_model=AuthUserResponse)
@@ -282,10 +383,12 @@ async def update_my_profile(
     faculty_value = normalize_faculty(person_role, profile_in.faculty)
     phone_value = (profile_in.phone or profile_in.contact_info).strip()
 
+    # Nota: No actualizamos auth_role aquí para evitar escalamiento de privilegios por los propios usuarios.
+    # Un usuario no debería poder cambiarse a ADMIN a sí mismo.
     current_user.full_name = profile_in.full_name.strip()
     current_user.email = profile_in.email.lower().strip()
     current_user.phone = phone_value
-    current_user.role = auth_role
+    
     if profile_in.password:
         current_user.password_hash = hash_password(profile_in.password)
 
@@ -352,3 +455,73 @@ async def delete_my_profile(
 
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/users", response_model=list[AuthUserResponse])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_admin),
+):
+    """Retorna la lista completa de usuarios de acceso. Reservado a administradores."""
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(AuthUser).options(selectinload(AuthUser.university_person)).order_by(AuthUser.full_name)
+    )
+    users = result.scalars().all()
+    return [build_user_response(user) for user in users]
+
+
+@router.put("/users/{user_id}", response_model=AuthUserResponse)
+async def update_user_by_admin(
+    user_id: UUID,
+    user_in: UserAdminUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_admin),
+):
+    """Actualiza rol y estado de un usuario. Reservado a administradores."""
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(
+        select(AuthUser).where(AuthUser.id == user_id).options(selectinload(AuthUser.university_person))
+    )
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    # No permitir desactivarse a uno mismo
+    if user.id == current_user.id and (not user_in.is_active or user_in.status == RecordStatusEnum.INACTIVE):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puedes desactivar tu propio usuario administrador.",
+        )
+
+    user.role = user_in.role
+    user.is_active = user_in.is_active
+    user.status = user_in.status
+
+    await db.commit()
+    await db.refresh(user)
+    return build_user_response(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user_by_admin(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(require_admin),
+):
+    """Elimina permanentemente un usuario de acceso. Reservado a administradores."""
+    result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No puedes eliminar tu propio usuario administrador.",
+        )
+
+    await db.delete(user)
+    await db.commit()
+    return
+

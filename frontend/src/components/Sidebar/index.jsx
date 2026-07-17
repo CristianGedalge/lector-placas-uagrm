@@ -1,14 +1,32 @@
 import { NavLink } from "react-router-dom";
-
-const links = [
-  { to: "/", label: "Dashboard" },
-  { to: "/subir-placa", label: "Subir placa" },
-  { to: "/historial", label: "Historial" },
-  { to: "/reportes", label: "Reportes" },
-  { to: "/perfil", label: "Perfil" }
-];
+import { useAuth } from "../../hooks/useAuth";
 
 function Sidebar({ isOpen, onClose }) {
+  const { user } = useAuth();
+
+  const links = [];
+
+  if (user?.role === "ADMIN") {
+    links.push(
+      { to: "/", label: "Dashboard" },
+      { to: "/vehiculos", label: "Gestionar Vehiculos" },
+      { to: "/usuarios", label: "Gestionar Usuarios" },
+      { to: "/personas", label: "Gestionar Personas" },
+      { to: "/accesos", label: "Control de Accesos" },
+      { to: "/historial", label: "Historial" },
+      { to: "/reportes", label: "Reportes" }
+    );
+  } else {
+    links.push(
+      { to: "/subir-placa", label: "Escanear Placas" },
+      { to: "/vehiculos", label: "Mis Vehiculos" },
+      { to: "/accesos", label: "Control de Accesos" },
+      { to: "/historial", label: "Mi Historial" }
+    );
+  }
+
+  links.push({ to: "/perfil", label: "Perfil" });
+
   return (
     <>
       <aside className={isOpen ? "sidebar sidebar-open" : "sidebar"}>

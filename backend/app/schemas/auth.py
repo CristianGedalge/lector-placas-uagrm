@@ -15,6 +15,7 @@ class UserRegisterRequest(BaseModel):
     contact_info: str = Field(min_length=5, max_length=255)
     phone: str | None = Field(default=None, min_length=5, max_length=255)
     role: str = Field(min_length=3, max_length=40, default="STUDENT")
+    is_admin: bool = Field(default=False)
 
 
 class UserLoginRequest(BaseModel):
@@ -33,6 +34,7 @@ class AuthUserResponse(BaseModel):
     is_active: bool
     university_person_id: UUID | None = None
     code: str | None = None
+    document_id: str | None = None
     faculty: str | None = None
     contact_info: str | None = None
     created_at: datetime
@@ -50,6 +52,12 @@ class UserProfileUpdateRequest(BaseModel):
     phone: str | None = Field(default=None, min_length=5, max_length=255)
     role: str = Field(min_length=3, max_length=40, default="STUDENT")
     password: str | None = Field(default=None, min_length=6, max_length=128)
+
+
+class UserAdminUpdateRequest(BaseModel):
+    role: AuthRoleEnum
+    is_active: bool
+    status: RecordStatusEnum
 
 
 class AuthResponse(BaseModel):

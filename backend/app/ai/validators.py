@@ -1,6 +1,9 @@
 import re
 
-PATRON_PLACA_BOLIVIA = re.compile(r"^\d{4}[A-Z]{3}$")
+# Formato de placas en Bolivia:
+# Antiguas: 3 números + 3 letras (ej. 123ABC)
+# Nuevas: 4 números + 3 letras (ej. 1234ABC)
+PATRON_PLACA_BOLIVIA = re.compile(r"^\d{3,4}[A-Z]{3}$")
 
 # ---------------------------------------------------------------------------
 # Blocklist de palabras del entorno de placas bolivianas
@@ -54,20 +57,24 @@ _LET_ZONE_FIXES: dict[int, str] = {
 
 def correct_ocr_confusions(normalized: str) -> str:
     """
-    Corrección posicional para el formato boliviano NNNNLLL.
+    Corrección posicional para el formato boliviano NNNNLLL o NNNLLL.
 
-    Posiciones 0-3 (zona numérica): convierte las 6 letras de confusión
-    universal a su dígito equivalente.
-    Posiciones 4-6 (zona alfabética): convierte dígitos a letra equivalente.
-    Para textos ≠ 7 chars aplica solo la tabla numérica como heurística.
+    Posiciones iniciales (zona numérica): convierte letras a dígitos.
+    Posiciones finales (zona alfabética): convierte dígitos a letra.
+    Para textos de longitudes diferentes, no aplica reglas posicionales estrictas
+    para no corromper la lectura.
     """
     if not normalized:
         return normalized
-    if len(normalized) == 7:
-        zona_num = normalized[:4].translate(_NUM_ZONE_FIXES)
-        zona_let = normalized[4:].translate(_LET_ZONE_FIXES)
+    
+    length = len(normalized)
+    if length == 6 or length == 7:
+        num_len = length - 3
+        zona_num = normalized[:num_len].translate(_NUM_ZONE_FIXES)
+        zona_let = normalized[num_len:].translate(_LET_ZONE_FIXES)
         return zona_num + zona_let
-    return normalized.translate(_NUM_ZONE_FIXES)
+        
+    return normalized
 
 
 def normalize_plate_text(raw_text: str) -> str:
