@@ -1,9 +1,13 @@
 # HEARTBEAT
 
-- Foco actual: Implementación estricta de Reglas de Negocio y Seguridad de Datos.
-- Ultimo avance: Se implementó la restricción de unicidad para el CI (`document_id`) en base de datos. Se restringió la creación de vehículos para que los operadores solo puedan registrar a su nombre, y el registro de salidas (`EXIT`) únicamente al propietario del vehículo o administradores. Se bloqueó el formulario de registro de vehículos en el frontend para operadores.
-- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz para despliegue rápido.
-- Inventario confirmado: Reglas de negocio enforcing en backend, frontend y nivel de base de datos (migración Alembic).
-- Bloqueos: Ninguno. Todos los tests locales y revisiones de seguridad en roles son exitosos.
-- Proximo paso: Calibrar e integrar el pipeline ALPR de EasyOCR/Supervision con cámaras físicas de prueba y configurar ROI definitiva.
-- Estado del Alpha: Registro, control de accesos y validaciones de negocio 100% integrados y funcionales.
+- Foco actual: Auditoría de arquitectura frontend y backend bajo estándares de calidad ISO/IEC 25010 (Correctitud, Fiabilidad, Facilidad de uso, Eficiencia, Seguridad, Mantenibilidad, Portabilidad).
+- Ultimo avance: Se implementaron optimizaciones clave:
+  1. UI/UX: Validación visual de placa en tiempo real en frontend, spinners individuales en refrescos de tablas y paginación compacta.
+  2. Eficiencia/BD: Índices compuestos en historiales de accesos y escaneos de placas, además de límite de resolución estática (`MAX_STATIC_DIM = 1280`) en EasyOCR backend para evitar picos de memoria.
+  3. Mantenibilidad: Desacoplamiento de `UploadPlate.jsx` extrayendo modales de flujo a componentes modulares. Memoización de tablas con `React.memo` y `useCallback` en `Users.jsx`.
+  4. Seguridad/Portabilidad: Script periódico de purga de tokens expirados en BD y centralización de tareas comunes en un Makefile portable.
+- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz para despliegue rápido; submódulos en frontend/src/components/UploadPlate/ y scripts en backend/app/services/.
+- Inventario confirmado: La suite completa de 23 pruebas de verificación y build del frontend compila y pasa al 100%.
+- Bloqueos: Ninguno.
+- Proximo paso: Integración del sistema con sensores o cámaras reales y monitoreo de producción.
+- Estado del Alpha: Pipeline OCR local optimizado, control de accesos segregado por rol, y suite frontend totalmente robusta y memoizada.

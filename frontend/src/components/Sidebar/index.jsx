@@ -16,6 +16,10 @@ function Sidebar({ isOpen, onClose }) {
       { to: "/historial", label: "Historial" },
       { to: "/reportes", label: "Reportes" }
     );
+  } else if (user?.role === "DISPOSITIVO") {
+    links.push(
+      { to: "/subir-placa", label: "Escanear Placas" }
+    );
   } else {
     links.push(
       { to: "/subir-placa", label: "Escanear Placas" },
@@ -25,7 +29,9 @@ function Sidebar({ isOpen, onClose }) {
     );
   }
 
-  links.push({ to: "/perfil", label: "Perfil" });
+  if (user?.role !== "DISPOSITIVO") {
+    links.push({ to: "/perfil", label: "Perfil" });
+  }
 
   return (
     <>

@@ -1,5 +1,20 @@
 # MEMORY
 
+## 2026-07-19 - Auditoría y Cumplimiento de Estándares de Calidad (ISO/IEC 25010)
+
+- **Correctitud y Fiabilidad (USA-003, REL-002)**: Se unificó la validación visual lógica en tiempo real para el registro de vehículos en el frontend. Se implementaron spinners individuales en los botones de refresco (`↻`) en lugar de loaders invasivos a pantalla completa.
+- **Eficiencia y Base de Datos (EFI-002, EFI-003, EFI-004)**: Se crearon índices compuestos en las tablas `access_logs` y `plate_scans` optimizando las búsquedas cronológicas. En el backend se limitó el tamaño máximo de imágenes estáticas a `1280px` (`MAX_STATIC_DIM`), evitando picos de consumo de CPU/RAM (OOM) en el OCR local. En el frontend se optimizó la vista de usuarios (`Users.jsx`) memoizando las filas de la tabla con `React.memo` y protegiendo callbacks con `useCallback`.
+- **Mantenibilidad y Portabilidad (MNT-002, MNT-003, POR-002, POR-003)**: Se refactorizó la lógica repetitiva de carga de tablas mediante el hook reusable `usePageData.js`. El monolito `UploadPlate.jsx` fue fragmentado, aislando los modales complejos a componentes independientes en `components/UploadPlate/`. Se diseñó un `Makefile` en la raíz para simplificar la inicialización del entorno y comandos de base de datos. Se actualizó `.env.example` con las variables de expiración y secretos JWT.
+- **Seguridad (SEC-007)**: Se desarrolló un servicio programado (`token_cleanup.py`) para purgar registros expirados de tokens revocados de la base de datos local de forma automatizada.
+
+## 2026-07-19 - Integración del Rol DISPOSITIVO y Corrección de Validación OCR
+
+- **Rol DISPOSITIVO en Base de Datos**: Añadido `DISPOSITIVO` en `AuthRoleEnum` en models.py y creada y ejecutada exitosamente la migración de PostgreSQL `df3072f8b6b1_add_dispositivo_to_authroleenum.py`.
+- **Mapeo de Roles y Normalización**: Modificadas las funciones de backend (`normalize_selected_role` y `get_catalog_role_label`) para procesar el nuevo rol, permitiendo registrar dispositivos externos mediante su nombre y credenciales con permisos limitados.
+- **Gestión Frontend de Roles**: Actualizado `Users.jsx` para mostrar un tag distintivo para cuentas de tipo `DISPOSITIVO`, agregado al modal de registro de usuarios y permitido ciclar entre `OPERADOR` -> `ADMIN` -> `DISPOSITIVO` al cambiar el rol.
+- **Corrección en Pipeline ALPR**: Se corrigió el bug de confirmación en el flujo estático de `pipeline.py`. Ahora se requiere que la lectura posea formato válido *y* confianza suficiente (`and`), evitando que detecciones con un formato aparentemente válido pero con bajísima confianza sean consideradas `DETECTED`. Se configuró también para que `normalized_plate` se devuelva en `None` si la detección no es confirmada.
+- **Verificación**: Todas las pruebas unitarias y el build de frontend completaron exitosamente sin errores de dependencias ni fallos.
+
 ## 2026-07-17 - Control de Accesos (Ingreso y Salida de Vehículos)
 
 - **Persistencia en PostgreSQL**: Creada la tabla `access_logs` mapeando registros de ingresos (`ENTRY`) y salidas (`EXIT`) vinculados a vehículos y operadores en campus, incluyendo marcas de tiempo y zonas/porterías de control. Aplicadas las migraciones exitosamente con Alembic.

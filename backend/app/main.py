@@ -95,7 +95,8 @@ app.add_middleware(
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    # SEC-006: Solo los headers mínimos necesarios
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
 )
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
@@ -112,3 +113,22 @@ app.include_router(
     prefix="/api/v1/access-logs",
     tags=["Access Logs"],
 )
+
+# SEC-010: Cabeceras de seguridad HTTP en todas las respuestas
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response: StarletteResponse = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Reload trigger comment to refresh FastAPI cache with new AuthRoleEnum

@@ -97,6 +97,10 @@ textarea:focus {
   position: relative;
 }
 
+.app-shell-device {
+  grid-template-columns: 1fr;
+}
+
 .sidebar {
   background:
     linear-gradient(180deg, var(--color-sidebar) 0%, var(--color-sidebar-strong) 100%);
@@ -1048,3 +1052,26 @@ textarea:focus {
   z-index: 5;
 }
 @keyframes scan-fullscreen { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+
+/* REL-002: Spinner de refresco de tablas */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* USA-003: Validación en tiempo real de campos */
+.field-valid {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+}
+.field-invalid {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+}
+.field-hint {
+  font-size: 0.75rem;
+  margin-top: 0.3rem;
+  display: block;
+}
+.field-hint.valid   { color: #10b981; }
+.field-hint.invalid { color: #ef4444; }

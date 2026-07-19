@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import Loader from "../components/Loader";
 import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser } from "../api/auth";
 
@@ -8,6 +8,65 @@ const CAREER_OPTIONS = [
   "Ingenieria en Sistemas",
   "Ingenieria Robotica"
 ];
+
+const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete }) => (
+  <tr style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+    <td style={{ padding: "1rem", fontWeight: "bold" }}>{user.full_name}</td>
+    <td style={{ padding: "1rem" }}>{user.email}</td>
+    <td style={{ padding: "1rem" }}>{user.code || "N/A"}</td>
+    <td style={{ padding: "1rem" }}>
+      <span style={{
+        padding: "0.25rem 0.5rem",
+        borderRadius: "4px",
+        fontSize: "0.75rem",
+        fontWeight: "bold",
+        background: user.role === "ADMIN" ? "#ffe6e6" : "#e6f2ff",
+        color: user.role === "ADMIN" ? "#b22234" : "#153e75"
+      }}>
+        {user.role === "ADMIN" ? "ADMINISTRADOR" : "OPERADOR"}
+      </span>
+    </td>
+    <td style={{ padding: "1rem", textTransform: "capitalize" }}>
+      {String(user.catalog_role || "").toLowerCase() || "N/A"}
+    </td>
+    <td style={{ padding: "1rem" }}>
+      <span style={{
+        padding: "0.25rem 0.5rem",
+        borderRadius: "4px",
+        fontSize: "0.75rem",
+        fontWeight: "bold",
+        background: user.is_active ? "#e6ffe6" : "#f2f2f2",
+        color: user.is_active ? "green" : "#666"
+      }}>
+        {user.is_active ? "ACTIVO" : "INACTIVO"}
+      </span>
+    </td>
+    <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+      <button
+        type="button"
+        onClick={() => handleRoleToggle(user)}
+        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+      >
+        Cambiar Acceso
+      </button>
+      <button
+        type="button"
+        onClick={() => handleStatusToggle(user)}
+        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: user.is_active ? "#f2a104" : "green" }}
+      >
+        {user.is_active ? "Desactivar" : "Activar"}
+      </button>
+      <button
+        type="button"
+        className="danger-button"
+        onClick={() => handleDelete(user.id)}
+        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+      >
+        Eliminar
+      </button>
+    </td>
+  </tr>
+));
 
 function Users() {
   const [users, setUsers] = useState([]);
@@ -30,7 +89,7 @@ function Users() {
     is_admin: false
   });
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listUsers();
@@ -41,13 +100,13 @@ function Users() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
-  const handleRoleToggle = async (user) => {
+  const handleRoleToggle = useCallback(async (user) => {
     const nextRole = user.role === "ADMIN" ? "OPERATOR" : "ADMIN";
     try {
       setError("");
@@ -62,9 +121,9 @@ function Users() {
     } catch (err) {
       setError(err.message || "No se pudo actualizar el rol del usuario.");
     }
-  };
+  }, [fetchUsers]);
 
-  const handleStatusToggle = async (user) => {
+  const handleStatusToggle = useCallback(async (user) => {
     const nextActive = !user.is_active;
     try {
       setError("");
@@ -79,9 +138,9 @@ function Users() {
     } catch (err) {
       setError(err.message || "No se pudo actualizar el estado del usuario.");
     }
-  };
+  }, [fetchUsers]);
 
-  const handleDelete = async (userId) => {
+  const handleDelete = useCallback(async (userId) => {
     if (!window.confirm("¿Estás seguro de que deseas eliminar permanentemente este usuario? Esta acción no se puede deshacer.")) {
       return;
     }
@@ -95,7 +154,7 @@ function Users() {
     } catch (err) {
       setError(err.message || "No se pudo eliminar el usuario.");
     }
-  };
+  }, [fetchUsers]);
 
   const handleOpenRegister = () => {
     setRegisterForm({
@@ -190,62 +249,13 @@ function Users() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
-                <td style={{ padding: "1rem", fontWeight: "bold" }}>{u.full_name}</td>
-                <td style={{ padding: "1rem" }}>{u.email}</td>
-                <td style={{ padding: "1rem" }}>{u.code || "N/A"}</td>
-                <td style={{ padding: "1rem" }}>
-                  <span style={{
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: "4px",
-                    fontSize: "0.75rem",
-                    fontWeight: "bold",
-                    background: u.role === "ADMIN" ? "#ffe6e6" : "#e6f2ff",
-                    color: u.role === "ADMIN" ? "#b22234" : "#153e75"
-                  }}>
-                    {u.role === "ADMIN" ? "ADMINISTRADOR" : "OPERADOR"}
-                  </span>
-                </td>
-                <td style={{ padding: "1rem", textTransform: "capitalize" }}>
-                  {String(u.catalog_role || "").toLowerCase() || "N/A"}
-                </td>
-                <td style={{ padding: "1rem" }}>
-                  <span style={{
-                    padding: "0.25rem 0.5rem",
-                    borderRadius: "4px",
-                    fontSize: "0.75rem",
-                    fontWeight: "bold",
-                    background: u.is_active ? "#e6ffe6" : "#f2f2f2",
-                    color: u.is_active ? "green" : "#666"
-                  }}>
-                    {u.is_active ? "ACTIVO" : "INACTIVO"}
-                  </span>
-                </td>
-                <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                  <button
-                    type="button"
-                    onClick={() => handleRoleToggle(u)}
-                    style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
-                  >
-                    Cambiar Acceso
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleStatusToggle(u)}
-                    style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: u.is_active ? "#f2a104" : "green" }}
-                  >
-                    {u.is_active ? "Desactivar" : "Activar"}
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-button"
-                    onClick={() => handleDelete(u.id)}
-                    style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
-                  >
-                    Eliminar
-                  </button>
-                </td>
-              </tr>
+              <UserRow
+                key={u.id}
+                user={u}
+                handleRoleToggle={handleRoleToggle}
+                handleStatusToggle={handleStatusToggle}
+                handleDelete={handleDelete}
+              />
             ))}
             {!users.length && (
               <tr>

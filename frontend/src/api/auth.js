@@ -3,7 +3,15 @@ import { readSession } from "../services/storage";
 
 function mapAuthError(error, fallbackMessage) {
   if (error?.response?.data?.detail) {
-    throw new Error(error.response.data.detail);
+    const detail = error.response.data.detail;
+    if (typeof detail === "string") {
+      throw new Error(detail);
+    } else if (Array.isArray(detail)) {
+      const msg = detail.map((d) => `${d.loc?.join(".") || "error"}: ${d.msg || "invalido"}`).join("; ");
+      throw new Error(msg);
+    } else {
+      throw new Error(JSON.stringify(detail));
+    }
   }
 
   if (!error?.response) {

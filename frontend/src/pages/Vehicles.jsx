@@ -10,7 +10,9 @@ import {
   createVehicleWithPhoto
 } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
-import { formatPlate } from "../utils/formatters";
+import { formatPlate, validatePlateForm } from "../utils/formatters";
+import Pagination from "../components/Pagination";
+import ConfirmModal from "../components/ConfirmModal";
 
 function Vehicles() {
   const { user } = useAuth();
@@ -25,6 +27,10 @@ function Vehicles() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: "", message: "", onConfirm: null, confirmColor: "#e11d48" });
 
   const loadVehicles = async () => {
     try {
@@ -85,36 +91,46 @@ function Vehicles() {
     setCreatingPhoto(null);
   };
 
-  const handleCreateSubmit = async (e) => {
+  const handleCreateSubmit = (e) => {
     e.preventDefault();
-    setSaving(true);
     setError("");
-    try {
-      const payload = {
-        license_plate: formatPlate(creatingVehicle.license_plate),
-        brand: creatingVehicle.brand,
-        model: creatingVehicle.model,
-        color: creatingVehicle.color,
-        vehicle_type: creatingVehicle.vehicle_type,
-        year: parseInt(creatingVehicle.year) || null,
-        observations: creatingVehicle.observations,
-        owner_code: creatingVehicle.owner_code,
-        owner_name: creatingVehicle.owner_name,
-        owner_document: creatingVehicle.owner_document,
-        owner_faculty: creatingVehicle.owner_faculty,
-        owner_role: creatingVehicle.owner_role,
-        owner_contact: creatingVehicle.owner_contact,
-        status: creatingVehicle.status
-      };
+    
+    setConfirmConfig({
+      isOpen: true,
+      title: "Registrar Vehículo",
+      message: `¿Confirmas el registro del vehículo con placa ${creatingVehicle.license_plate}?`,
+      confirmColor: "var(--color-primary)",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
+          const payload = {
+            license_plate: formatPlate(creatingVehicle.license_plate),
+            brand: creatingVehicle.brand,
+            model: creatingVehicle.model,
+            color: creatingVehicle.color,
+            vehicle_type: creatingVehicle.vehicle_type,
+            year: parseInt(creatingVehicle.year) || null,
+            observations: creatingVehicle.observations,
+            owner_code: creatingVehicle.owner_code,
+            owner_name: creatingVehicle.owner_name,
+            owner_document: creatingVehicle.owner_document,
+            owner_faculty: creatingVehicle.owner_faculty,
+            owner_role: creatingVehicle.owner_role,
+            owner_contact: creatingVehicle.owner_contact,
+            status: creatingVehicle.status
+          };
 
-      await createVehicleWithPhoto(payload, creatingPhoto);
-      setCreatingVehicle(null);
-      loadVehicles();
-    } catch (createErr) {
-      setError(createErr.message || "No se pudo registrar el vehiculo.");
-    } finally {
-      setSaving(false);
-    }
+          await createVehicleWithPhoto(payload, creatingPhoto);
+          setCreatingVehicle(null);
+          loadVehicles();
+        } catch (createErr) {
+          setError(createErr.message || "No se pudo registrar el vehiculo.");
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   const handleOpenEdit = () => {
@@ -145,49 +161,63 @@ function Vehicles() {
     };
   };
 
-  const handleSaveEdit = async (event) => {
+  const handleSaveEdit = (event) => {
     event.preventDefault();
-    if (!editingVehicle?.id) {
-      return;
-    }
+    if (!editingVehicle?.id) return;
 
-    try {
-      setSaving(true);
-      const updated = await updateVehicleWithPhoto(
-        editingVehicle.id,
-        {
-          ...editingVehicle,
-          license_plate: formatPlate(editingVehicle.license_plate),
-          registered_by_user_id: user?.id
-        },
-        editingPhoto
-      );
-      setSelectedVehicle(updated);
-      setEditingVehicle(null);
-      await loadVehicles();
-    } catch (saveError) {
-      setError(saveError?.response?.data?.detail || "No se pudo actualizar el vehiculo.");
-    } finally {
-      setSaving(false);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: "Guardar Cambios",
+      message: `¿Estás seguro de que deseas guardar los cambios para la placa ${editingVehicle.license_plate}?`,
+      confirmColor: "var(--color-primary)",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
+          const updated = await updateVehicleWithPhoto(
+            editingVehicle.id,
+            {
+              ...editingVehicle,
+              license_plate: formatPlate(editingVehicle.license_plate),
+              registered_by_user_id: user?.id
+            },
+            editingPhoto
+          );
+          setSelectedVehicle(updated);
+          setEditingVehicle(null);
+          await loadVehicles();
+        } catch (saveError) {
+          setError(saveError?.response?.data?.detail || "No se pudo actualizar el vehiculo.");
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
-  const handleDeleteVehicle = async () => {
-    if (!selectedVehicle?.id) {
-      return;
-    }
+  const handleDeleteVehicle = () => {
+    if (!selectedVehicle?.id) return;
 
-    try {
-      setSaving(true);
-      await deleteVehicle(selectedVehicle.id);
-      setSelectedVehicle(null);
-      setEditingVehicle(null);
-      await loadVehicles();
-    } catch (deleteError) {
-      setError(deleteError?.response?.data?.detail || "No se pudo eliminar el vehiculo.");
-    } finally {
-      setSaving(false);
-    }
+    setConfirmConfig({
+      isOpen: true,
+      title: "Eliminar Vehículo",
+      message: "¿Estás seguro de que deseas eliminar este vehículo permanentemente? Esta acción es irreversible.",
+      confirmColor: "#e11d48",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
+          await deleteVehicle(selectedVehicle.id);
+          setSelectedVehicle(null);
+          setEditingVehicle(null);
+          await loadVehicles();
+        } catch (deleteError) {
+          setError(deleteError?.response?.data?.detail || "No se pudo eliminar el vehiculo.");
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
   };
 
   if (loading) {
@@ -202,26 +232,25 @@ function Vehicles() {
     return true;
   });
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentVehicles = filteredVehicles.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <section className="page-stack">
-      <div className="hero card">
-        <p className="eyebrow">{user?.role === "ADMIN" ? "Administracion" : "Operador"}</p>
-        <h2>{user?.role === "ADMIN" ? "Gestión de Vehículos" : "Mis Vehículos"}</h2>
-        <p className="muted-text">
-          {user?.role === "ADMIN"
-            ? "Registra, edita, audita o elimina los vehículos autorizados para ingresar a los campus de la universidad."
-            : "Registra, edita o visualiza los vehículos que has dado de alta para el control de accesos."}
-        </p>
-      </div>
-
-      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1rem" }}>
         <div>
           <p className="eyebrow">Listado de Vehiculos</p>
           <h3>{user?.role === "ADMIN" ? "Todos los vehiculos del sistema" : "Vehículos registrados por mi cuenta"}</h3>
         </div>
-        <button type="button" onClick={handleOpenCreate} style={{ padding: "0.6rem 1.2rem" }}>
-          Registrar Vehiculo
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="ghost-button" onClick={loadVehicles} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem" }} title="Refrescar tabla">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
+          </button>
+          <button type="button" onClick={handleOpenCreate} style={{ padding: "0.6rem 1.2rem" }}>
+            Registrar Vehiculo
+          </button>
+        </div>
       </div>
 
       {/* Selector de Pestañas (Solo administradores) */}
@@ -260,7 +289,7 @@ function Vehicles() {
         </div>
       )}
 
-      {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
+      {error && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p className="error-text" style={{ background: "#ffe6e6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid red", display: "inline-block", margin: 0 }}>{error}</p></div>}
 
       {!filteredVehicles.length && (
         <div className="card">
@@ -283,7 +312,7 @@ function Vehicles() {
               </tr>
             </thead>
             <tbody>
-              {filteredVehicles.map((v) => (
+              {currentVehicles.map((v) => (
                 <tr key={v.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
                   <td style={{ padding: "1rem" }}>
                     <span 
@@ -334,17 +363,24 @@ function Vehicles() {
                       type="button"
                       className="danger-button"
                       onClick={async () => {
-                        if (window.confirm(`¿Estás seguro de que deseas eliminar el vehículo con placa ${v.license_plate}?`)) {
-                          try {
-                            setSaving(true);
-                            await deleteVehicle(v.id);
-                            loadVehicles();
-                          } catch (err) {
-                            setError("No se pudo eliminar el vehículo.");
-                          } finally {
-                            setSaving(false);
+                        setConfirmConfig({
+                          isOpen: true,
+                          title: "Eliminar Vehículo",
+                          message: `¿Estás seguro de que deseas eliminar el vehículo con placa ${v.license_plate}?`,
+                          confirmColor: "#e11d48",
+                          onConfirm: async () => {
+                            try {
+                              setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                              setSaving(true);
+                              await deleteVehicle(v.id);
+                              loadVehicles();
+                            } catch (err) {
+                              setError("No se pudo eliminar el vehículo.");
+                            } finally {
+                              setSaving(false);
+                            }
                           }
-                        }
+                        });
                       }}
                       style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
                     >
@@ -358,7 +394,16 @@ function Vehicles() {
         </div>
       )}
 
-      {selectedVehicle && (
+      {!loading && filteredVehicles.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredVehicles.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
+      )}
+
+      {selectedVehicle && !editingVehicle && (
         <div className="modal-backdrop">
           <div className="modal-card">
             <div className="modal-header">
@@ -443,9 +488,13 @@ function Vehicles() {
               <h4>Datos del vehiculo</h4>
               <div className="details-grid">
                 <label className="field-group">
-                  <span>Placa</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <span>Placa</span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Obligatorio</span>
+                  </div>
                   <input
                     type="text"
+                    className={validatePlateForm(editingVehicle.license_plate).className}
                     value={editingVehicle.license_plate}
                     onChange={(event) =>
                       setEditingVehicle((current) => ({
@@ -455,6 +504,11 @@ function Vehicles() {
                     }
                     required
                   />
+                  {validatePlateForm(editingVehicle.license_plate).message && (
+                    <span className={`field-hint ${validatePlateForm(editingVehicle.license_plate).className === "field-valid" ? "valid" : "invalid"}`}>
+                      {validatePlateForm(editingVehicle.license_plate).message}
+                    </span>
+                  )}
                 </label>
                 <label className="field-group">
                   <span>Marca</span>
@@ -611,10 +665,14 @@ function Vehicles() {
               <h4>Datos del vehiculo</h4>
               <div className="details-grid">
                 <label className="field-group">
-                  <span>Placa</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                    <span>Placa</span>
+                    <span style={{ fontSize: "0.75rem", color: "#64748b" }}>Obligatorio</span>
+                  </div>
                   <input
                     type="text"
                     placeholder="1234ABC"
+                    className={validatePlateForm(creatingVehicle.license_plate).className}
                     value={creatingVehicle.license_plate}
                     onChange={(event) =>
                       setCreatingVehicle((current) => ({
@@ -624,6 +682,11 @@ function Vehicles() {
                     }
                     required
                   />
+                  {validatePlateForm(creatingVehicle.license_plate).message && (
+                    <span className={`field-hint ${validatePlateForm(creatingVehicle.license_plate).className === "field-valid" ? "valid" : "invalid"}`}>
+                      {validatePlateForm(creatingVehicle.license_plate).message}
+                    </span>
+                  )}
                 </label>
                 <label className="field-group">
                   <span>Marca</span>
@@ -820,6 +883,15 @@ function Vehicles() {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmColor={confirmConfig.confirmColor}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+      />
     </section>
   );
 }

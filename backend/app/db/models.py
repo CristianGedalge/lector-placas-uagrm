@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.orm import relationship
@@ -23,6 +23,7 @@ class RecordStatusEnum(str, enum.Enum):
 class AuthRoleEnum(str, enum.Enum):
     ADMIN = "ADMIN"
     OPERATOR = "OPERATOR"
+    DISPOSITIVO = "DISPOSITIVO"
 
 
 class VehicleTypeEnum(str, enum.Enum):
@@ -63,8 +64,8 @@ class UniversityPerson(Base):
     contact_info = Column(String, nullable=True)
     status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     vehicles = relationship("Vehicle", back_populates="owner")
     auth_users = relationship("AuthUser", back_populates="university_person")
@@ -82,8 +83,8 @@ class AuthUser(Base):
     status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     university_person_id = Column(Uuid, ForeignKey("university_persons.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     university_person = relationship("UniversityPerson", back_populates="auth_users")
     registered_vehicles = relationship("Vehicle", back_populates="registered_by_user")
@@ -106,8 +107,8 @@ class Vehicle(Base):
     status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
     owner_id = Column(Uuid, ForeignKey("university_persons.id"), nullable=False)
     registered_by_user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     owner = relationship("UniversityPerson", back_populates="vehicles")
     registered_by_user = relationship("AuthUser", back_populates="registered_vehicles")
@@ -127,7 +128,7 @@ class PlateScan(Base):
     vehicle_id = Column(Uuid, ForeignKey("vehicles.id"), nullable=True)
     scanned_by_user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=True)
     observations = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     vehicle = relationship("Vehicle", back_populates="scans")
     scanned_by_user = relationship("AuthUser", back_populates="plate_scans")
@@ -143,7 +144,7 @@ class Notification(Base):
     is_read = Column(Boolean, default=False, nullable=False)
     user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=False)
     plate_scan_id = Column(Uuid, ForeignKey("plate_scans.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     user = relationship("AuthUser", back_populates="notifications")
     plate_scan = relationship("PlateScan", back_populates="notifications")
@@ -154,7 +155,7 @@ class RevokedToken(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     token = Column(String, unique=True, index=True, nullable=False)
-    revoked_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    revoked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class AccessLog(Base):
@@ -163,7 +164,7 @@ class AccessLog(Base):
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     vehicle_id = Column(Uuid, ForeignKey("vehicles.id"), nullable=False)
     direction = Column(Enum(AccessDirectionEnum), nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     zone = Column(String, nullable=False)
     operator_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=False)
     plate_scan_id = Column(Uuid, ForeignKey("plate_scans.id"), nullable=True)

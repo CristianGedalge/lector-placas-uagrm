@@ -9,6 +9,8 @@ import {
 } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import { formatPlate } from "../utils/formatters";
+import VehicleFoundModal from "../components/UploadPlate/VehicleFoundModal";
+import PlateNotFoundModal from "../components/UploadPlate/PlateNotFoundModal";
 
 const ownerInitialState = {
   code: "",
@@ -68,14 +70,21 @@ function UploadPlate() {
   const [cameraError, setCameraError] = useState("");
   const [analysisPreview, setAnalysisPreview] = useState(null);
   const [scanError, setScanError] = useState("");
+  const [activeTab, setActiveTab] = useState(null); // null | "image" | "camera"
+  const [activeModal, setActiveModal] = useState(null); // null | "file" | "snapshot"
 
   useEffect(() => {
+    if (activeTab === "camera") {
+      startCamera(true);
+    } else if (activeModal === "snapshot") {
+      startCamera(false);
+    } else {
+      stopCamera();
+    }
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-      }
+      stopCamera();
     };
-  }, []);
+  }, [activeTab, activeModal]);
 
   const resetLookupState = () => {
     setLookupError("");
@@ -111,9 +120,9 @@ function UploadPlate() {
 
     try {
       const result = await lookupVehicleByPlate(plateValue);
-      openFoundModal(result);
+      setLookupResult(result);
       
-      // Auto register access log
+      // Placa encontrada → Registrar acceso automáticamente (Ingreso/Salida inferido)
       try {
         const autoLog = await createAutoAccessLog({
           vehicle_id: result.id,
@@ -121,22 +130,42 @@ function UploadPlate() {
           notes: ""
         });
         setAutoAccessLog(autoLog);
+        setActiveModal("access_confirmed");
         
-        // Auto-close modal after 4 seconds to speed up flow
+        // Mantener visible por 5 segundos y luego continuar
         setTimeout(() => {
-          setShowFoundModal(false);
+          setActiveModal(null);
+          setLookupResult(null);
           setAutoAccessLog(null);
-        }, 4000);
+          setManualPlate("");
+          // Si estábamos en modo cámara, la reiniciamos para seguir escaneando
+          if (activeTab === "camera") {
+            startCamera(true);
+          }
+        }, 5000);
+        
       } catch (autoErr) {
-        setAccessError(autoErr.response?.data?.detail || autoErr.message || "No se pudo auto-registrar el acceso.");
+        setAccessError(
+          autoErr?.response?.data?.detail || autoErr.message || "No se pudo auto-registrar el acceso."
+        );
+        // Fallback: si falla el registro automático, mostrar el modal manual
+        setActiveModal("ingreso_egreso");
       }
-
+      
     } catch (error) {
-      setLookupError(
-        error?.response?.data?.detail ||
-          "La placa no esta registrada. Puedes continuar con el alta del vehiculo."
-      );
-      openRegistrationModal(plateValue);
+      const status = error?.response?.status;
+      if (status === 404) {
+        // Placa no registrada → informar al usuario
+        setManualPlate(plateValue);
+        setActiveModal("plate_not_found");
+        
+        // El modal "plate_not_found" requiere que el usuario presione "Entendido"
+        // para reanudar el escaneo.
+      } else {
+        setLookupError(
+          error?.response?.data?.detail || "Error al consultar la placa. Intenta de nuevo."
+        );
+      }
     } finally {
       setLookupLoading(false);
     }
@@ -339,7 +368,7 @@ function UploadPlate() {
     }
   };
 
-  const startCamera = async () => {
+  const startCamera = async (isLive = false) => {
     try {
       setCameraError("");
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -349,8 +378,10 @@ function UploadPlate() {
       streamRef.current = stream;
       setCameraOpen(true);
       
-      // Iniciar bucle con throttle (no requestAnimationFrame)
-      setTimeout(detectFrame, 300);
+      if (isLive) {
+        // Iniciar bucle con throttle (no requestAnimationFrame)
+        setTimeout(detectFrame, 300);
+      }
       
     } catch (error) {
       setCameraError("No se pudo abrir la camara del dispositivo.");
@@ -442,19 +473,25 @@ function UploadPlate() {
     try {
       setRegisteringAccess(true);
       setAccessError("");
-      setAccessSuccess("");
-      await createAccessLog({
+      const log = await createAccessLog({
         vehicle_id: lookupResult.id,
         direction: direction,
         zone: accessZone,
         notes: accessNotes
       });
-      setAccessSuccess(`Movimiento de ${direction === "ENTRY" ? "INGRESO" : "SALIDA"} registrado con éxito.`);
+      // Pasar a modal de confirmación y cerrar automáticamente en 4s
+      setActiveModal("access_confirmed");
+      setAutoAccessLog(log);
       setTimeout(() => {
-        setShowFoundModal(false);
-      }, 1500);
+        setActiveModal(null);
+        setLookupResult(null);
+        setAutoAccessLog(null);
+        setManualPlate("");
+      }, 4000);
     } catch (err) {
-      setAccessError(err.message || "No se pudo registrar el acceso.");
+      setAccessError(
+        err?.response?.data?.detail || err.message || "No se pudo registrar el acceso."
+      );
     } finally {
       setRegisteringAccess(false);
     }
@@ -466,524 +503,725 @@ function UploadPlate() {
 
   return (
     <section className="page-stack">
-      <div className="card">
-        <p className="eyebrow">Validacion</p>
-        <h2>Subir placa</h2>
-        <p className="muted-text">
-          Analiza una placa desde imagen, camara o ingreso manual.
-        </p>
-        <UploadImage onChange={handleImageSelected} />
-        {fileName && <p>Archivo seleccionado: {fileName}</p>}
+      {activeTab === null && (
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "55vh",
+          padding: "2rem"
+        }}>
+          <h2 style={{ color: "var(--color-primary)", marginBottom: "0.5rem", fontSize: "1.8rem", textAlign: "center" }}>
+            Selecciona una opción
+          </h2>
+          <p className="muted-text" style={{ marginBottom: "2.5rem", fontSize: "1.1rem", textAlign: "center" }}>
+            Elige el método de detección de placas para comenzar el control de acceso
+          </p>
 
-        <div className="camera-actions">
-          <button type="button" onClick={startCamera}>
-            Abrir camara
-          </button>
-        </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+            gap: "2rem",
+            width: "100%",
+            maxWidth: "700px"
+          }}>
+            <button
+              type="button"
+              onClick={() => { setActiveTab("image"); setActiveModal("file"); resetLookupState(); }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "2.5rem 1.5rem",
+                borderRadius: "20px",
+                border: "2px solid rgba(21, 62, 117, 0.15)",
+                background: "white",
+                color: "var(--color-primary)",
+                cursor: "pointer",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                boxShadow: "0 10px 25px rgba(21, 62, 117, 0.05)"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-5px)";
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.background = "#f8fafc";
+                e.currentTarget.style.boxShadow = "0 15px 30px rgba(21, 62, 117, 0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(21, 62, 117, 0.15)";
+                e.currentTarget.style.background = "white";
+                e.currentTarget.style.boxShadow = "0 10px 25px rgba(21, 62, 117, 0.05)";
+              }}
+            >
+              <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-primary)", marginBottom: "1.2rem" }}>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <span style={{ fontSize: "1.3rem", fontWeight: "bold", marginBottom: "0.5rem" }}>
+                Subir Imagen de Placa
+              </span>
+              <span style={{ fontSize: "0.9rem", color: "#6b7280", textAlign: "center", lineHeight: "1.4" }}>
+                Carga un archivo local o toma una fotografía instantánea
+              </span>
+            </button>
 
-        {/* Resultados del análisis OCR — visibles incluso en LOW_CONFIDENCE */}
-        {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
-          <div className="analysis-preview">
-            <p className="eyebrow">
-              {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Revisión manual"}
-            </p>
-            <div className="analysis-images">
-              {analysisPreview.annotated_image && (
-                <div>
-                  <p className="muted-text">Imagen analizada</p>
-                  <img
-                    className="vehicle-photo"
-                    src={analysisPreview.annotated_image}
-                    alt="Imagen anotada por OCR"
-                  />
-                </div>
-              )}
-              {analysisPreview.plate_crop && (
-                <div>
-                  <p className="muted-text">Recorte de placa</p>
-                  <img
-                    className="plate-crop-preview"
-                    src={analysisPreview.plate_crop}
-                    alt="Recorte de placa detectada"
-                  />
-                </div>
-              )}
-            </div>
-            {analysisPreview.detected_plate && (
-              <p className="muted-text">
-                Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
-                {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
-              </p>
-            )}
+            <button
+              type="button"
+              onClick={() => { setActiveTab("camera"); resetLookupState(); }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "2.5rem 1.5rem",
+                borderRadius: "20px",
+                border: "2px solid rgba(21, 62, 117, 0.15)",
+                background: "white",
+                color: "var(--color-primary)",
+                cursor: "pointer",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                boxShadow: "0 10px 25px rgba(21, 62, 117, 0.05)"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-5px)";
+                e.currentTarget.style.borderColor = "var(--color-primary)";
+                e.currentTarget.style.background = "#f8fafc";
+                e.currentTarget.style.boxShadow = "0 15px 30px rgba(21, 62, 117, 0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.borderColor = "rgba(21, 62, 117, 0.15)";
+                e.currentTarget.style.background = "white";
+                e.currentTarget.style.boxShadow = "0 10px 25px rgba(21, 62, 117, 0.05)";
+              }}
+            >
+              <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-primary)", marginBottom: "1.2rem" }}>
+                <path d="M23 7l-7 5 7 5V7z" />
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+              </svg>
+              <span style={{ fontSize: "1.3rem", fontWeight: "bold", marginBottom: "0.5rem" }}>
+                Usar Cámara en Vivo
+              </span>
+              <span style={{ fontSize: "0.9rem", color: "#6b7280", textAlign: "center", lineHeight: "1.4" }}>
+                Escaneo y reconocimiento automático en tiempo real
+              </span>
+            </button>
+
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className="card">
-        <p className="eyebrow">Consulta manual</p>
-        <h2>Buscar placa</h2>
-        <form className="manual-plate-form" onSubmit={handleLookup}>
-          <label className="field-group">
-            <span>Numero de placa</span>
-            <input
-              type="text"
-              placeholder="Ejemplo: 1234-ABC"
-              value={manualPlate}
-              onChange={(event) => setManualPlate(event.target.value)}
-              required
-            />
-          </label>
-
-          <button type="submit" disabled={lookupLoading}>
-            {lookupLoading ? "Validando..." : "Validar vehiculo"}
-          </button>
-        </form>
-
-        {lookupError && <p className="error-text">{lookupError}</p>}
-        {registerSuccess && <p className="success-text">{registerSuccess}</p>}
-      </div>
-
-      {cameraOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-card modal-large">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Camara</p>
-                <h2>Capturar placa</h2>
-              </div>
-              <button type="button" className="ghost-button" onClick={stopCamera}>
-                Cerrar
-              </button>
-            </div>
-
-            <div className="camera-container" style={{ position: "relative" }}>
-              {scanError && (
-                <div style={{
-                  position: "absolute",
-                  top: "10px",
-                  left: "10px",
-                  right: "10px",
-                  background: "rgba(220, 38, 38, 0.95)",
-                  color: "white",
-                  padding: "8px 16px",
-                  borderRadius: "8px",
-                  zIndex: 30,
-                  fontSize: "13px",
-                  fontWeight: "bold",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
+      {activeTab === "camera" && (
+        <div style={{ animation: "fadeIn 0.3s ease" }}>
+          <div className="card" style={{ padding: 0, overflow: "hidden", borderRadius: "16px" }}>
+            <div className="camera-section" style={{ position: "relative" }}>
+              {cameraOpen ? (
+                <div className="camera-container" style={{
+                  position: "relative",
+                  width: "100%",
+                  height: "75vh",
+                  borderRadius: "16px",
+                  overflow: "hidden",
+                  border: "4px solid var(--color-primary)",
+                  backgroundColor: "#000"
                 }}>
-                  ⚠️ Error del servidor: {scanError}
-                </div>
-              )}
-              <video ref={videoRef} autoPlay playsInline className="camera-preview" />
-              {trackingBoxes.map((box, i) => {
-                const [x, y, width, height] = box.bbox;
-                const videoW = videoRef.current ? videoRef.current.videoWidth : 640;
-                const videoH = videoRef.current ? videoRef.current.videoHeight : 480;
-                const pctX = (x / videoW) * 100;
-                const pctY = (y / videoH) * 100;
-                const pctW = (width / videoW) * 100;
-                const pctH = (height / videoH) * 100;
-
-                if (box.type === 'raw') {
-                  return (
-                    <div key={i} style={{
+                  {scanError && (
+                    <div style={{
                       position: "absolute",
-                      left: `${pctX}%`,
-                      top: `${pctY}%`,
-                      width: `${pctW}%`,
-                      height: `${pctH}%`,
-                      border: "2px solid rgba(255, 204, 0, 0.35)",
-                      backgroundColor: "rgba(255, 204, 0, 0.04)",
-                      zIndex: 5,
-                      pointerEvents: "none",
-                      borderRadius: "4px"
-                    }} />
-                  );
-                }
-
-                if (box.type === 'plate-voting') {
-                  // Color progresivo: amarillo (1/3) → naranja (2/3) → verde (3/3)
-                  const progress = (box.votes || 1) / (box.votesNeeded || VOTES_NEEDED);
-                  const colors = [
-                    "#eab308", // 1/3 — amarillo
-                    "#f97316", // 2/3 — naranja
-                    "#22c55e", // 3/3 — verde
-                  ];
-                  const colorIdx = Math.min(Math.floor(progress * 3), 2);
-                  const borderColor = colors[colorIdx];
-                  const dotsTotal = box.votesNeeded || VOTES_NEEDED;
-                  const dotsFilled = box.votes || 1;
-                  const dots = Array.from({ length: dotsTotal }, (_, di) =>
-                    di < dotsFilled ? "●" : "○"
-                  ).join(" ");
-
-                  return (
-                    <div key={i} style={{
-                      position: "absolute",
-                      left: `${pctX}%`,
-                      top: `${pctY}%`,
-                      width: `${pctW}%`,
-                      height: `${pctH}%`,
-                      border: `3px solid ${borderColor}`,
-                      backgroundColor: `${borderColor}18`,
-                      zIndex: 10,
-                      pointerEvents: "none",
-                      borderRadius: "6px",
-                      boxShadow: `0 0 10px ${borderColor}60`,
-                      transition: "border-color 0.3s, box-shadow 0.3s",
+                      top: "10px",
+                      left: "10px",
+                      right: "10px",
+                      background: "rgba(220, 38, 38, 0.95)",
+                      color: "white",
+                      padding: "8px 16px",
+                      borderRadius: "8px",
+                      zIndex: 30,
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)"
                     }}>
-                      <span style={{
-                        backgroundColor: borderColor,
-                        color: "white",
-                        padding: "2px 10px",
-                        fontSize: "12px",
-                        position: "absolute",
-                        top: "-22px",
-                        left: "-3px",
-                        fontWeight: "bold",
-                        borderRadius: "3px",
-                        whiteSpace: "nowrap",
-                        letterSpacing: "0.5px",
-                      }}>
-                        {box.text} &nbsp; {dots}
-                      </span>
+                      ⚠️ Error del servidor: {scanError}
                     </div>
-                  );
-                }
-              })}
+                  )}
+                  
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="camera-preview"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block"
+                    }}
+                  />
 
-              {/* Láser de escaneo — visible solo cuando no hay nada detectado */}
-              {trackingBoxes.length === 0 && (
-                <div style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: "2px",
-                  backgroundColor: "rgba(239, 68, 68, 0.8)",
-                  boxShadow: "0 0 10px 2px rgba(239, 68, 68, 0.8)",
-                  animation: "scan-fullscreen 2s infinite linear"
-                }}></div>
-              )}
+                  {trackingBoxes.map((box, i) => {
+                    const [x, y, width, height] = box.bbox;
+                    const videoW = videoRef.current ? videoRef.current.videoWidth : 640;
+                    const videoH = videoRef.current ? videoRef.current.videoHeight : 480;
+                    const pctX = (x / videoW) * 100;
+                    const pctY = (y / videoH) * 100;
+                    const pctW = (width / videoW) * 100;
+                    const pctH = (height / videoH) * 100;
 
-              <div style={{ position: "absolute", bottom: "20px", left: "0", right: "0", textAlign: "center", zIndex: 20 }}>
-                <p className="camera-instruction" style={{ display: "inline-block", background: "rgba(0,0,0,0.75)", color: "white", padding: "8px 18px", borderRadius: "20px", margin: 0 }}>
-                  {trackingBoxes.some(b => b.type === 'plate-voting')
-                    ? `Leyendo placa — mantén la cámara firme`
-                    : "Buscando placa... apunta al vehículo"}
-                </p>
-              </div>
-            </div>
-            <canvas ref={canvasRef} hidden />
-            {cameraError && <p className="error-text">{cameraError}</p>}
-          </div>
-        </div>
-      )}
-
-      {showFoundModal && lookupResult && (
-        <div className="modal-backdrop">
-          <div className="modal-card modal-large">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Resultado</p>
-                <h2>Vehiculo encontrado</h2>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => setShowFoundModal(false)}>
-                Cerrar
-              </button>
-            </div>
-
-            {lookupResult.vehicle_photo_path && (
-              <img
-                className="vehicle-photo"
-                src={lookupResult.vehicle_photo_path}
-                alt={`Vehiculo ${lookupResult.license_plate}`}
-              />
-            )}
-
-            {analysisPreview?.annotated_image && (
-              <img
-                className="vehicle-photo"
-                src={analysisPreview.annotated_image}
-                alt="Deteccion de placa"
-              />
-            )}
-
-            <div className="details-grid">
-              <p><strong>Placa:</strong> {lookupResult.license_plate}</p>
-              <p><strong>Marca:</strong> {lookupResult.brand}</p>
-              <p><strong>Modelo:</strong> {lookupResult.model}</p>
-              <p><strong>Color:</strong> {lookupResult.color}</p>
-              <p><strong>Tipo:</strong> {lookupResult.vehicle_type}</p>
-              <p><strong>Estado:</strong> {lookupResult.status}</p>
-            </div>
-
-            {lookupResult.owner && (
-              <>
-                <h3>Datos del dueno</h3>
-                <div className="details-grid">
-                  <p><strong>Nombre:</strong> {lookupResult.owner.full_name}</p>
-                  <p><strong>Codigo:</strong> {lookupResult.owner.code}</p>
-                  <p><strong>Documento:</strong> {lookupResult.owner.document_id || "No registrado"}</p>
-                  <p><strong>Facultad:</strong> {lookupResult.owner.faculty || "No registrada"}</p>
-                  <p><strong>Rol:</strong> {lookupResult.owner.role}</p>
-                  <p><strong>Contacto:</strong> {lookupResult.owner.contact_info || "No registrado"}</p>
-                </div>
-              </>
-            )}
-
-            {/* Registro de Acceso Automático */}
-            <div style={{ marginTop: "1.5rem", borderTop: "2px solid rgba(21, 62, 117, 0.1)", paddingTop: "1rem" }}>
-              {autoAccessLog ? (
-                <div style={{
-                  background: autoAccessLog.direction === "ENTRY" ? "#e6ffe6" : "#fff0e6",
-                  border: `2px solid ${autoAccessLog.direction === "ENTRY" ? "green" : "#d46b08"}`,
-                  padding: "1rem",
-                  borderRadius: "8px",
-                  textAlign: "center"
-                }}>
-                  <h2 style={{ color: autoAccessLog.direction === "ENTRY" ? "green" : "#d46b08", margin: "0 0 0.5rem 0" }}>
-                    ✅ {autoAccessLog.direction === "ENTRY" ? "INGRESO REGISTRADO" : "SALIDA REGISTRADA"}
-                  </h2>
-                  <p style={{ margin: 0, fontWeight: "bold" }}>
-                    {autoAccessLog.zone} - {new Date(autoAccessLog.timestamp).toLocaleTimeString()}
-                  </p>
-                </div>
-              ) : accessError ? (
-                <p className="error-text" style={{ background: "#ffe6e6", padding: "0.6rem", borderRadius: "4px", textAlign: "center", fontWeight: "bold" }}>
-                  ⚠️ {accessError}
-                </p>
-              ) : (
-                <p style={{ textAlign: "center", color: "#666" }}>Registrando acceso automáticamente...</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRegistrationModal && (
-        <div className="modal-backdrop">
-          <div className="modal-card modal-large">
-            <div className="modal-header">
-              <div>
-                <p className="eyebrow">Registro</p>
-                <h2>{registrationTitle}</h2>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => setShowRegistrationModal(false)}>
-                Cerrar
-              </button>
-            </div>
-
-            {isAdmin && (
-              <label className="inline-toggle">
-                <input
-                  type="checkbox"
-                  checked={registeringForAnotherPerson}
-                  onChange={(event) => setRegisteringForAnotherPerson(event.target.checked)}
-                />
-                <span>Registrar vehiculo de otra persona</span>
-              </label>
-            )}
-
-            <form className="registration-form" onSubmit={handleVehicleSubmit}>
-              <div className="form-block">
-                <h4>Datos del vehiculo</h4>
-                <div className="details-grid">
-                  <label className="field-group">
-                    <span>Placa</span>
-                    <input
-                      type="text"
-                      value={vehicleForm.license_plate}
-                      onChange={(event) =>
-                        setVehicleForm((current) => ({
-                          ...current,
-                          license_plate: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Marca</span>
-                    <input
-                      type="text"
-                      value={vehicleForm.brand}
-                      onChange={(event) =>
-                        setVehicleForm((current) => ({
-                          ...current,
-                          brand: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Modelo</span>
-                    <input
-                      type="text"
-                      value={vehicleForm.model}
-                      onChange={(event) =>
-                        setVehicleForm((current) => ({
-                          ...current,
-                          model: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Color</span>
-                    <input
-                      type="text"
-                      value={vehicleForm.color}
-                      onChange={(event) =>
-                        setVehicleForm((current) => ({
-                          ...current,
-                          color: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Foto del vehiculo (JPG o PNG)</span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png"
-                      onChange={(event) => setVehiclePhoto(event.target.files?.[0] || null)}
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Tipo de vehiculo</span>
-                    <select
-                      value={vehicleForm.vehicle_type}
-                      onChange={(event) =>
-                        setVehicleForm((current) => ({
-                          ...current,
-                          vehicle_type: event.target.value
-                        }))
-                      }
-                    >
-                      <option value="CAR">Auto</option>
-                      <option value="MOTORCYCLE">Motocicleta</option>
-                      <option value="VAN">Vagoneta</option>
-                      <option value="TRUCK">Camioneta</option>
-                      <option value="OTHER">Otro</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="field-group">
-                  <span>Observacion</span>
-                  <textarea
-                    value={vehicleForm.observation}
-                    onChange={(event) =>
-                      setVehicleForm((current) => ({
-                        ...current,
-                        observation: event.target.value
-                      }))
+                    if (box.type === 'raw') {
+                      return (
+                        <div key={i} style={{
+                          position: "absolute",
+                          left: `${pctX}%`,
+                          top: `${pctY}%`,
+                          width: `${pctW}%`,
+                          height: `${pctH}%`,
+                          border: "2px solid rgba(255, 204, 0, 0.35)",
+                          backgroundColor: "rgba(255, 204, 0, 0.04)",
+                          zIndex: 5,
+                          pointerEvents: "none",
+                          borderRadius: "4px"
+                        }} />
+                      );
                     }
-                    rows={4}
+
+                    if (box.type === 'plate-voting') {
+                      const progress = (box.votes || 1) / (box.votesNeeded || VOTES_NEEDED);
+                      const colors = ["#eab308", "#f97316", "#22c55e"];
+                      const colorIdx = Math.min(Math.floor(progress * 3), 2);
+                      const borderColor = colors[colorIdx];
+                      const dotsTotal = box.votesNeeded || VOTES_NEEDED;
+                      const dotsFilled = box.votes || 1;
+                      const dots = Array.from({ length: dotsTotal }, (_, di) =>
+                        di < dotsFilled ? "●" : "○"
+                      ).join(" ");
+
+                      return (
+                        <div key={i} style={{
+                          position: "absolute",
+                          left: `${pctX}%`,
+                          top: `${pctY}%`,
+                          width: `${pctW}%`,
+                          height: `${pctH}%`,
+                          border: `3px solid ${borderColor}`,
+                          backgroundColor: `${borderColor}18`,
+                          zIndex: 10,
+                          pointerEvents: "none",
+                          borderRadius: "6px",
+                          boxShadow: `0 0 10px ${borderColor}60`,
+                          transition: "border-color 0.3s, box-shadow 0.3s",
+                        }}>
+                          <span style={{
+                            backgroundColor: borderColor,
+                            color: "white",
+                            padding: "2px 10px",
+                            fontSize: "12px",
+                            position: "absolute",
+                            top: "-22px",
+                            left: "-3px",
+                            fontWeight: "bold",
+                            borderRadius: "3px",
+                            whiteSpace: "nowrap",
+                            letterSpacing: "0.5px",
+                          }}>
+                            {box.text} &nbsp; {dots}
+                          </span>
+                        </div>
+                      );
+                    }
+                  })}
+
+                  {trackingBoxes.length === 0 && (
+                    <div style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: "2px",
+                      backgroundColor: "rgba(239, 68, 68, 0.8)",
+                      boxShadow: "0 0 10px 2px rgba(239, 68, 68, 0.8)",
+                      animation: "scan-fullscreen 2s infinite linear"
+                    }}></div>
+                  )}
+
+                  {/* Capa superior de controles */}
+                  <div style={{
+                    position: "absolute",
+                    top: "20px",
+                    left: "20px",
+                    right: "20px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    zIndex: 20
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab(null); }}
+                      style={{
+                        background: "rgba(0, 0, 0, 0.7)",
+                        color: "white",
+                        border: "1px solid rgba(255, 255, 255, 0.25)",
+                        padding: "0.75rem 1.25rem",
+                        borderRadius: "10px",
+                        fontSize: "0.95rem",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="19" y1="12" x2="5" y2="12"></line>
+                        <polyline points="12 19 5 12 12 5"></polyline>
+                      </svg>
+                      Volver
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setActiveModal("manual_lookup"); }}
+                      style={{
+                        background: "rgba(0, 0, 0, 0.7)",
+                        color: "white",
+                        border: "1px solid rgba(255, 255, 255, 0.25)",
+                        padding: "0.75rem 1.25rem",
+                        borderRadius: "10px",
+                        fontSize: "0.95rem",
+                        fontWeight: "bold",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        transition: "all 0.2s"
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
+                      onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                        <line x1="6" y1="8" x2="6" y2="8"></line>
+                        <line x1="10" y1="8" x2="10" y2="8"></line>
+                        <line x1="14" y1="8" x2="14" y2="8"></line>
+                        <line x1="18" y1="8" x2="18" y2="8"></line>
+                        <line x1="8" y1="12" x2="8" y2="12"></line>
+                        <line x1="12" y1="12" x2="12" y2="12"></line>
+                        <line x1="16" y1="12" x2="16" y2="12"></line>
+                        <line x1="7" y1="16" x2="17" y2="16"></line>
+                      </svg>
+                      Registro Manual
+                    </button>
+                  </div>
+
+                  <div style={{ position: "absolute", bottom: "25px", left: "0", right: "0", textAlign: "center", zIndex: 20 }}>
+                    <p className="camera-instruction" style={{ display: "inline-block", background: "rgba(0,0,0,0.8)", color: "white", padding: "10px 20px", borderRadius: "24px", margin: 0, fontSize: "0.95rem", fontWeight: "600" }}>
+                      {trackingBoxes.some(b => b.type === 'plate-voting')
+                        ? `Leyendo placa — mantén la cámara firme`
+                        : "Buscando placa... apunta al vehículo"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "3rem 2rem", border: "2px dashed rgba(21, 62, 117, 0.2)", borderRadius: "12px", margin: "2rem" }}>
+                  <p className="muted-text" style={{ fontSize: "1.1rem" }}>Iniciando cámara...</p>
+                  <button
+                    type="button"
+                    onClick={() => startCamera(true)}
+                    style={{
+                      marginTop: "1.5rem",
+                      padding: "0.85rem 1.75rem",
+                      backgroundColor: "var(--color-primary)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "10px",
+                      fontWeight: "bold",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Reabrir Cámara en Vivo
+                  </button>
+                </div>
+              )}
+              <canvas ref={canvasRef} hidden />
+              {cameraError && <p className="error-text" style={{ padding: "1rem" }}>{cameraError}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Ingreso / Salida ──────────────────────────────────── */}
+      {activeModal === "ingreso_egreso" && lookupResult && (
+        <VehicleFoundModal
+          lookupResult={lookupResult}
+          setActiveModal={setActiveModal}
+          setLookupResult={setLookupResult}
+          accessZone={accessZone}
+          setAccessZone={setAccessZone}
+          accessError={accessError}
+          setAccessError={setAccessError}
+          registeringAccess={registeringAccess}
+          handleRegisterAccess={handleRegisterAccess}
+        />
+      )}
+
+      {/* ── Modal: Placa no registrada ───────────────────────────────── */}
+      {activeModal === "plate_not_found" && (
+        <PlateNotFoundModal
+          manualPlate={manualPlate}
+          setActiveModal={setActiveModal}
+          setManualPlate={setManualPlate}
+          activeTab={activeTab}
+          startCamera={startCamera}
+        />
+      )}
+
+      {/* ── Modal: Acceso confirmado ─────────────────────────────────── */}
+      {activeModal === "access_confirmed" && autoAccessLog && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: "420px", textAlign: "center" }}>
+            <div style={{ padding: "2.5rem 1.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "1rem" }}>
+                {autoAccessLog.direction === "ENTRY" ? (
+                  <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#15803d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                  </svg>
+                ) : (
+                  <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="9" y1="15" x2="15" y2="15"></line>
+                    <line x1="12" y1="12" x2="15" y2="15"></line>
+                    <line x1="12" y1="18" x2="15" y2="15"></line>
+                  </svg>
+                )}
+              </div>
+              <h2 style={{
+                color: autoAccessLog.direction === "ENTRY" ? "#15803d" : "#b91c1c",
+                fontSize: "1.8rem",
+                marginBottom: "0.5rem"
+              }}>
+                {autoAccessLog.direction === "ENTRY" ? "INGRESO REGISTRADO" : "SALIDA REGISTRADA"}
+              </h2>
+              {lookupResult && (
+                <p style={{ fontFamily: "monospace", fontSize: "1.5rem", fontWeight: "bold", color: "var(--color-primary)", margin: "0.5rem 0" }}>
+                  {lookupResult.license_plate}
+                </p>
+              )}
+              <p style={{ color: "#6b7280", margin: "0.75rem 0 0" }}>
+                Zona: <strong>{autoAccessLog.zone}</strong>
+              </p>
+              <p style={{ color: "#6b7280", margin: "0.25rem 0 0", fontSize: "1.1rem" }}>
+                {new Date(autoAccessLog.timestamp).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </p>
+              <p className="muted-text" style={{ marginTop: "1.5rem", fontSize: "0.85rem" }}>Volviendo a analizar en 5 segundos...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {activeModal === "manual_lookup" && (
+        <div className="modal-backdrop">
+          <div className="modal-card" style={{ maxWidth: "600px", width: "90%" }}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Consulta manual</p>
+                <h2>Buscar Placa de la Cámara</h2>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => { setActiveModal(null); resetLookupState(); }}>
+                Cerrar
+              </button>
+            </div>
+            <div style={{ marginTop: "1.5rem" }}>
+              <p className="muted-text" style={{ marginBottom: "1rem" }}>Ingresa los dígitos de la placa manualmente para validar el acceso:</p>
+              <form className="manual-plate-form" onSubmit={handleLookup}>
+                <label className="field-group">
+                  <span>Número de placa</span>
+                  <input
+                    type="text"
+                    placeholder="Ejemplo: 1234-ABC"
+                    value={manualPlate}
+                    onChange={(event) => setManualPlate(event.target.value)}
+                    required
+                    style={{ background: "white" }}
                   />
                 </label>
-              </div>
+                <button type="submit" disabled={lookupLoading}>
+                  {lookupLoading ? "Validando..." : "Validar vehículo"}
+                </button>
+              </form>
+              {lookupError && <p className="error-text" style={{ marginTop: "1rem" }}>{lookupError}</p>}
+              {registerSuccess && <p className="success-text" style={{ marginTop: "1rem" }}>{registerSuccess}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="form-block">
-                <h4>Datos del propietario</h4>
-                <div className="details-grid">
-                  <label className="field-group">
-                    <span>Registro universitario</span>
-                    <input
-                      type="text"
-                      value={ownerForm.code}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          code: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Nombre completo</span>
-                    <input
-                      type="text"
-                      value={ownerForm.full_name}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          full_name: event.target.value
-                        }))
-                      }
-                      required
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Documento de identidad</span>
-                    <input
-                      type="text"
-                      value={ownerForm.document_id}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          document_id: event.target.value
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Tipo de persona</span>
-                    <select
-                      value={ownerForm.role}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          role: event.target.value
-                        }))
-                      }
-                    >
-                      <option value="STUDENT">Estudiante</option>
-                      <option value="TEACHER">Docente</option>
-                      <option value="ADMIN">Administrativo</option>
-                    </select>
-                  </label>
-                  <label className="field-group">
-                    <span>Carrera</span>
-                    <input
-                      type="text"
-                      value={ownerForm.faculty}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          faculty: event.target.value
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="field-group">
-                    <span>Telefono</span>
-                    <input
-                      type="text"
-                      value={ownerForm.contact_info}
-                      onChange={(event) =>
-                        setOwnerForm((current) => ({
-                          ...current,
-                          contact_info: event.target.value
-                        }))
-                      }
-                    />
-                  </label>
+      {activeModal === "file" && (
+        <div className="modal-backdrop">
+          <div className="modal-card modal-large">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Detección por Archivo</p>
+                <h2>Subir del Dispositivo</h2>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => { setActiveModal(null); setActiveTab(null); resetLookupState(); }}>
+                Cerrar
+              </button>
+            </div>
+
+            <div style={{ marginTop: "1.5rem" }}>
+              <UploadImage onChange={handleImageSelected} />
+              {fileName && <p style={{ marginTop: "0.5rem" }}>Archivo seleccionado: <strong>{fileName}</strong></p>}
+            </div>
+
+            {/* Resultados del análisis OCR */}
+            {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
+              <div className="analysis-preview" style={{ marginTop: "1.5rem" }}>
+                <p className="eyebrow">
+                  {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Detección fallida"}
+                </p>
+                <div className="analysis-images">
+                  {analysisPreview.annotated_image && (
+                    <div>
+                      <p className="muted-text">Imagen analizada</p>
+                      <img
+                        className="vehicle-photo"
+                        src={analysisPreview.annotated_image}
+                        alt="Imagen anotada por OCR"
+                      />
+                    </div>
+                  )}
+                  {analysisPreview.plate_crop && (
+                    <div>
+                      <p className="muted-text">Recorte de placa</p>
+                      <img
+                        className="plate-crop-preview"
+                        src={analysisPreview.plate_crop}
+                        alt="Recorte de placa"
+                      />
+                    </div>
+                  )}
                 </div>
+                {analysisPreview.detected_plate && (
+                  <p className="muted-text" style={{ marginTop: "1rem" }}>
+                    Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
+                    {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
+                  </p>
+                )}
               </div>
+            )}
 
-              {registerError && <p className="error-text">{registerError}</p>}
+            {/*  integrada */}
+            <div style={{ marginTop: "2rem", borderTop: "2px solid rgba(21, 62, 117, 0.1)", paddingTop: "1.5rem" }}>
+              <p className="eyebrow">Registro manual</p>
+              <h3>Buscar Placa de la Imagen</h3>
+              <p className="muted-text">Si la imagen no pudo leerse automáticamente, ingresa los dígitos de la placa:</p>
+              <form className="manual-plate-form" onSubmit={handleLookup}>
+                <label className="field-group">
+                  <span>Número de placa</span>
+                  <input
+                    type="text"
+                    placeholder="Ejemplo: 1234-ABC"
+                    value={manualPlate}
+                    onChange={(event) => setManualPlate(event.target.value)}
+                    required
+                  />
+                </label>
+                <button type="submit" disabled={lookupLoading}>
+                  {lookupLoading ? "Validando..." : "Validar vehículo"}
+                </button>
+              </form>
+              {lookupError && <p className="error-text" style={{ marginTop: "1rem" }}>{lookupError}</p>}
+              {registerSuccess && <p className="success-text" style={{ marginTop: "1rem" }}>{registerSuccess}</p>}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="modal-actions">
-                <button type="submit">Registrar vehiculo</button>
+      {activeModal === "snapshot" && (
+        <div className="modal-backdrop">
+          <div className="modal-card modal-large">
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Detección por Captura</p>
+                <h2>Sacar Foto con Cámara</h2>
               </div>
-            </form>
+              <button type="button" className="ghost-button" onClick={() => { setActiveModal(null); setActiveTab(null); resetLookupState(); }}>
+                Cerrar
+              </button>
+            </div>
+
+            <div style={{ marginTop: "1.5rem" }}>
+              {cameraOpen ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", alignItems: "center" }}>
+                  <div className="camera-container" style={{
+                    width: "100%",
+                    height: "55vh",
+                    minHeight: "350px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    border: "2px solid var(--color-primary)",
+                    backgroundColor: "#000",
+                    position: "relative"
+                  }}>
+                    <video ref={videoRef} autoPlay playsInline style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    <canvas ref={canvasRef} hidden />
+                    
+                    {/* Botón flotante de Registro Manual (igual que cámara en vivo) */}
+                    <div style={{ position: "absolute", bottom: "15px", right: "15px", zIndex: 20 }}>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveModal("manual_lookup"); }}
+                        style={{
+                          background: "rgba(0, 0, 0, 0.7)",
+                          color: "white",
+                          border: "1px solid rgba(255, 255, 255, 0.25)",
+                          padding: "0.75rem 1.25rem",
+                          borderRadius: "10px",
+                          fontSize: "0.95rem",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                          <line x1="6" y1="8" x2="6" y2="8"></line>
+                          <line x1="10" y1="8" x2="10" y2="8"></line>
+                          <line x1="14" y1="8" x2="14" y2="8"></line>
+                          <line x1="18" y1="8" x2="18" y2="8"></line>
+                          <line x1="8" y1="12" x2="8" y2="12"></line>
+                          <line x1="12" y1="12" x2="12" y2="12"></line>
+                          <line x1="16" y1="12" x2="16" y2="12"></line>
+                          <line x1="7" y1="16" x2="17" y2="16"></line>
+                        </svg>
+                        Registro Manual
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={captureFromCamera}
+                    disabled={lookupLoading}
+                    style={{
+                      padding: "0.8rem 2rem",
+                      backgroundColor: "#22c55e",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "1rem",
+                      fontWeight: "bold",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      margin: "0 auto"
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                    {lookupLoading ? "Analizando..." : "Tomar Foto y Analizar"}
+                  </button>
+                  {cameraError && <p className="error-text">{cameraError}</p>}
+                </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "2rem", border: "2px dashed rgba(21, 62, 117, 0.2)", borderRadius: "8px" }}>
+                  <button
+                    type="button"
+                    onClick={() => startCamera(false)}
+                    style={{
+                      padding: "0.8rem 1.5rem",
+                      backgroundColor: "var(--color-primary)",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontWeight: "bold",
+                      cursor: "pointer"
+                    }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: "8px", verticalAlign: "middle" }}>
+                      <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                      <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                    Abrir Cámara para Capturar
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Resultados del análisis OCR */}
+            {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
+              <div className="analysis-preview" style={{ marginTop: "1.5rem" }}>
+                <p className="eyebrow">
+                  {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Detección fallida"}
+                </p>
+                <div className="analysis-images">
+                  {analysisPreview.annotated_image && (
+                    <div>
+                      <p className="muted-text">Imagen analizada</p>
+                      <img
+                        className="vehicle-photo"
+                        src={analysisPreview.annotated_image}
+                        alt="Imagen anotada por OCR"
+                      />
+                    </div>
+                  )}
+                  {analysisPreview.plate_crop && (
+                    <div>
+                      <p className="muted-text">Recorte de placa</p>
+                      <img
+                        className="plate-crop-preview"
+                        src={analysisPreview.plate_crop}
+                        alt="Recorte de placa"
+                      />
+                    </div>
+                  )}
+                </div>
+                {analysisPreview.detected_plate && (
+                  <p className="muted-text" style={{ marginTop: "1rem" }}>
+                    Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
+                    {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Registro manual integrado */}
+            <div style={{ marginTop: "2rem", borderTop: "2px solid rgba(21, 62, 117, 0.1)", paddingTop: "1.5rem" }}>
+              <p className="eyebrow">Registro manual</p>
+              <h3>Buscar Placa de la Cámara</h3>
+              <p className="muted-text">Si la cámara no detecta la placa, puedes ingresarla manualmente:</p>
+              <form className="manual-plate-form" onSubmit={handleLookup}>
+                <label className="field-group">
+                  <span>Número de placa</span>
+                  <input
+                    type="text"
+                    placeholder="Ejemplo: 1234-ABC"
+                    value={manualPlate}
+                    onChange={(event) => setManualPlate(event.target.value)}
+                    required
+                  />
+                </label>
+                <button type="submit" disabled={lookupLoading}>
+                  {lookupLoading ? "Validando..." : "Validar vehículo"}
+                </button>
+              </form>
+              {lookupError && <p className="error-text" style={{ marginTop: "1rem" }}>{lookupError}</p>}
+              {registerSuccess && <p className="success-text" style={{ marginTop: "1rem" }}>{registerSuccess}</p>}
+            </div>
           </div>
         </div>
       )}

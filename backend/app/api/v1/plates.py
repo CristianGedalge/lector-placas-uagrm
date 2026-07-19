@@ -49,11 +49,19 @@ async def analyze_plate_endpoint(
             detail="El archivo es demasiado grande. El límite máximo es de 5MB."
         )
     
+    # REL-003: Verificar que el motor OCR esté disponible antes de procesar
+    ocr_reader = getattr(request.app.state, "ocr_reader", None)
+    if ocr_reader is None:
+        raise HTTPException(
+            status_code=503,
+            detail="El motor OCR no está disponible en este momento. Intenta nuevamente en unos instantes."
+        )
+
     # Ejecutar pipeline AI
     result_dict = await run_in_threadpool(
         analyze_plate,
         image_bytes,
-        request.app.state.ocr_reader,
+        ocr_reader,
         realtime,
     )
 
@@ -99,11 +107,13 @@ async def analyze_plate_endpoint(
 
 @router.get("/scans", response_model=list[PlateScanResponse])
 async def list_plate_scans(
+    skip: int = 0,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
     """Retorna el historial de lecturas de placas. Administradores ven todo; Operadores ven lo suyo."""
-    query = select(PlateScan).order_by(PlateScan.created_at.desc())
+    query = select(PlateScan).order_by(PlateScan.created_at.desc()).offset(skip).limit(limit)
     if current_user.role != AuthRoleEnum.ADMIN:
         query = query.where(PlateScan.scanned_by_user_id == current_user.id)
     result = await db.execute(query)

@@ -33,6 +33,7 @@ MIN_CANDIDATE_LENGTH = 4
 MAX_CANDIDATE_LENGTH = 10
 TARGET_PLATE_LENGTH = 7
 MAX_REALTIME_DIM = 640  # Resolución suficiente para leer caracteres de placa con precisión
+MAX_STATIC_DIM = 1280   # EFI-002: Resolución límite para pipeline estático (1-2 MP)
 
 box_annotator = sv.BoxAnnotator(thickness=2, color_lookup=sv.ColorLookup.INDEX)
 label_annotator = sv.LabelAnnotator(
@@ -350,6 +351,18 @@ def _resize_for_realtime(image: np.ndarray) -> tuple[np.ndarray, float]:
     resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
     return resized, scale
 
+def _resize_for_static(image: np.ndarray) -> tuple[np.ndarray, float]:
+    """EFI-002: Limita el tamaño de la imagen subida para el pipeline estático."""
+    h, w = image.shape[:2]
+    if max(h, w) <= MAX_STATIC_DIM:
+        return image, 1.0
+    
+    scale = MAX_STATIC_DIM / float(max(h, w))
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    resized = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return resized, scale
+
 
 def _run_ocr(
     ocr_reader,
@@ -532,7 +545,8 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
     # ----------------------------------------------------------------
     # PATH ESTÁTICO: máxima precisión — multi-variante + multi-config
     # ----------------------------------------------------------------
-    variants = _generate_preprocessing_variants(analysis_region)
+    static_region, static_scale = _resize_for_static(analysis_region)
+    variants = _generate_preprocessing_variants(static_region)
 
     ocr_configs = [
         (0.7, 0.4),   # Normal
@@ -563,7 +577,8 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
                 continue
 
             det = _detections_from_easyocr(results)
-            det = _map_detections_to_image(det, scale, offset, image.shape)
+            # Combinamos la escala estática con el offset original
+            det = _map_detections_to_image(det, static_scale, offset, image.shape)
             all_raw_bboxes.extend(det.xyxy.tolist())
             candidates = _build_candidates(det, image.shape)
             all_candidates.extend(candidates)
@@ -617,9 +632,7 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
             error_code="empty_crop",
         )
 
-    # Si tiene formato boliviano válido, confiamos mucho más en el resultado.
-    # Evita que lecturas correctas pero de baja confianza requieran revisión manual.
-    confirmed = selected.valid_format or (selected.confidence >= settings.OCR_CONFIDENCE_THRESHOLD)
+    confirmed = selected.valid_format and (selected.confidence >= settings.OCR_CONFIDENCE_THRESHOLD)
     status = "DETECTED" if confirmed else "LOW_CONFIDENCE"
     message = None
     if not selected.valid_format:
@@ -637,7 +650,7 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
         "status": status,
         "message": message,
         "detected_plate": selected.raw_text,
-        "normalized_plate": selected.normalized_text if confirmed else selected.normalized_text,
+        "normalized_plate": selected.normalized_text if confirmed else None,
         "is_valid_bolivian_format": selected.valid_format,
         "detection_backend": PIPELINE_MODE,
         "detection_confidence": selected.score,

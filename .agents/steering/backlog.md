@@ -41,3 +41,14 @@
 - `ADMIN-PANEL-001` | `done` | Prioridad `alta` | Implementar CRUD de Gestion de Usuarios, Gestion de Personas del SIARP e Historial de Escaneos persistido en BD | Dependencias: `SEC-005`
 - `BUSINESS-001` | `done` | Prioridad `alta` | Forzar unicidad de CI en BD, restringir creación de vehículos a nombre propio para operadores y proteger registro de salidas (EXIT) solo al propietario o admin | Dependencias: `ADMIN-PANEL-001`
 - `UI-002` | `done` | Prioridad `media` | Pre-llenar y bloquear como read-only los campos del propietario en formulario de vehículos para el rol de Operador | Dependencias: `BUSINESS-001`
+- `ROLE-001` | `done` | Prioridad `alta` | Integrar el rol DISPOSITIVO en base de datos, backend y frontend para agentes de captura | Dependencias: `SEC-005`
+- `USA-003` | `done` | Prioridad `alta` | Validación visual lógica de placas en tiempo real en frontend | Dependencias: ninguna
+- `REL-002` | `done` | Prioridad `media` | Spinners individuales locales en botones de refresco en tablas | Dependencias: ninguna
+- `EFI-002` | `done` | Prioridad `alta` | Limitar resolución máxima de imagen subida (MAX_STATIC_DIM = 1280) en backend | Dependencias: ninguna
+- `EFI-003` | `done` | Prioridad `alta` | Índices compuestos en PostgreSQL para búsquedas rápidas en historiales | Dependencias: ninguna
+- `EFI-004` | `done` | Prioridad `media` | Memoizar tablas e interfaces de usuarios mediante React.memo y useCallback | Dependencias: ninguna
+- `SEC-007` | `done` | Prioridad `media` | Script periódico de purga de tokens revocados expirados en BD | Dependencias: ninguna
+- `MNT-002` | `done` | Prioridad `alta` | Centralizar carga de datos y refresco en hook usePageData | Dependencias: ninguna
+- `MNT-003` | `done` | Prioridad `alta` | Fragmentar UploadPlate.jsx extrayendo modales a componentes | Dependencias: ninguna
+- `POR-002` | `done` | Prioridad `media` | Makefile unificado para comandos operativos | Dependencias: ninguna
+- `POR-003` | `done` | Prioridad `media` | Documentar parámetros de expiración y secretos JWT en .env.example | Dependencias: ninguna

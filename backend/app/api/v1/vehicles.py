@@ -145,12 +145,18 @@ def apply_vehicle_changes(vehicle: Vehicle, vehicle_in: VehicleCreate):
 @router.get("/", response_model=list[VehicleResponse])
 async def list_vehicles(
     registered_by_user_id: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
+    """Lista vehículos con paginación server-side. Admins ven todos; operadores ven los suyos."""
     query = select(Vehicle).options(selectinload(Vehicle.owner)).order_by(Vehicle.created_at.desc())
     if registered_by_user_id:
         query = query.where(Vehicle.registered_by_user_id == registered_by_user_id)
+    if current_user.role not in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]:
+        query = query.where(Vehicle.registered_by_user_id == str(current_user.id))
+    query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
 
@@ -181,6 +187,13 @@ async def get_vehicle_detail(vehicle_id: str, db: AsyncSession = Depends(get_db)
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vehiculo no encontrado.",
         )
+    # SEC-008: Operadores solo pueden ver sus propios vehículos
+    if current_user.role not in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]:
+        if str(vehicle.registered_by_user_id) != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para ver los detalles de este vehículo.",
+            )
     return vehicle
 
 

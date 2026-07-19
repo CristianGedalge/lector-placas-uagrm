@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Loader from "../components/Loader";
 import { getPlateScans } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
+import Pagination from "../components/Pagination";
 
 function History() {
   const { user } = useAuth();
@@ -10,19 +11,23 @@ function History() {
   const [error, setError] = useState("");
   const [filterType, setFilterType] = useState(user?.role === "ADMIN" ? "ALL" : "MY"); // ALL o MY
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  const fetchScans = async () => {
+    try {
+      setLoading(true);
+      const data = await getPlateScans();
+      setScans(data || []);
+    } catch (err) {
+      setError("No se pudo cargar el historial de escaneos.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchScans = async () => {
-      try {
-        setLoading(true);
-        const data = await getPlateScans();
-        setScans(data || []);
-      } catch (err) {
-        setError("No se pudo cargar el historial de escaneos.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
     if (user?.id) {
       fetchScans();
       if (user?.role !== "ADMIN") {
@@ -42,16 +47,21 @@ function History() {
     return true;
   });
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentScans = filteredScans.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <section className="page-stack">
-      <div className="hero card">
-        <p className="eyebrow">{user?.role === "ADMIN" ? "Auditoria" : "Operador"}</p>
-        <h2>{user?.role === "ADMIN" ? "Historial de Escaneos" : "Mi Historial de Escaneos"}</h2>
-        <p className="muted-text">
-          {user?.role === "ADMIN"
-            ? "Listado cronológico de las placas leídas automáticamente por las cámaras o ingresadas manualmente."
-            : "Listado cronológico de las placas que has procesado y validado en las porterías."}
-        </p>
+      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1rem" }}>
+        <div>
+          <p className="eyebrow">{user?.role === "ADMIN" ? "Auditoría Global" : "Mi Auditoría"}</p>
+          <h3 style={{ margin: 0 }}>Historial de Escaneos</h3>
+        </div>
+        <button type="button" className="ghost-button" onClick={fetchScans} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem" }} title="Refrescar tabla">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
+          Refrescar Historial
+        </button>
       </div>
 
       {/* Selector de Pestañas (Solo administradores) */}
@@ -89,9 +99,7 @@ function History() {
           </button>
         </div>
       )}
-
-      {error && <p className="error-text">{error}</p>}
-
+      {error && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p className="error-text" style={{ background: "#ffe6e6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid red", display: "inline-block", margin: 0 }}>{error}</p></div>}
       {!filteredScans.length && (
         <div className="card">
           <p className="muted-text text-center">No se encontraron escaneos bajo esta selección.</p>
@@ -112,7 +120,7 @@ function History() {
               </tr>
             </thead>
             <tbody>
-              {filteredScans.map((s) => (
+              {currentScans.map((s) => (
                 <tr key={s.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
                   <td style={{ padding: "1rem", fontWeight: "600" }}>
                     {new Date(s.created_at).toLocaleString()}
@@ -150,6 +158,15 @@ function History() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {!loading && filteredScans.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filteredScans.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
       )}
     </section>
   );

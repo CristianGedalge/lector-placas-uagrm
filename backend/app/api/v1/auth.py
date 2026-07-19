@@ -37,6 +37,7 @@ def normalize_selected_role(raw_role: str) -> tuple[AuthRoleEnum, RoleEnum, str]
         "ESTUDIANTE": (AuthRoleEnum.OPERATOR, RoleEnum.STUDENT, "ESTUDIANTE"),
         "TEACHER": (AuthRoleEnum.OPERATOR, RoleEnum.TEACHER, "DOCENTE"),
         "DOCENTE": (AuthRoleEnum.OPERATOR, RoleEnum.TEACHER, "DOCENTE"),
+        "DISPOSITIVO": (AuthRoleEnum.DISPOSITIVO, RoleEnum.ADMIN, "ADMINISTRATIVO"),
     }
     if role not in role_map:
         raise HTTPException(
@@ -57,11 +58,14 @@ def get_catalog_role_label(role: AuthRoleEnum) -> str:
     role_map = {
         AuthRoleEnum.ADMIN: "ADMINISTRATIVO",
         AuthRoleEnum.OPERATOR: "ESTUDIANTE",
+        AuthRoleEnum.DISPOSITIVO: "DISPOSITIVO",
     }
     return role_map.get(role, role.value)
 
 
 def get_person_role_label(person: UniversityPerson | None, auth_role: AuthRoleEnum) -> str:
+    if auth_role == AuthRoleEnum.DISPOSITIVO:
+        return "DISPOSITIVO"
     if person and person.role == RoleEnum.TEACHER:
         return "DOCENTE"
     if person and person.role == RoleEnum.ADMIN:

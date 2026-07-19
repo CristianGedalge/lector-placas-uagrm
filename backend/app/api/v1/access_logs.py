@@ -27,6 +27,21 @@ async def create_access_log(
             detail="El vehículo no está registrado en el sistema."
         )
 
+    # COR-003: Operadores solo pueden registrar accesos de sus propios vehículos
+    if current_user.role not in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]:
+        is_owner = str(vehicle.registered_by_user_id) == str(current_user.id)
+        if not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo puedes registrar accesos de vehículos bajo tu cuenta.",
+            )
+        # EXIT adicional: solo el propietario o admin puede registrar salida
+        if payload.direction == AccessDirectionEnum.EXIT:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo un administrador puede registrar salidas manualmente.",
+            )
+
     log = AccessLog(
         vehicle_id=payload.vehicle_id,
         direction=payload.direction,
@@ -78,11 +93,11 @@ async def auto_create_access_log(
     if last_log and last_log.direction == AccessDirectionEnum.ENTRY:
         new_direction = AccessDirectionEnum.EXIT
 
-    # Regla de negocio: solo el propietario del vehículo o un Admin puede registrar la SALIDA
+    # Regla de negocio: el propietario, un Admin o el Dispositivo pueden registrar la SALIDA
     if new_direction == AccessDirectionEnum.EXIT:
         is_owner = str(vehicle.registered_by_user_id) == str(current_user.id)
-        is_admin = current_user.role == AuthRoleEnum.ADMIN
-        if not is_owner and not is_admin:
+        is_admin_or_device = current_user.role in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]
+        if not is_owner and not is_admin_or_device:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Solo el propietario del vehículo o un administrador puede registrar la salida.",
@@ -113,12 +128,15 @@ async def auto_create_access_log(
 
 @router.get("/", response_model=list[AccessLogResponse])
 async def list_access_logs(
+    skip: int = 0,
+    limit: int = 50,
     db: AsyncSession = Depends(get_db),
     current_user: AuthUser = Depends(get_current_user),
 ):
+    """Retorna el historial de accesos. skip/limit para paginación server-side."""
     stmt = select(AccessLog).options(
         selectinload(AccessLog.vehicle).selectinload(Vehicle.owner)
-    ).order_by(AccessLog.timestamp.desc())
+    ).order_by(AccessLog.timestamp.desc()).offset(skip).limit(limit)
 
     if current_user.role != AuthRoleEnum.ADMIN:
         # El operador solo puede ver ingresos de sus propios vehículos

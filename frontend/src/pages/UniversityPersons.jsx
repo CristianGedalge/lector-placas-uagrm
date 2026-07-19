@@ -6,12 +6,19 @@ import {
   updateUniversityPerson,
   deleteUniversityPerson
 } from "../api/auth";
+import Pagination from "../components/Pagination";
+import ConfirmModal from "../components/ConfirmModal";
 
 function UniversityPersons() {
   const [persons, setPersons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: "", message: "", onConfirm: null, confirmColor: "#e11d48" });
 
   const [editingPerson, setEditingPerson] = useState(null);
   const [formData, setFormData] = useState({
@@ -25,9 +32,10 @@ function UniversityPersons() {
     is_active: true
   });
 
-  const fetchPersons = async () => {
+  const fetchPersons = async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setIsRefreshing(true);
+      else setLoading(true);
       const data = await listUniversityPersons();
       setPersons(data || []);
     } catch (err) {
@@ -35,6 +43,7 @@ function UniversityPersons() {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -70,59 +79,86 @@ function UniversityPersons() {
     });
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setError("");
     setSuccess("");
-    try {
-      if (editingPerson.isNew) {
-        await createUniversityPerson(formData);
-        setSuccess("Registro de persona universitaria creado con éxito.");
-      } else {
-        await updateUniversityPerson(editingPerson.id, formData);
-        setSuccess("Registro de persona universitaria actualizado con éxito.");
+
+    const actionText = editingPerson.isNew ? "crear este nuevo registro" : "guardar los cambios de este registro";
+
+    setConfirmConfig({
+      isOpen: true,
+      title: editingPerson.isNew ? "Registrar Persona" : "Guardar Cambios",
+      message: `¿Estás seguro de que deseas ${actionText}?`,
+      confirmColor: "var(--color-primary)",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          if (editingPerson.isNew) {
+            await createUniversityPerson(formData);
+            setSuccess("Registro de persona universitaria creado con éxito.");
+          } else {
+            await updateUniversityPerson(editingPerson.id, formData);
+            setSuccess("Registro de persona universitaria actualizado con éxito.");
+          }
+          setEditingPerson(null);
+          fetchPersons();
+        } catch (err) {
+          setError(err.message || "Error al procesar la operación.");
+        }
       }
-      setEditingPerson(null);
-      fetchPersons();
-    } catch (err) {
-      setError(err.message || "Error al procesar la operación.");
-    }
+    });
   };
 
-  const handleDelete = async (personId) => {
-    if (!window.confirm("¿Estás seguro de que deseas eliminar permanentemente a esta persona del registro?")) {
-      return;
-    }
-    try {
-      setError("");
-      setSuccess("");
-      await deleteUniversityPerson(personId);
-      setSuccess("Registro universitario eliminado con éxito.");
-      fetchPersons();
-    } catch (err) {
-      setError(err.message || "No se pudo eliminar el registro.");
-    }
+  const handleDelete = (personId) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Eliminar Persona",
+      message: "¿Estás seguro de que deseas eliminar permanentemente a esta persona del registro? Se perderá el enlace con los vehículos registrados manualmente.",
+      confirmColor: "#e11d48",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setError("");
+          setSuccess("");
+          await deleteUniversityPerson(personId);
+          setSuccess("Registro universitario eliminado con éxito.");
+          fetchPersons();
+        } catch (err) {
+          setError(err.message || "No se pudo eliminar el registro.");
+        }
+      }
+    });
   };
 
   if (loading) {
     return <Loader label="Cargando registros universitarios..." />;
   }
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentPersons = persons.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <section className="page-stack">
-      <div className="hero card">
-        <p className="eyebrow">Administracion</p>
-        <h2>Gestionar Personas (SIARP)</h2>
-        <p className="muted-text">
-          Controla los registros oficiales de Estudiantes, Docentes y Administrativos autorizados para asociar placas.
-        </p>
-        <button type="button" onClick={handleOpenCreate} style={{ marginTop: "1rem", alignSelf: "flex-start" }}>
-          Agregar Nueva Persona
-        </button>
-      </div>
+      {success && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid green", display: "inline-block", margin: 0 }}>{success}</p></div>}
+      {error && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p className="error-text" style={{ background: "#ffe6e6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid red", display: "inline-block", margin: 0 }}>{error}</p></div>}
 
-      {success && <p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.8rem", borderRadius: "8px", border: "1px solid green" }}>{success}</p>}
-      {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
+      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1rem" }}>
+        <div>
+          <p className="eyebrow">Registros SIARP</p>
+          <h3>Lista de Personas Universitarias</h3>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button type="button" className="ghost-button" onClick={() => fetchPersons(true)} disabled={isRefreshing} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem", opacity: isRefreshing ? 0.6 : 1 }} title="Refrescar tabla">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
+            {isRefreshing ? 'Actualizando…' : ''}
+          </button>
+          <button type="button" onClick={handleOpenCreate} style={{ padding: "0.6rem 1.2rem" }}>
+            Agregar Nueva Persona
+          </button>
+        </div>
+      </div>
 
       <div className="card" style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
@@ -139,7 +175,7 @@ function UniversityPersons() {
             </tr>
           </thead>
           <tbody>
-            {persons.map((p) => (
+            {currentPersons.map((p) => (
               <tr key={p.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
                 <td style={{ padding: "1rem", fontWeight: "bold", color: "#153e75" }}>{p.code}</td>
                 <td style={{ padding: "1rem", fontWeight: "600" }}>{p.full_name}</td>
@@ -197,8 +233,17 @@ function UniversityPersons() {
               </tr>
             )}
           </tbody>
-        </table>
-      </div>
+          </table>
+        </div>
+
+      {!loading && persons.length > 0 && (
+        <Pagination
+          currentPage={currentPage}
+          totalItems={persons.length}
+          itemsPerPage={itemsPerPage}
+          onPageChange={setCurrentPage}
+        />
+      )}
 
       {editingPerson && (
         <div className="modal-backdrop">
@@ -296,6 +341,15 @@ function UniversityPersons() {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        confirmColor={confirmConfig.confirmColor}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+      />
     </section>
   );
 }
