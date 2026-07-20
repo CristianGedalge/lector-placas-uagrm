@@ -1,15 +1,13 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardLayout from "../layouts/DashboardLayout";
 import Dashboard from "../pages/Dashboard";
-import History from "../pages/History";
 import Login from "../pages/Login";
 import Profile from "../pages/Profile";
 import Register from "../pages/Register";
-import Reports from "../pages/Reports";
 import UploadPlate from "../pages/UploadPlate";
 import Users from "../pages/Users";
-import UniversityPersons from "../pages/UniversityPersons";
 import Vehicles from "../pages/Vehicles";
+import Devices from "../pages/Devices";
 import AccessLogs from "../pages/AccessLogs";
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
@@ -35,7 +33,21 @@ function AdminRoute({ children }) {
     return <Loader label="Validando rol..." />;
   }
 
-  if (user?.role !== "ADMIN") {
+  if (user?.rol !== "ADMINISTRADOR") {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+function DispositivoRoute({ children }) {
+  const { user, authLoading } = useAuth();
+
+  if (authLoading) {
+    return <Loader label="Validando rol..." />;
+  }
+
+  if (user?.rol !== "DISPOSITIVO") {
     return <Navigate to="/" replace />;
   }
 
@@ -49,11 +61,15 @@ function HomeRoute() {
     return <Loader label="Cargando..." />;
   }
 
-  if (user?.role !== "ADMIN") {
+  if (user?.rol === "ADMINISTRADOR") {
+    return <Dashboard />;
+  }
+
+  if (user?.rol === "DISPOSITIVO") {
     return <Navigate to="/subir-placa" replace />;
   }
 
-  return <Dashboard />;
+  return <Navigate to="/vehiculos" replace />;
 }
 
 function AppRoutes() {
@@ -63,12 +79,10 @@ function AppRoutes() {
       <Route path="/registro" element={<Register />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
-        <Route path="/subir-placa" element={<UploadPlate />} />
-        <Route path="/historial" element={<History />} />
-        <Route path="/reportes" element={<Reports />} />
+        <Route path="/subir-placa" element={<DispositivoRoute><UploadPlate /></DispositivoRoute>} />
         <Route path="/perfil" element={<Profile />} />
         <Route path="/usuarios" element={<AdminRoute><Users /></AdminRoute>} />
-        <Route path="/personas" element={<AdminRoute><UniversityPersons /></AdminRoute>} />
+        <Route path="/dispositivos" element={<AdminRoute><Devices /></AdminRoute>} />
         <Route path="/vehiculos" element={<Vehicles />} />
         <Route path="/accesos" element={<AccessLogs />} />
       </Route>

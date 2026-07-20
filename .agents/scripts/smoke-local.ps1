@@ -80,9 +80,9 @@ except HTTPError as exc:
     payload = json.loads(exc.read().decode("utf-8"))
 if status_code not in {200, 422, 503}:
     raise SystemExit(f"analyze devolvio HTTP inesperado: {status_code}")
-if payload.get("status") not in {"DETECTED", "LOW_CONFIDENCE", "ERROR"}:
+if payload.get("estado") not in {"DETECTADO", "BAJA_CONFIANZA", "ERROR", "MANUAL"}:
     raise SystemExit(f"contrato analyze inesperado: {payload}")
-print(f"analyze_http={status_code}; analyze_status={payload.get('status')}")
+print(f"analyze_http={status_code}; analyze_status={payload.get('estado')}")
 '@
     $analyzeSmoke | & $Python -
     if ($LASTEXITCODE -ne 0) { throw "smoke del endpoint analyze fallo" }

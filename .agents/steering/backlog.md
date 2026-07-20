@@ -52,3 +52,19 @@
 - `MNT-003` | `done` | Prioridad `alta` | Fragmentar UploadPlate.jsx extrayendo modales a componentes | Dependencias: ninguna
 - `POR-002` | `done` | Prioridad `media` | Makefile unificado para comandos operativos | Dependencias: ninguna
 - `POR-003` | `done` | Prioridad `media` | Documentar parámetros de expiración y secretos JWT en .env.example | Dependencias: ninguna
+- `ROLE-002` | `done` | Prioridad `alta` | Restringir gestión de vehículos a ADMINISTRADOR y OPERADOR; eliminar sección "Mis Vehículos" del staff | Dependencias: `ROLE-001`
+- `ROLE-003` | `done` | Prioridad `alta` | Corregir error 403 del OPERADOR al listar usuarios (GET /api/auth/users) para asignar propietarios | Dependencias: `ROLE-002`
+- `ROLE-004` | `done` | Prioridad `alta` | Bloquear registro manual de accesos para el rol USUARIO; solo lectura | Dependencias: `ROLE-001`
+- `ROLE-005` | `done` | Prioridad `alta` | Bloquear la ruta /escanear y la función de escaneo para USUARIO y OPERADOR; exclusivo para DISPOSITIVO | Dependencias: `ROLE-001`
+- `ROLE-006` | `done` | Prioridad `alta` | Rol DISPOSITIVO sin registro manual: login directo a vista de cámara sin botón regreso ni acceso al resto de la app | Dependencias: `ROLE-005`
+- `UI-003` | `done` | Prioridad `media` | Simplificar PlateNotFoundModal a icono + estado + título + placa; auto-descarte en 5 segundos | Dependencias: `ROLE-006`
+- `ACC-001` | `done` | Prioridad `alta` | Crear endpoint POST /api/v1/access-logs/auto con inferencia de dirección por estado del campus y ubicación del dispositivo | Dependencias: `ROLE-001`
+- `ACC-002` | `done` | Prioridad `alta` | Añadir campo direction opcional a AccesoAutoCreate; respetar elección del operador antes de inferir | Dependencias: `ACC-001`
+- `ACC-003` | `done` | Prioridad `alta` | Añadir campos mapeados direction/zone/timestamp/vehicle a AccesoResponse con model_validator | Dependencias: `ACC-001`
+- `ACC-004` | `done` | Prioridad `alta` | Corregir Error 422: usar createAutoAccessLog en lugar de createAccessLog en AccessLogs.jsx | Dependencias: `ACC-001`
+- `ACC-005` | `done` | Prioridad `media` | Corregir ConfirmModal con mensaje vacío (typo mensaje→message) en AccessLogs.jsx | Dependencias: ninguna
+- `ACC-006` | `done` | Prioridad `media` | Añadir buscador de placa en tiempo real en modal de acceso manual con filtrado del selector | Dependencias: `ACC-004`
+- `ACC-007` | `done` | Prioridad `media` | Corregir etiquetas del dropdown de vehículos en AccessLogs.jsx (v.placa, v.marca?.nombre, v.propietario) | Dependencias: `ACC-004`
+- `CAM-004` | `blocked` | Prioridad `media` | Validar captura continua con webcam USB y RTSP reales | Dependencias: hardware y stream reales
+- `OCR-PHYSICAL-001` | `blocked` | Prioridad `alta` | Calibrar OCR, ROI e iluminacion con placas y camaras fisicas | Dependencias: hardware real
+- `REPO-001` | `in_progress` | Prioridad `alta` | Crear y publicar el repositorio conjunto de backend y frontend | Dependencias: repositorio remoto vacío

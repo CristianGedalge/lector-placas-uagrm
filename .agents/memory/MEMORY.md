@@ -1,5 +1,46 @@
 # MEMORY
 
+## 2026-07-20 - Separación de Roles, Flujo DISPOSITIVO y Corrección de Accesos Manuales
+
+- **Gestión de Vehículos por Admin/Operador (`Vehicles.jsx`)**: Se añadió la capacidad de que los roles ADMINISTRADOR y OPERADOR puedan registrar y gestionar vehículos de cualquier usuario. Se eliminó la sección "Mis Vehículos Registrados" que no correspondía al flujo de staff. Se implementó selector de propietario con listado de todos los usuarios del sistema.
+
+- **Corrección de Permisos 403 para Operador (`GET /api/auth/users`)**: Se añadió el endpoint `/api/auth/users` con autorización para el rol OPERADOR, permitiéndole listar usuarios del sistema para asignarlos como propietarios de vehículos sin revelar datos sensibles.
+
+- **Restricciones de Rol en UI**:
+  - **USUARIO**: Solo puede leer accesos (sin botón de registro manual).
+  - **OPERADOR y ADMINISTRADOR**: Pueden registrar accesos manuales y gestionar vehículos de otros.
+  - **DISPOSITIVO**: Acceso exclusivo a la vista de cámara en vivo (`/escanear`); no tiene registro manual, ni acceso al resto de la app. Al hacer login va directamente a la cámara.
+  - Sidebar y AppRoutes actualizados para hacer cumplir estas restricciones.
+
+- **Vista Exclusiva DISPOSITIVO (`UploadPlate.jsx`)**: Una vez logueado, el rol DISPOSITIVO ve únicamente la vista de cámara sin botón de regreso ni registro manual. El selector de modo (webcam/subir imagen) se oculta. Solo existe el escaneo continuo.
+
+- **Modal `PlateNotFoundModal` simplificado**: Se redujo a solo icono, estado, título y placa detectada. Se auto-descarta a los 5 segundos.
+
+- **Endpoint `POST /api/v1/access-logs/auto`**: Creado para registro automático desde cámara o manual desde operador. Infiere `ENTRADA`/`SALIDA` según el estado del campus del vehículo. Si el dispositivo tiene "entrada"/"salida" en el nombre, lo respeta. Si el operador envía `direction` explícita, se usa antes de la inferencia. Crea un `Escaneado` sintético si el vehículo no tiene escaneo previo.
+
+- **Schema `AccesoAutoCreate`** (`backend/app/schemas/access_log.py`): Añadido campo opcional `direction: str | None = None` que permite al frontend enviar `"ENTRY"` o `"EXIT"` para accesos manuales.
+
+- **Schema `AccesoResponse`** (`backend/app/schemas/access_log.py`): Se añadieron los campos mapeados `direction`, `zone`, `timestamp` y `vehicle` requeridos por el frontend React, usando `model_validator(mode="before")` para traducir desde el modelo SQLAlchemy.
+
+- **Corrección Error 422 en `AccessLogs.jsx`**: El formulario manual llamaba a `POST /access-logs/` (que requiere `escaneado_id`) en vez del endpoint correcto `POST /access-logs/auto`. Corregido para usar `createAutoAccessLog`.
+
+- **Corrección ConfirmModal mensaje vacío**: La prop pasada era `confirmConfig.mensaje` (typo) en lugar de `confirmConfig.message`. Corregido.
+
+- **Buscador de placa en modal de acceso manual**: Añadido campo de búsqueda por placa en tiempo real que filtra el selector de vehículos. Si el texto coincide exactamente con una placa, preselecciona el vehículo automáticamente.
+
+- **Etiquetas correctas en selector de vehículos**: Se corrigieron los campos del dropdown de vehículos en `AccessLogs.jsx` para usar `v.placa`, `v.marca?.nombre` y `v.propietario.nombre` (propiedades reales del backend) en lugar de `v.license_plate`, `v.brand` y `v.owner?.full_name` que no existían en la respuesta.
+
+- **"Ingreso/Salida" en lugar de "ENTRY/EXIT"**: La tabla de accesos ya mostraba etiquetas en español. El modal de confirmación ahora también dice "Ingreso" o "Salida" antes de confirmar.
+
+- **Verificación**: 23/23 pruebas unitarias OK. Build de producción Vite exitoso (99 módulos).
+
+## 2026-07-20 - Unificación de Dashboard, Iconografía Profesional y Modelado de Base de Datos UML
+
+- **Unificación de Reportes en Dashboard (COR-002, USA-001)**: Se unificó la analítica de reportes integrando gráficos interactivos SVG y KPIs adicionales de accesos en la página principal `Dashboard.jsx`. Se eliminó la ruta `/reportes` de `AppRoutes.jsx`, se retiró del menú lateral `Sidebar/index.jsx` y se eliminó el archivo obsoleto `Reports.jsx`.
+- **Iconografía Profesional y UI/UX**: Se erradicaron los emojis informales en el Dashboard reemplazándolos por contenedores translúcidos con iconos SVG vectoriales responsivos para cada KPI y cabecera de gráfico, elevando el valor estético del sistema.
+- **Modelado de Base de Datos (UML)**: Se diseñó el esquema de base de datos en PlantUML traducido íntegramente al español, estructurando de manera óptima las tablas de `Usuario`, `Vehiculo`, `Marca`, `TipoVehiculo`, `Dispositivo`, `TipoDispositivo`, `Escaneado` y `Acceso`.
+- **Verificación**: Compilación de Python y build de producción con Vite completados satisfactoriamente y suites de pruebas al 100%.
+
 ## 2026-07-19 - Auditoría y Cumplimiento de Estándares de Calidad (ISO/IEC 25010)
 
 - **Correctitud y Fiabilidad (USA-003, REL-002)**: Se unificó la validación visual lógica en tiempo real para el registro de vehículos en el frontend. Se implementaron spinners individuales en los botones de refresco (`↻`) en lugar de loaders invasivos a pantalla completa.
@@ -12,7 +53,7 @@
 - **Rol DISPOSITIVO en Base de Datos**: Añadido `DISPOSITIVO` en `AuthRoleEnum` en models.py y creada y ejecutada exitosamente la migración de PostgreSQL `df3072f8b6b1_add_dispositivo_to_authroleenum.py`.
 - **Mapeo de Roles y Normalización**: Modificadas las funciones de backend (`normalize_selected_role` y `get_catalog_role_label`) para procesar el nuevo rol, permitiendo registrar dispositivos externos mediante su nombre y credenciales con permisos limitados.
 - **Gestión Frontend de Roles**: Actualizado `Users.jsx` para mostrar un tag distintivo para cuentas de tipo `DISPOSITIVO`, agregado al modal de registro de usuarios y permitido ciclar entre `OPERADOR` -> `ADMIN` -> `DISPOSITIVO` al cambiar el rol.
-- **Corrección en Pipeline ALPR**: Se corrigió el bug de confirmación en el flujo estático de `pipeline.py`. Ahora se requiere que la lectura posea formato válido *y* confianza suficiente (`and`), evitando que detecciones con un formato aparentemente válido pero con bajísima confianza sean consideradas `DETECTED`. Se configuró también para que `normalized_plate` se devuelva en `None` si la detección no es confirmada.
+- **Corrección en Pipeline ALPR**: Se corrigió el bug de confirmación en el flujo estático de `pipeline.py`. Ahora se requiere que la lectura posea formato válido _y_ confianza suficiente (`and`), evitando que detecciones con un formato aparentemente válido pero con bajísima confianza sean consideradas `DETECTED`. Se configuró también para que `normalized_plate` se devuelva en `None` si la detección no es confirmada.
 - **Verificación**: Todas las pruebas unitarias y el build de frontend completaron exitosamente sin errores de dependencias ni fallos.
 
 ## 2026-07-17 - Control de Accesos (Ingreso y Salida de Vehículos)
@@ -33,7 +74,7 @@
   4. Escaneos Históricos
   5. Confianza Promedio del motor OCR
   6. Operadores UAGRM del sistema
-  Adicionalmente se despliega una bitácora en vivo con los últimos 5 escaneos reales persistidos en la base de datos (con su hora, placas, porcentaje de confianza, estado y validación en la BD).
+     Adicionalmente se despliega una bitácora en vivo con los últimos 5 escaneos reales persistidos en la base de datos (con su hora, placas, porcentaje de confianza, estado y validación en la BD).
 
 ## 2026-07-17 - Panel de Gestión Completa del Administrador (Fase 5)
 
@@ -42,7 +83,6 @@
 - **Bitácora de Escaneos (plate_scans)**: Conectado el endpoint `/analyze` para que registre automáticamente cada detección de placa con formato válido o de baja confianza en la tabla `plate_scans`. Implementado el endpoint `GET /scans` y la interfaz de auditoría real en `History.jsx` para visualizar el historial cronológico de todas las porterías.
 - **Segregación de Roles**: Modificado el `Sidebar` y la protección de rutas (`AdminRoute`) para que las secciones de gestión (`Registrar Operador`, `Gestionar Usuarios`, `Gestionar Personas`, `Historial`, `Reportes`) solo sean renderizadas y accedidas por cuentas autorizadas de Administradores, manteniendo para los Operadores un flujo limpio limitado al escáner y su perfil.
 
-
 - **Fase 1 (Limpieza de Secretos)**: Se configuró una `SECRET_KEY` segura generada de 64 bytes. Se parametrizó la clave de Postgres en `docker-compose.yml` (`${POSTGRES_PASSWORD}`) y se inhabilitó `DEBUG=true` para ocultar trazas de stack de los errores 500.
 - **Fase 2 (Control de Acceso y Límites)**: Se implementó la librería `slowapi` limitando `/login` (10/min), `/register` (5/min) y `/analyze` (60/min). Se restringió severamente la carga de imágenes limitando a 5MB y formatos JPEG/PNG/WebP explícitos.
 - **Fase 3 (Sesiones y Cookies JWT)**: Se mitigó la inyección de XSS eliminando el JWT de `localStorage` y transitando hacia una cookie `HttpOnly` y `SameSite=lax`. Se ocultó el directorio estático de uploads, pasando a servir imágenes autenticadas mediante `/api/v1/vehicles/photos/{filename}`.
@@ -50,7 +90,6 @@
 - **Fase 4 (Parches Críticos)**: Se descubrió y reparó una vulnerabilidad de **Mass Assignment** (Escalamiento de Privilegios) donde un usuario podía enviarse `role: "ADMIN"` en `/register` o `/me`.
 - **Fase 4 (Cierre de Registro Público)**: Dado que el rol de Guardia/Operador expone las listas globales de estudiantes y vehículos para permitir comparativas cruzadas con la cámara, se protegió `/register` con `require_admin`. Esto cancela el registro público, evitando la Fuga de Datos (IDOR).
 - **Fase 4 (LFI Mitigado)**: Se corrigió una vulnerabilidad de Path Traversal grave asegurando el UUID generado de fotos solicitadas con `os.path.basename` para bloquear secuencias `../../../`.
-
 
 ## 2026-07-17 - Mejoras UI y Seguimiento en Vivo de Placas
 

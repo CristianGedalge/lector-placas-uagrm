@@ -2,146 +2,222 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from uuid import UUID
 
-from app.db.models import AccessLog, Vehicle, AuthUser, AuthRoleEnum, AccessDirectionEnum
+from app.db.models import (
+    Acceso, Escaneado, RoleEnum, TipoAccesoEnum, EstadoCampus,
+    UbicacionVehiculoEnum, Dispositivo, Vehiculo, EstadoEscaneoEnum
+)
 from app.db.session import get_db
-from app.schemas.access_log import AccessLogCreate, AccessLogResponse, AccessLogAutoCreate
+from app.schemas.access_log import AccesoCreate, AccesoResponse, AccesoAutoCreate
 from app.api.v1.auth import get_current_user
 
 router = APIRouter()
 
 
-@router.post("/", response_model=AccessLogResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=AccesoResponse, status_code=status.HTTP_201_CREATED)
 async def create_access_log(
-    payload: AccessLogCreate,
+    payload: AccesoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    # Verificar que el vehículo exista
-    vehicle_result = await db.execute(select(Vehicle).where(Vehicle.id == payload.vehicle_id))
-    vehicle = vehicle_result.scalar_one_or_none()
-    if not vehicle:
+    scan_result = await db.execute(select(Escaneado).where(Escaneado.id == payload.escaneado_id))
+    escaneado = scan_result.scalar_one_or_none()
+    if not escaneado:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="El vehículo no está registrado en el sistema."
+            detail="El escaneo no existe."
         )
 
-    # COR-003: Operadores solo pueden registrar accesos de sus propios vehículos
-    if current_user.role not in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]:
-        is_owner = str(vehicle.registered_by_user_id) == str(current_user.id)
-        if not is_owner:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Solo puedes registrar accesos de vehículos bajo tu cuenta.",
-            )
-        # EXIT adicional: solo el propietario o admin puede registrar salida
-        if payload.direction == AccessDirectionEnum.EXIT:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Solo un administrador puede registrar salidas manualmente.",
-            )
+    # Solo admins, operadores o dispositivos pueden registrar accesos
+    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para registrar accesos.",
+        )
 
-    log = AccessLog(
-        vehicle_id=payload.vehicle_id,
-        direction=payload.direction,
-        zone=payload.zone,
-        plate_scan_id=payload.plate_scan_id,
-        notes=payload.notes,
-        operator_id=current_user.id,
+    log = Acceso(
+        tipo_acceso=payload.tipo_acceso,
+        ubicacion=payload.ubicacion,
+        escaneado_id=payload.escaneado_id,
+        operador_usuario_id=current_user.id if current_user.rol != RoleEnum.DISPOSITIVO else None,
     )
-
     db.add(log)
+    await db.flush()
+
+    if escaneado.vehiculo_id:
+        estado_result = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == escaneado.vehiculo_id))
+        estado_campus = estado_result.scalar_one_or_none()
+        
+        nuevo_estado = UbicacionVehiculoEnum.DENTRO if payload.tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
+
+        if estado_campus:
+            estado_campus.estado = nuevo_estado
+            estado_campus.ultimo_acceso_id = log.id
+        else:
+            estado_campus = EstadoCampus(
+                vehiculo_id=escaneado.vehiculo_id,
+                estado=nuevo_estado,
+                ultimo_acceso_id=log.id
+            )
+            db.add(estado_campus)
+
     await db.commit()
-    await db.refresh(log)
+    
+    # Recargar con relaciones para la serialización del frontend
+    stmt_reload = (
+        select(Acceso)
+        .options(
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.propietario),
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.marca)
+        )
+        .where(Acceso.id == log.id)
+    )
+    res_reload = await db.execute(stmt_reload)
+    log_loaded = res_reload.scalar_one()
+    return AccesoResponse.model_validate(log_loaded)
 
-    # Cargar relaciones para la respuesta
-    stmt = select(AccessLog).options(
-        selectinload(AccessLog.vehicle).selectinload(Vehicle.owner)
-    ).where(AccessLog.id == log.id)
-    res = await db.execute(stmt)
-    full_log = res.scalar_one()
 
-    return full_log
-
-
-@router.post("/auto", response_model=AccessLogResponse, status_code=status.HTTP_201_CREATED)
-async def auto_create_access_log(
-    payload: AccessLogAutoCreate,
+@router.post("/auto", response_model=AccesoResponse, status_code=status.HTTP_201_CREATED)
+async def create_auto_access_log(
+    payload: AccesoAutoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    # Verificar que el vehículo exista
-    vehicle_result = await db.execute(select(Vehicle).where(Vehicle.id == payload.vehicle_id))
-    vehicle = vehicle_result.scalar_one_or_none()
-    if not vehicle:
+    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="El vehículo no está registrado en el sistema."
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para registrar accesos.",
         )
 
-    # Buscar el último registro de acceso para inferir la dirección
-    last_log_result = await db.execute(
-        select(AccessLog)
-        .where(AccessLog.vehicle_id == payload.vehicle_id)
-        .order_by(AccessLog.timestamp.desc())
+    v_res = await db.execute(select(Vehiculo).where(Vehiculo.id == payload.vehicle_id))
+    vehiculo = v_res.scalar_one_or_none()
+    if not vehiculo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehículo no encontrado."
+        )
+
+    device_location = payload.zone or "Portería Principal"
+    inferred_tipo_acceso = None
+
+    if current_user.rol == RoleEnum.DISPOSITIVO:
+        dev_res = await db.execute(
+            select(Dispositivo).where(
+                Dispositivo.nombre == current_user.nombre,
+                Dispositivo.esta_activo == True
+            )
+        )
+        device = dev_res.scalar_one_or_none()
+        if device:
+            device_location = device.ubicacion
+            name_lower = device.nombre.lower()
+            if "entrada" in name_lower or "ingreso" in name_lower:
+                inferred_tipo_acceso = TipoAccesoEnum.ENTRADA
+            elif "salida" in name_lower or "egreso" in name_lower:
+                inferred_tipo_acceso = TipoAccesoEnum.SALIDA
+
+    # Si el operador/admin especificó la dirección manualmente, respetarla
+    if inferred_tipo_acceso is None and payload.direction is not None:
+        inferred_tipo_acceso = TipoAccesoEnum.ENTRADA if payload.direction == "ENTRY" else TipoAccesoEnum.SALIDA
+
+    if inferred_tipo_acceso is None:
+        estado_result = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehiculo.id))
+        estado_campus = estado_result.scalar_one_or_none()
+        if estado_campus and estado_campus.estado == UbicacionVehiculoEnum.DENTRO:
+            inferred_tipo_acceso = TipoAccesoEnum.SALIDA
+        else:
+            inferred_tipo_acceso = TipoAccesoEnum.ENTRADA
+
+    scan_res = await db.execute(
+        select(Escaneado)
+        .where(Escaneado.vehiculo_id == vehiculo.id)
+        .order_by(Escaneado.creado_el.desc())
         .limit(1)
     )
-    last_log = last_log_result.scalar_one_or_none()
+    last_scan = scan_res.scalar_one_or_none()
 
-    new_direction = AccessDirectionEnum.ENTRY
-    if last_log and last_log.direction == AccessDirectionEnum.ENTRY:
-        new_direction = AccessDirectionEnum.EXIT
+    if not last_scan:
+        last_scan = Escaneado(
+            placa_detectada=vehiculo.placa,
+            placa_normalizada=vehiculo.placa,
+            confianza=1.0,
+            estado=EstadoEscaneoEnum.DETECTADO,
+            vehiculo_id=vehiculo.id
+        )
+        db.add(last_scan)
+        await db.flush()
 
-    # Regla de negocio: el propietario, un Admin o el Dispositivo pueden registrar la SALIDA
-    if new_direction == AccessDirectionEnum.EXIT:
-        is_owner = str(vehicle.registered_by_user_id) == str(current_user.id)
-        is_admin_or_device = current_user.role in [AuthRoleEnum.ADMIN, AuthRoleEnum.DISPOSITIVO]
-        if not is_owner and not is_admin_or_device:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Solo el propietario del vehículo o un administrador puede registrar la salida.",
-            )
-
-    log = AccessLog(
-        vehicle_id=payload.vehicle_id,
-        direction=new_direction,
-        zone=payload.zone,
-        plate_scan_id=payload.plate_scan_id,
-        notes=payload.notes,
-        operator_id=current_user.id,
+    log = Acceso(
+        tipo_acceso=inferred_tipo_acceso,
+        ubicacion=device_location,
+        escaneado_id=last_scan.id,
+        operador_usuario_id=current_user.id if current_user.rol != RoleEnum.DISPOSITIVO else None,
     )
-
     db.add(log)
+    await db.flush()
+
+    nuevo_estado = UbicacionVehiculoEnum.DENTRO if inferred_tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
+    estado_result = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehiculo.id))
+    estado_campus = estado_result.scalar_one_or_none()
+
+    if estado_campus:
+        estado_campus.estado = nuevo_estado
+        estado_campus.ultimo_acceso_id = log.id
+    else:
+        estado_campus = EstadoCampus(
+            vehiculo_id=vehiculo.id,
+            estado=nuevo_estado,
+            ultimo_acceso_id=log.id
+        )
+        db.add(estado_campus)
+
     await db.commit()
-    await db.refresh(log)
+    
+    # Recargar con relaciones para la serialización del frontend
+    stmt_reload = (
+        select(Acceso)
+        .options(
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.propietario),
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.marca)
+        )
+        .where(Acceso.id == log.id)
+    )
+    res_reload = await db.execute(stmt_reload)
+    log_loaded = res_reload.scalar_one()
+    return AccesoResponse.model_validate(log_loaded)
 
-    # Cargar relaciones para la respuesta
-    stmt = select(AccessLog).options(
-        selectinload(AccessLog.vehicle).selectinload(Vehicle.owner)
-    ).where(AccessLog.id == log.id)
-    res = await db.execute(stmt)
-    full_log = res.scalar_one()
 
-    return full_log
-
-
-@router.get("/", response_model=list[AccessLogResponse])
+@router.get("/", response_model=list[AccesoResponse])
 async def list_access_logs(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
-    """Retorna el historial de accesos. skip/limit para paginación server-side."""
-    stmt = select(AccessLog).options(
-        selectinload(AccessLog.vehicle).selectinload(Vehicle.owner)
-    ).order_by(AccessLog.timestamp.desc()).offset(skip).limit(limit)
+    stmt = (
+        select(Acceso)
+        .options(
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.propietario),
+            selectinload(Acceso.escaneado)
+            .selectinload(Escaneado.vehiculo)
+            .selectinload(Vehiculo.marca)
+        )
+        .order_by(Acceso.creado_el.desc())
+        .offset(skip)
+        .limit(limit)
+    )
 
-    if current_user.role != AuthRoleEnum.ADMIN:
-        # El operador solo puede ver ingresos de sus propios vehículos
-        stmt = stmt.join(Vehicle).where(Vehicle.registered_by_user_id == current_user.id)
-
+    # Dependiendo de permisos, filtrar. Por ahora todos
     result = await db.execute(stmt)
     logs = result.scalars().all()
-    return logs
+    return [AccesoResponse.model_validate(x) for x in logs]

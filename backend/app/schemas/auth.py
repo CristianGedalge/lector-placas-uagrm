@@ -2,24 +2,21 @@ import re
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.db.models import AuthRoleEnum, RecordStatusEnum
+from app.db.models import RoleEnum
 
 
-class UserRegisterRequest(BaseModel):
-    full_name: str = Field(min_length=3, max_length=120)
-    email: EmailStr
+class UsuarioRegisterRequest(BaseModel):
+    nombre: str = Field(min_length=2, max_length=120)
+    apellido_paterno: str = Field(min_length=2, max_length=120)
+    apellido_materno: str | None = Field(default=None, max_length=120)
+    carnet: str = Field(min_length=5, max_length=50)
     # SEC-011: Mínimo 8 caracteres, 1 mayúscula, 1 número
-    password: str = Field(min_length=8, max_length=128)
-    code: str = Field(min_length=3, max_length=50)
-    faculty: str | None = Field(default=None, max_length=255)
-    contact_info: str = Field(min_length=5, max_length=255)
-    phone: str | None = Field(default=None, min_length=5, max_length=255)
-    role: str = Field(min_length=3, max_length=40, default="STUDENT")
-    is_admin: bool = Field(default=False)
+    contrasena: str = Field(min_length=8, max_length=128)
+    rol: RoleEnum = Field(default=RoleEnum.USUARIO)
 
-    @field_validator("password")
+    @field_validator("contrasena")
     @classmethod
     def validate_password_strength(cls, v: str) -> str:
         if not re.search(r"[A-Z]", v):
@@ -29,48 +26,42 @@ class UserRegisterRequest(BaseModel):
         return v
 
 
-class UserLoginRequest(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
+class UsuarioLoginRequest(BaseModel):
+    carnet: str
+    contrasena: str = Field(min_length=6, max_length=128)
 
 
-class AuthUserResponse(BaseModel):
+class UsuarioResponse(BaseModel):
     id: UUID
-    full_name: str
-    email: EmailStr
-    phone: str | None = None
-    role: AuthRoleEnum
-    catalog_role: str | None = None
-    status: RecordStatusEnum
-    is_active: bool
-    university_person_id: UUID | None = None
-    code: str | None = None
-    document_id: str | None = None
-    faculty: str | None = None
-    contact_info: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    nombre: str
+    apellido_paterno: str
+    apellido_materno: str | None = None
+    carnet: str
+    rol: RoleEnum
+    esta_activo: bool
+    creado_el: datetime
+    actualizado_el: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserProfileUpdateRequest(BaseModel):
-    full_name: str = Field(min_length=3, max_length=120)
-    email: EmailStr
-    code: str = Field(min_length=3, max_length=50)
-    faculty: str | None = Field(default=None, max_length=255)
-    contact_info: str = Field(min_length=5, max_length=255)
-    phone: str | None = Field(default=None, min_length=5, max_length=255)
-    role: str = Field(min_length=3, max_length=40, default="STUDENT")
-    password: str | None = Field(default=None, min_length=6, max_length=128)
+class UsuarioProfileUpdateRequest(BaseModel):
+    nombre: str = Field(min_length=2, max_length=120)
+    apellido_paterno: str = Field(min_length=2, max_length=120)
+    apellido_materno: str | None = Field(default=None, max_length=120)
+    carnet: str = Field(min_length=5, max_length=50)
+    contrasena: str | None = Field(default=None, min_length=8, max_length=128)
 
 
-class UserAdminUpdateRequest(BaseModel):
-    role: AuthRoleEnum
-    is_active: bool
-    status: RecordStatusEnum
+class UsuarioAdminUpdateRequest(BaseModel):
+    nombre: str = Field(min_length=2, max_length=120)
+    apellido_paterno: str = Field(min_length=2, max_length=120)
+    apellido_materno: str | None = Field(default=None, max_length=120)
+    carnet: str = Field(min_length=5, max_length=50)
+    rol: RoleEnum
+    esta_activo: bool
 
 
 class AuthResponse(BaseModel):
     token: str
-    user: AuthUserResponse
+    user: UsuarioResponse

@@ -3,50 +3,27 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../hooks/useAuth";
 
-const CAREER_OPTIONS = [
-  "Ingenieria en Redes",
-  "Ingenieria Informatica",
-  "Ingenieria en Sistemas",
-  "Ingenieria Robotica"
-];
-
-function mapRoleToFormValue(user) {
-  const rawRole = user?.catalog_role || user?.role || "ESTUDIANTE";
-  if (rawRole === "ADMINISTRATIVO" || rawRole === "ADMIN") {
-    return "ADMINISTRATIVE";
-  }
-  if (rawRole === "DOCENTE" || rawRole === "TEACHER") {
-    return "TEACHER";
-  }
-  return "STUDENT";
-}
-
 function Profile() {
   const navigate = useNavigate();
   const { user, refreshProfile, saveProfile, removeProfile, profileSaving } = useAuth();
   const [formData, setFormData] = useState({
-    full_name: "",
-    email: "",
-    code: "",
-    role: "STUDENT",
-    faculty: "",
-    phone: "",
-    password: ""
+    nombre: "",
+    apellido_paterno: "",
+    apellido_materno: "",
+    carnet: "",
+    contrasena: ""
   });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const requiresFaculty = formData.role === "STUDENT";
 
   useEffect(() => {
     if (user) {
       setFormData({
-        full_name: user.full_name || user.name || "",
-        email: user.email || "",
-        code: user.code || "",
-        role: mapRoleToFormValue(user),
-        faculty: user.faculty || "",
-        phone: user.phone || user.contact_info || "",
-        password: ""
+        nombre: user.nombre || "",
+        apellido_paterno: user.apellido_paterno || "",
+        apellido_materno: user.apellido_materno || "",
+        carnet: user.carnet || "",
+        contrasena: ""
       });
     }
   }, [user]);
@@ -69,19 +46,16 @@ function Profile() {
 
     try {
       await saveProfile({
-        full_name: formData.full_name,
-        email: formData.email,
-        code: formData.code,
-        role: formData.role,
-        faculty: requiresFaculty ? formData.faculty : null,
-        phone: formData.phone,
-        contact_info: formData.phone,
-        password: formData.password || undefined
+        nombre: formData.nombre,
+        apellido_paterno: formData.apellido_paterno,
+        apellido_materno: formData.apellido_materno,
+        carnet: formData.carnet,
+        contrasena: formData.contrasena || undefined
       });
-      setFormData((current) => ({ ...current, password: "" }));
+      setFormData((current) => ({ ...current, contrasena: "" }));
       setMessage("Perfil actualizado correctamente.");
     } catch (submitError) {
-      setError(submitError.message || "No se pudo actualizar el perfil.");
+      setError(submitError.mensaje || "No se pudo actualizar el perfil.");
     }
   };
 
@@ -100,7 +74,7 @@ function Profile() {
       await removeProfile();
       navigate("/login", { replace: true });
     } catch (submitError) {
-      setError(submitError.message || "No se pudo eliminar el perfil.");
+      setError(submitError.mensaje || "No se pudo eliminar el perfil.");
     }
   };
 
@@ -116,61 +90,23 @@ function Profile() {
       <form className="registration-form" onSubmit={handleSubmit}>
         <div className="details-grid">
           <label className="field-group">
-            <span>Nombre completo</span>
-            <input value={formData.full_name} onChange={handleChange("full_name")} required />
+            <span>Nombre</span>
+            <input value={formData.nombre} onChange={handleChange("nombre")} required />
           </label>
 
           <label className="field-group">
-            <span>Correo</span>
-            <input
-              type="email"
-              value={formData.email}
-              onChange={handleChange("email")}
-              required
-            />
+            <span>Apellido Paterno</span>
+            <input value={formData.apellido_paterno} onChange={handleChange("apellido_paterno")} required />
           </label>
 
           <label className="field-group">
-            <span>Registro</span>
-            <input value={formData.code} onChange={handleChange("code")} required />
+            <span>Apellido Materno</span>
+            <input value={formData.apellido_materno} onChange={handleChange("apellido_materno")} />
           </label>
 
           <label className="field-group">
-            <span>Rol</span>
-            <select
-              value={formData.role}
-              onChange={(event) =>
-                setFormData((current) => ({
-                  ...current,
-                  role: event.target.value,
-                  faculty: event.target.value === "STUDENT" ? current.faculty : ""
-                }))
-              }
-              required
-            >
-              <option value="ADMINISTRATIVE">Administrativo</option>
-              <option value="STUDENT">Estudiante</option>
-              <option value="TEACHER">Docente</option>
-            </select>
-          </label>
-
-          {requiresFaculty && (
-            <label className="field-group">
-              <span>Carrera</span>
-              <select value={formData.faculty} onChange={handleChange("faculty")} required>
-                <option value="">Selecciona una carrera</option>
-                {CAREER_OPTIONS.map((career) => (
-                  <option key={career} value={career}>
-                    {career}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="field-group">
-            <span>Telefono</span>
-            <input value={formData.phone} onChange={handleChange("phone")} required />
+            <span>Carnet</span>
+            <input value={formData.carnet} onChange={handleChange("carnet")} required />
           </label>
 
           <label className="field-group">
@@ -178,8 +114,8 @@ function Profile() {
             <input
               type="password"
               placeholder="Deja vacio si no deseas cambiarla"
-              value={formData.password}
-              onChange={handleChange("password")}
+              value={formData.contrasena}
+              onChange={handleChange("contrasena")}
             />
           </label>
         </div>
@@ -201,3 +137,4 @@ function Profile() {
 }
 
 export default Profile;
+

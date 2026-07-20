@@ -1,13 +1,9 @@
 # HEARTBEAT
 
-- Foco actual: Auditoría de arquitectura frontend y backend bajo estándares de calidad ISO/IEC 25010 (Correctitud, Fiabilidad, Facilidad de uso, Eficiencia, Seguridad, Mantenibilidad, Portabilidad).
-- Ultimo avance: Se implementaron optimizaciones clave:
-  1. UI/UX: Validación visual de placa en tiempo real en frontend, spinners individuales en refrescos de tablas y paginación compacta.
-  2. Eficiencia/BD: Índices compuestos en historiales de accesos y escaneos de placas, además de límite de resolución estática (`MAX_STATIC_DIM = 1280`) en EasyOCR backend para evitar picos de memoria.
-  3. Mantenibilidad: Desacoplamiento de `UploadPlate.jsx` extrayendo modales de flujo a componentes modulares. Memoización de tablas con `React.memo` y `useCallback` en `Users.jsx`.
-  4. Seguridad/Portabilidad: Script periódico de purga de tokens expirados en BD y centralización de tareas comunes en un Makefile portable.
-- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz para despliegue rápido; submódulos en frontend/src/components/UploadPlate/ y scripts en backend/app/services/.
-- Inventario confirmado: La suite completa de 23 pruebas de verificación y build del frontend compila y pasa al 100%.
-- Bloqueos: Ninguno.
-- Proximo paso: Integración del sistema con sensores o cámaras reales y monitoreo de producción.
-- Estado del Alpha: Pipeline OCR local optimizado, control de accesos segregado por rol, y suite frontend totalmente robusta y memoizada.
+- Foco actual: Consolidación del sistema de roles (ADMINISTRADOR, OPERADOR, DISPOSITIVO, USUARIO) y del flujo de registro de accesos vehiculares manuales y automáticos.
+- Ultimo avance: Se completó la separación de flujos por rol en el frontend (Vehicles.jsx, AccessLogs.jsx, UploadPlate.jsx, Sidebar, AppRoutes). El rol DISPOSITIVO tiene acceso exclusivo a la vista de cámara en vivo, con registro automático de Ingreso/Salida inferido por el estado del campus. El endpoint `/api/v1/access-logs/auto` ahora acepta `direction` explícita del operador además de inferirla. Se corrigió el error 422 del formulario de acceso manual (endpoint incorrecto), el mensaje vacío del ConfirmModal (clave `message` vs `mensaje`) y se añadió búsqueda de placa en tiempo real en el modal de acceso manual.
+- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz; submódulos en frontend/src/components/ y páginas en frontend/src/pages/.
+- Inventario confirmado: Suite completa de 23 pruebas unitarias y empaquetado de producción Vite completados correctamente (100% exitoso).
+- Bloqueos: `CAM-004` y `OCR-PHYSICAL-001` siguen bloqueados por hardware físico real. `REPO-001` pendiente de repositorio remoto vacío.
+- Proximo paso: Integrar y calibrar con cámaras IP en el entorno físico de la universidad. Validar flujo completo DISPOSITIVO con login → vista de cámara → registro automático de acceso.
+- Estado del Alpha: Roles diferenciados, pipeline OCR optimizado, accesos manuales y automáticos funcionales, Dashboard premium unificado, gestión de vehículos por admin/operador completa.

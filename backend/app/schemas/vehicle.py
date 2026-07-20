@@ -4,26 +4,41 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.ai.validators import normalize_plate_text, validate_bolivian_plate
-from app.db.models import RecordStatusEnum, VehicleTypeEnum
-from app.schemas.person import PersonCreate, PersonResponse
+from app.schemas.auth import UsuarioResponse
 
 
-class VehicleOwnerPayload(PersonCreate):
-    pass
+class MarcaResponse(BaseModel):
+    id: UUID
+    nombre: str
+    creado_el: datetime
+    
+    model_config = ConfigDict(from_attributes=True)
 
 
-class VehicleBase(BaseModel):
-    license_plate: str = Field(min_length=5, max_length=20)
-    brand: str = Field(min_length=2, max_length=100)
-    model: str = Field(min_length=1, max_length=100)
+class TipoVehiculoResponse(BaseModel):
+    id: UUID
+    nombre: str
+    creado_el: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MarcaCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=100)
+
+
+class TipoVehiculoCreate(BaseModel):
+    nombre: str = Field(min_length=1, max_length=100)
+
+
+class VehiculoBase(BaseModel):
+    placa: str = Field(min_length=5, max_length=20)
     color: str = Field(min_length=1, max_length=100)
-    vehicle_photo_path: str | None = None
-    vehicle_type: VehicleTypeEnum = VehicleTypeEnum.CAR
-    year: str | None = Field(default=None, max_length=20)
-    observation: str | None = None
-    status: RecordStatusEnum = RecordStatusEnum.ACTIVE
+    marca_id: UUID
+    tipo_vehiculo_id: UUID
+    propietario_usuario_id: UUID
 
-    @field_validator("license_plate")
+    @field_validator("placa")
     @classmethod
     def validate_license_plate(cls, value: str) -> str:
         normalized = normalize_plate_text(value)
@@ -32,18 +47,17 @@ class VehicleBase(BaseModel):
         return normalized
 
 
-class VehicleCreate(VehicleBase):
-    owner_id: UUID | None = None
-    registered_by_user_id: UUID | None = None
-    owner: VehicleOwnerPayload | None = None
+class VehiculoCreate(VehiculoBase):
+    pass
 
 
-class VehicleResponse(VehicleBase):
+class VehiculoResponse(VehiculoBase):
     id: UUID
-    owner_id: UUID
-    registered_by_user_id: UUID | None = None
-    created_at: datetime
-    updated_at: datetime
-    owner: PersonResponse | None = None
+    esta_activo: bool
+    creado_el: datetime
+    actualizado_el: datetime
+    marca: MarcaResponse | None = None
+    tipo: TipoVehiculoResponse | None = None
+    propietario: UsuarioResponse | None = None
 
     model_config = ConfigDict(from_attributes=True)

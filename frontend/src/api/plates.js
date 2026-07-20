@@ -40,38 +40,22 @@ export async function getDashboardSummary(registeredByUserId) {
   return data;
 }
 
+export async function getVehicles(propietarioUsuarioId) {
+  const { data } = await apiClient.get("/v1/vehicles/", {
+    params: {
+      propietario_usuario_id: propietarioUsuarioId
+    }
+  });
+  return data;
+}
+
 export async function createVehicle(payload) {
   const { data } = await apiClient.post("/v1/vehicles/", payload);
   return data;
 }
 
-export async function createVehicleWithPhoto(payload, photoFile) {
-  const formData = new FormData();
-  formData.append("vehicle_data", JSON.stringify(payload));
-  if (photoFile) {
-    formData.append("photo", photoFile);
-  }
-
-  const { data } = await apiClient.post("/v1/vehicles/with-photo", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data"
-    }
-  });
-  return data;
-}
-
-export async function updateVehicleWithPhoto(vehicleId, payload, photoFile) {
-  const formData = new FormData();
-  formData.append("vehicle_data", JSON.stringify(payload));
-  if (photoFile) {
-    formData.append("photo", photoFile);
-  }
-
-  const { data } = await apiClient.put(`/v1/vehicles/${vehicleId}/with-photo`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data"
-    }
-  });
+export async function updateVehicle(vehicleId, payload) {
+  const { data } = await apiClient.put(`/v1/vehicles/${vehicleId}`, payload);
   return data;
 }
 
@@ -97,4 +81,42 @@ export async function createAccessLog(payload) {
 export async function createAutoAccessLog(payload) {
   const { data } = await apiClient.post("/v1/access-logs/auto", payload);
   return data;
+}
+
+export async function getBrands() {
+  const { data } = await apiClient.get("/v1/vehicles/brands");
+  return data;
+}
+
+export async function createBrand(payload) {
+  const { data } = await apiClient.post("/v1/vehicles/brands", payload);
+  return data;
+}
+
+export async function updateBrand(brandId, payload) {
+  const { data } = await apiClient.put(`/v1/vehicles/brands/${brandId}`, payload);
+  return data;
+}
+
+export async function deleteBrand(brandId) {
+  await apiClient.delete(`/v1/vehicles/brands/${brandId}`);
+}
+
+export async function getVehicleTypes() {
+  const { data } = await apiClient.get("/v1/vehicles/types");
+  return data;
+}
+
+export async function createVehicleType(payload) {
+  const { data } = await apiClient.post("/v1/vehicles/types", payload);
+  return data;
+}
+
+export async function updateVehicleType(typeId, payload) {
+  const { data } = await apiClient.put(`/v1/vehicles/types/${typeId}`, payload);
+  return data;
+}
+
+export async function deleteVehicleType(typeId) {
+  await apiClient.delete(`/v1/vehicles/types/${typeId}`);
 }

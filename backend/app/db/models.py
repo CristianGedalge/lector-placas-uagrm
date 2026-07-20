@@ -10,9 +10,10 @@ from app.db.session import Base
 
 
 class RoleEnum(str, enum.Enum):
-    STUDENT = "STUDENT"
-    TEACHER = "TEACHER"
-    ADMIN = "ADMIN"
+    ADMINISTRADOR = "ADMINISTRADOR"
+    OPERADOR = "OPERADOR"
+    DISPOSITIVO = "DISPOSITIVO"
+    USUARIO = "USUARIO"
 
 
 class RecordStatusEnum(str, enum.Enum):
@@ -20,156 +21,154 @@ class RecordStatusEnum(str, enum.Enum):
     INACTIVE = "INACTIVE"
 
 
-class AuthRoleEnum(str, enum.Enum):
-    ADMIN = "ADMIN"
-    OPERATOR = "OPERATOR"
-    DISPOSITIVO = "DISPOSITIVO"
+class TipoAccesoEnum(str, enum.Enum):
+    ENTRADA = "ENTRADA"
+    SALIDA = "SALIDA"
 
 
-class VehicleTypeEnum(str, enum.Enum):
-    CAR = "CAR"
-    MOTORCYCLE = "MOTORCYCLE"
-    VAN = "VAN"
-    TRUCK = "TRUCK"
-    OTHER = "OTHER"
-
-
-class ScanStatusEnum(str, enum.Enum):
-    DETECTED = "DETECTED"
-    LOW_CONFIDENCE = "LOW_CONFIDENCE"
+class EstadoEscaneoEnum(str, enum.Enum):
+    DETECTADO = "DETECTADO"
+    BAJA_CONFIANZA = "BAJA_CONFIANZA"
     ERROR = "ERROR"
     MANUAL = "MANUAL"
 
 
-class NotificationTypeEnum(str, enum.Enum):
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ALERT = "ALERT"
+class UbicacionVehiculoEnum(str, enum.Enum):
+    DENTRO = "DENTRO"
+    FUERA = "FUERA"
 
 
-class AccessDirectionEnum(str, enum.Enum):
-    ENTRY = "ENTRY"
-    EXIT = "EXIT"
-
-
-class UniversityPerson(Base):
-    __tablename__ = "university_persons"
+class Usuario(Base):
+    __tablename__ = "usuarios"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    code = Column(String, unique=True, index=True, nullable=False)
-    role = Column(Enum(RoleEnum), nullable=False)
-    full_name = Column(String, nullable=False)
-    document_id = Column(String, unique=True, index=True, nullable=True)
-    faculty = Column(String, nullable=True)
-    contact_info = Column(String, nullable=True)
-    status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    nombre = Column(String, nullable=False)
+    apellido_paterno = Column(String, nullable=False)
+    apellido_materno = Column(String, nullable=True)
+    carnet = Column(String, unique=True, index=True, nullable=False)
+    contrasena_hash = Column(String, nullable=False)
+    rol = Column(Enum(RoleEnum), default=RoleEnum.USUARIO, nullable=False)
+    esta_activo = Column(Boolean, default=True, nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    vehicles = relationship("Vehicle", back_populates="owner")
-    auth_users = relationship("AuthUser", back_populates="university_person")
-
-
-class AuthUser(Base):
-    __tablename__ = "auth_users"
-
-    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    full_name = Column(String, nullable=False)
-    email = Column(String, unique=True, index=True, nullable=False)
-    phone = Column(String, nullable=True)
-    password_hash = Column(String, nullable=False)
-    role = Column(Enum(AuthRoleEnum), default=AuthRoleEnum.OPERATOR, nullable=False)
-    status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    university_person_id = Column(Uuid, ForeignKey("university_persons.id"), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
-
-    university_person = relationship("UniversityPerson", back_populates="auth_users")
-    registered_vehicles = relationship("Vehicle", back_populates="registered_by_user")
-    plate_scans = relationship("PlateScan", back_populates="scanned_by_user")
-    notifications = relationship("Notification", back_populates="user")
+    vehiculos = relationship("Vehiculo", back_populates="propietario")
+    accesos_gestionados = relationship("Acceso", back_populates="operador")
 
 
-class Vehicle(Base):
-    __tablename__ = "vehicles"
+class Marca(Base):
+    __tablename__ = "marcas"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    license_plate = Column(String, unique=True, index=True, nullable=False)
-    brand = Column(String, nullable=False)
-    model = Column(String, nullable=False)
+    nombre = Column(String, unique=True, nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class TipoVehiculo(Base):
+    __tablename__ = "tipos_vehiculo"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    nombre = Column(String, unique=True, nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class Vehiculo(Base):
+    __tablename__ = "vehiculos"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    placa = Column(String, unique=True, index=True, nullable=False)
     color = Column(String, nullable=False)
-    vehicle_photo_path = Column(String, nullable=True)
-    vehicle_type = Column(Enum(VehicleTypeEnum), default=VehicleTypeEnum.CAR, nullable=False)
-    year = Column(String, nullable=True)
-    observation = Column(Text, nullable=True)
-    status = Column(Enum(RecordStatusEnum), default=RecordStatusEnum.ACTIVE, nullable=False)
-    owner_id = Column(Uuid, ForeignKey("university_persons.id"), nullable=False)
-    registered_by_user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    marca_id = Column(Uuid, ForeignKey("marcas.id"), nullable=False)
+    tipo_vehiculo_id = Column(Uuid, ForeignKey("tipos_vehiculo.id"), nullable=False)
+    propietario_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    esta_activo = Column(Boolean, default=True, nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    owner = relationship("UniversityPerson", back_populates="vehicles")
-    registered_by_user = relationship("AuthUser", back_populates="registered_vehicles")
-    scans = relationship("PlateScan", back_populates="vehicle")
-
-
-class PlateScan(Base):
-    __tablename__ = "plate_scans"
-
-    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    image_path = Column(String, nullable=True)
-    detected_plate = Column(String, nullable=True)
-    normalized_plate = Column(String, nullable=True)
-    confidence = Column(Float, nullable=True)
-    scan_status = Column(Enum(ScanStatusEnum), nullable=False)
-    manual_correction = Column(String, nullable=True)
-    vehicle_id = Column(Uuid, ForeignKey("vehicles.id"), nullable=True)
-    scanned_by_user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=True)
-    observations = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    vehicle = relationship("Vehicle", back_populates="scans")
-    scanned_by_user = relationship("AuthUser", back_populates="plate_scans")
-    notifications = relationship("Notification", back_populates="plate_scan")
+    marca = relationship("Marca")
+    tipo = relationship("TipoVehiculo")
+    propietario = relationship("Usuario", back_populates="vehiculos")
+    escaneos = relationship("Escaneado", back_populates="vehiculo")
+    estado_campus = relationship("EstadoCampus", back_populates="vehiculo", uselist=False)
 
 
-class Notification(Base):
-    __tablename__ = "notifications"
+class EstadoCampus(Base):
+    __tablename__ = "estado_campus"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    title_message = Column(String, nullable=False)
-    notification_type = Column(Enum(NotificationTypeEnum), default=NotificationTypeEnum.INFO, nullable=False)
-    is_read = Column(Boolean, default=False, nullable=False)
-    user_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=False)
-    plate_scan_id = Column(Uuid, ForeignKey("plate_scans.id"), nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), unique=True, nullable=False)
+    estado = Column(Enum(UbicacionVehiculoEnum), nullable=False)
+    ultimo_acceso_id = Column(Uuid, ForeignKey("accesos.id"), nullable=False)
+    actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
 
-    user = relationship("AuthUser", back_populates="notifications")
-    plate_scan = relationship("PlateScan", back_populates="notifications")
+    vehiculo = relationship("Vehiculo", back_populates="estado_campus")
+    ultimo_acceso = relationship("Acceso", foreign_keys=[ultimo_acceso_id])
 
 
-class RevokedToken(Base):
-    __tablename__ = "revoked_tokens"
+class TipoDispositivo(Base):
+    __tablename__ = "tipos_dispositivo"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    token = Column(String, unique=True, index=True, nullable=False)
-    revoked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    nombre = Column(String, nullable=False) # E.g. "Entrada", "Salida"
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
-class AccessLog(Base):
-    __tablename__ = "access_logs"
+class Dispositivo(Base):
+    __tablename__ = "dispositivos"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    vehicle_id = Column(Uuid, ForeignKey("vehicles.id"), nullable=False)
-    direction = Column(Enum(AccessDirectionEnum), nullable=False)
-    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    zone = Column(String, nullable=False)
-    operator_id = Column(Uuid, ForeignKey("auth_users.id"), nullable=False)
-    plate_scan_id = Column(Uuid, ForeignKey("plate_scans.id"), nullable=True)
-    notes = Column(Text, nullable=True)
+    nombre = Column(String, nullable=False)
+    ubicacion = Column(String, nullable=False)
+    tipo_dispositivo_id = Column(Uuid, ForeignKey("tipos_dispositivo.id"), nullable=False)
+    esta_activo = Column(Boolean, default=True, nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
-    vehicle = relationship("Vehicle")
-    operator = relationship("AuthUser")
-    plate_scan = relationship("PlateScan")
+    tipo = relationship("TipoDispositivo")
+    escaneos = relationship("Escaneado", back_populates="dispositivo")
+
+
+class Escaneado(Base):
+    __tablename__ = "escaneados"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    ruta_imagen = Column(String, nullable=True)
+    placa_detectada = Column(String, nullable=True)
+    placa_normalizada = Column(String, index=True, nullable=True)
+    confianza = Column(Float, nullable=True)
+    estado = Column(Enum(EstadoEscaneoEnum), nullable=False, default=EstadoEscaneoEnum.DETECTADO)
+    dispositivo_id = Column(Uuid, ForeignKey("dispositivos.id"), nullable=True)
+    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), nullable=True)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
+
+    dispositivo = relationship("Dispositivo", back_populates="escaneos")
+    vehiculo = relationship("Vehiculo", back_populates="escaneos")
+    acceso = relationship("Acceso", back_populates="escaneado", uselist=False)
+    acceso_visitante = relationship("AccesoVisitante", back_populates="escaneado", uselist=False)
+
+
+class AccesoVisitante(Base):
+    __tablename__ = "accesos_visitantes"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    nombre_conductor = Column(String, nullable=False)
+    carnet_conductor = Column(String, index=True, nullable=False)
+    motivo = Column(String, nullable=True)
+    institucion_empresa = Column(String, nullable=True)
+    escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False)
+
+    escaneado = relationship("Escaneado", back_populates="acceso_visitante")
+
+
+class Acceso(Base):
+    __tablename__ = "accesos"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tipo_acceso = Column(Enum(TipoAccesoEnum), nullable=False)
+    ubicacion = Column(String, nullable=False)
+    escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False)
+    operador_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
+
+    escaneado = relationship("Escaneado", back_populates="acceso")
+    operador = relationship("Usuario", back_populates="accesos_gestionados")

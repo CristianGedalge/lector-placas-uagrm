@@ -7,15 +7,15 @@ import { useAuth } from "../hooks/useAuth";
 function Login() {
   const { user, authLoading, signInLoading, signIn } = useAuth();
   const [formData, setFormData] = useState({
-    email: "",
-    password: ""
+    carnet: "",
+    contrasena: ""
   });
   const [error, setError] = useState("");
 
   if (authLoading) {
     return (
       <main className="auth-screen">
-        <Loader label="Verificando sesion..." />
+        <Loader label="Verificando sesión..." />
       </main>
     );
   }
@@ -31,7 +31,7 @@ function Login() {
     try {
       await signIn(formData);
     } catch (submitError) {
-      setError(submitError.message || "No se pudo iniciar sesion.");
+      setError(submitError.message || "No se pudo iniciar sesión.");
       console.error(submitError);
     }
   };
@@ -41,22 +41,22 @@ function Login() {
       <form className="card auth-card auth-card-compact" onSubmit={handleSubmit}>
         <div>
           <p className="eyebrow">SIARP</p>
-          <h2>Iniciar sesion</h2>
+          <h2>Iniciar sesión</h2>
           <p className="muted-text">
-            Usa tus credenciales para entrar al panel administrativo.
+            Ingresa tu Registro / Carnet de Identidad y contraseña para acceder.
           </p>
         </div>
 
         <label className="field-group">
-          <span>Correo institucional</span>
+          <span>Registro / Carnet de Identidad</span>
           <input
-            type="email"
-            placeholder="admin@siarp.com"
-            value={formData.email}
+            type="text"
+            placeholder="202400123"
+            value={formData.carnet}
             onChange={(event) =>
               setFormData((current) => ({
                 ...current,
-                email: event.target.value
+                carnet: event.target.value
               }))
             }
             required
@@ -64,15 +64,15 @@ function Login() {
         </label>
 
         <label className="field-group">
-          <span>Contrasena</span>
+          <span>Contraseña</span>
           <input
             type="password"
-            placeholder="Ingresa tu contrasena"
-            value={formData.password}
+            placeholder="Ingresa tu contraseña"
+            value={formData.contrasena}
             onChange={(event) =>
               setFormData((current) => ({
                 ...current,
-                password: event.target.value
+                contrasena: event.target.value
               }))
             }
             required
@@ -86,7 +86,7 @@ function Login() {
         </button>
 
         <p className="helper-text">
-          No tienes cuenta?{" "}
+          ¿No tienes cuenta?{" "}
           <Link className="text-link" to="/registro">
             Crear cuenta
           </Link>

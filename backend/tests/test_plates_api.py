@@ -33,7 +33,7 @@ class PlatesAPITests(unittest.TestCase):
         )
 
     def test_analyze_endpoint_keeps_response_contract(self):
-        expected = {
+        mock_pipeline_output = {
             "status": "DETECTED",
             "detected_plate": "1234-ABC",
             "normalized_plate": "1234ABC",
@@ -49,24 +49,35 @@ class PlatesAPITests(unittest.TestCase):
             "plate_bbox": None,
             "raw_bboxes": None,
         }
+        expected_response = {
+            "estado": "DETECTADO",
+            "placa_detectada": "1234-ABC",
+            "placa_normalizada": "1234ABC",
+            "es_formato_valido": True,
+            "confianza": 0.91,
+            "ruta_imagen": "data:image/jpeg;base64,AA==",
+            "mensaje": None,
+            "plate_bbox": None,
+            "raw_bboxes": None,
+        }
         image = np.zeros((20, 40, 3), dtype=np.uint8)
         ok, encoded = cv2.imencode(".jpg", image)
         self.assertTrue(ok)
-        with patch.object(plates, "analyze_plate", return_value=expected):
+        with patch.object(plates, "analyze_plate", return_value=mock_pipeline_output):
             response = self.client.post(
                 "/api/v1/plates/analyze",
                 files={"file": ("plate.jpg", encoded.tobytes(), "image/jpeg")},
             )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), expected)
+        self.assertEqual(response.json(), expected_response)
 
     def test_schema_accepts_ocr_supervision_backend(self):
         response = PlateAnalysisResponse(
-            status="LOW_CONFIDENCE",
-            detection_backend="OCR_SUPERVISION",
-            requires_manual_review=True,
+            estado="BAJA_CONFIANZA",
+            placa_detectada="1234ABC",
+            es_formato_valido=True,
         )
-        self.assertEqual(response.detection_backend, "OCR_SUPERVISION")
+        self.assertEqual(response.estado, "BAJA_CONFIANZA")
 
 
 if __name__ == "__main__":

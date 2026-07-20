@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import UploadImage from "../components/UploadImage";
 import {
-  createVehicleWithPhoto,
+  createVehicle,
   lookupVehicleByPlate,
   uploadPlateImage,
   createAccessLog,
-  createAutoAccessLog
+  createAutoAccessLog,
+  getBrands,
+  getVehicleTypes
 } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import { formatPlate } from "../utils/formatters";
@@ -35,7 +37,7 @@ const vehicleInitialState = {
 
 function UploadPlate() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "ADMINISTRATIVE" || user?.role === "ADMIN";
+  const isAdmin = user?.rol === "ADMINISTRATIVE" || user?.rol === "ADMINISTRADOR";
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -70,7 +72,7 @@ function UploadPlate() {
   const [cameraError, setCameraError] = useState("");
   const [analysisPreview, setAnalysisPreview] = useState(null);
   const [scanError, setScanError] = useState("");
-  const [activeTab, setActiveTab] = useState(null); // null | "image" | "camera"
+  const [activeTab, setActiveTab] = useState(user?.rol === "DISPOSITIVO" ? "camera" : null); // null | "image" | "camera"
   const [activeModal, setActiveModal] = useState(null); // null | "file" | "snapshot"
 
   useEffect(() => {
@@ -146,7 +148,7 @@ function UploadPlate() {
         
       } catch (autoErr) {
         setAccessError(
-          autoErr?.response?.data?.detail || autoErr.message || "No se pudo auto-registrar el acceso."
+          autoErr?.response?.data?.detail || autoErr.mensaje || "No se pudo auto-registrar el acceso."
         );
         // Fallback: si falla el registro automático, mostrar el modal manual
         setActiveModal("ingreso_egreso");
@@ -199,19 +201,19 @@ function UploadPlate() {
       const analysis = await uploadPlateImage(formData);
       setAnalysisPreview(analysis);
 
-      if (analysis?.normalized_plate) {
+      if (analysis?.placa_normalizada) {
         // OCR exitoso con formato boliviano confirmado
-        setManualPlate(analysis.normalized_plate);
-        await handleLookupPlate(analysis.normalized_plate);
-      } else if (analysis?.detected_plate) {
+        setManualPlate(analysis.placa_normalizada);
+        await handleLookupPlate(analysis.placa_normalizada);
+      } else if (analysis?.placa_detectada) {
         // OCR detectó texto pero no cumple el formato: rellenar campo para corrección manual
-        const rawClean = analysis.detected_plate.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+        const rawClean = analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase();
         setManualPlate(rawClean);
         setLookupError(
-          `OCR detecto: "${analysis.detected_plate}" — ${analysis.message || "Verifica y corrige el numero de placa si es necesario."}`
+          `OCR detecto: "${analysis.placa_detectada}" — ${analysis.mensaje || "Verifica y corrige el numero de placa si es necesario."}`
         );
       } else {
-        setLookupError(analysis?.message || "No se pudo detectar una placa en la imagen.");
+        setLookupError(analysis?.mensaje || "No se pudo detectar una placa en la imagen.");
       }
     } catch (error) {
       setLookupError(error?.response?.data?.detail || "No se pudo analizar la imagen.");
@@ -272,8 +274,8 @@ function UploadPlate() {
         formData.append("file", blob, "frame.jpg");
         const analysis = await uploadPlateImage(formData, true, controller.signal);
 
-        const normalizedText = analysis.detected_plate
-          ? analysis.detected_plate.replace(/[^A-Z0-9]/gi, "").toUpperCase()
+        const normalizedText = analysis.placa_detectada
+          ? analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase()
           : null;
 
         // --- Sistema de votación por consenso ---
@@ -288,9 +290,9 @@ function UploadPlate() {
           voteMap.set(normalizedText, {
             count: newCount,
             bbox: analysis.plate_bbox,
-            score: analysis.ocr_confidence,
-            text: analysis.detected_plate,
-            isValidFormat: analysis.is_valid_bolivian_format,
+            score: analysis.confianza,
+            text: analysis.placa_detectada,
+            isValidFormat: analysis.es_formato_valido,
             lastFrameTs: now,
           });
 
@@ -330,8 +332,8 @@ function UploadPlate() {
             const entry = voteMap.get(normalizedText);
             newBoxes.push({
               bbox: [x1, y1, x2 - x1, y2 - y1],
-              score: analysis.ocr_confidence,
-              text: analysis.detected_plate,
+              score: analysis.confianza,
+              text: analysis.placa_detectada,
               votes: entry ? entry.count : 1,
               votesNeeded: VOTES_NEEDED,
               type: 'plate-voting',
@@ -356,7 +358,7 @@ function UploadPlate() {
     } catch (e) {
       if (e.name !== "AbortError" && e.code !== "ERR_CANCELED") {
         console.error("Error en detectFrame:", e);
-        setScanError(e.response?.data?.detail || e.message || String(e));
+        setScanError(e.response?.data?.detail || e.mensaje || String(e));
         setTrackingBoxes([]);
       }
     } finally {
@@ -424,11 +426,11 @@ function UploadPlate() {
       setLookupLoading(true);
       const analysis = await uploadPlateImage(formData);
       setAnalysisPreview(analysis);
-      if (analysis?.normalized_plate) {
-        setManualPlate(analysis.normalized_plate);
-        await handleLookupPlate(analysis.normalized_plate);
+      if (analysis?.placa_normalizada) {
+        setManualPlate(analysis.placa_normalizada);
+        await handleLookupPlate(analysis.placa_normalizada);
       } else {
-        setLookupError(analysis?.message || "No se pudo detectar una placa desde la camara.");
+        setLookupError(analysis?.mensaje || "No se pudo detectar una placa desde la camara.");
       }
     } catch (error) {
       setLookupError(error?.response?.data?.detail || "No se pudo analizar la captura.");
@@ -451,7 +453,7 @@ function UploadPlate() {
         owner: ownerForm
       };
 
-      const createdVehicle = await createVehicleWithPhoto(payload, vehiclePhoto);
+      const createdVehicle = await createVehicle(payload);
       setLookupResult(createdVehicle);
       setRegisterSuccess("Vehiculo registrado correctamente.");
       setVehicleForm(vehicleInitialState);
@@ -464,7 +466,7 @@ function UploadPlate() {
       setAccessError("");
       setAccessNotes("");
     } catch (error) {
-      setRegisterError(error.message || "Error al guardar el vehiculo.");
+      setRegisterError(error.mensaje || "Error al guardar el vehiculo.");
     }
   };
 
@@ -490,7 +492,7 @@ function UploadPlate() {
       }, 4000);
     } catch (err) {
       setAccessError(
-        err?.response?.data?.detail || err.message || "No se pudo registrar el acceso."
+        err?.response?.data?.detail || err.mensaje || "No se pudo registrar el acceso."
       );
     } finally {
       setRegisteringAccess(false);
@@ -756,66 +758,70 @@ function UploadPlate() {
                     justifyContent: "space-between",
                     zIndex: 20
                   }}>
-                    <button
-                      type="button"
-                      onClick={() => { setActiveTab(null); }}
-                      style={{
-                        background: "rgba(0, 0, 0, 0.7)",
-                        color: "white",
-                        border: "1px solid rgba(255, 255, 255, 0.25)",
-                        padding: "0.75rem 1.25rem",
-                        borderRadius: "10px",
-                        fontSize: "0.95rem",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="19" y1="12" x2="5" y2="12"></line>
-                        <polyline points="12 19 5 12 12 5"></polyline>
-                      </svg>
-                      Volver
-                    </button>
+                    {user?.rol !== "DISPOSITIVO" && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveTab(null); }}
+                        style={{
+                          background: "rgba(0, 0, 0, 0.7)",
+                          color: "white",
+                          border: "1px solid rgba(255, 255, 255, 0.25)",
+                          padding: "0.75rem 1.25rem",
+                          borderRadius: "10px",
+                          fontSize: "0.95rem",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="19" y1="12" x2="5" y2="12"></line>
+                          <polyline points="12 19 5 12 12 5"></polyline>
+                        </svg>
+                        Volver
+                      </button>
+                    )}
 
-                    <button
-                      type="button"
-                      onClick={() => { setActiveModal("manual_lookup"); }}
-                      style={{
-                        background: "rgba(0, 0, 0, 0.7)",
-                        color: "white",
-                        border: "1px solid rgba(255, 255, 255, 0.25)",
-                        padding: "0.75rem 1.25rem",
-                        borderRadius: "10px",
-                        fontSize: "0.95rem",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        transition: "all 0.2s"
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
-                      onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-                        <line x1="6" y1="8" x2="6" y2="8"></line>
-                        <line x1="10" y1="8" x2="10" y2="8"></line>
-                        <line x1="14" y1="8" x2="14" y2="8"></line>
-                        <line x1="18" y1="8" x2="18" y2="8"></line>
-                        <line x1="8" y1="12" x2="8" y2="12"></line>
-                        <line x1="12" y1="12" x2="12" y2="12"></line>
-                        <line x1="16" y1="12" x2="16" y2="12"></line>
-                        <line x1="7" y1="16" x2="17" y2="16"></line>
-                      </svg>
-                      Registro Manual
-                    </button>
+                    {user?.rol !== "DISPOSITIVO" && (
+                      <button
+                        type="button"
+                        onClick={() => { setActiveModal("manual_lookup"); }}
+                        style={{
+                          background: "rgba(0, 0, 0, 0.7)",
+                          color: "white",
+                          border: "1px solid rgba(255, 255, 255, 0.25)",
+                          padding: "0.75rem 1.25rem",
+                          borderRadius: "10px",
+                          fontSize: "0.95rem",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.5rem",
+                          transition: "all 0.2s"
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.9)"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "rgba(0, 0, 0, 0.7)"}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                          <line x1="6" y1="8" x2="6" y2="8"></line>
+                          <line x1="10" y1="8" x2="10" y2="8"></line>
+                          <line x1="14" y1="8" x2="14" y2="8"></line>
+                          <line x1="18" y1="8" x2="18" y2="8"></line>
+                          <line x1="8" y1="12" x2="8" y2="12"></line>
+                          <line x1="12" y1="12" x2="12" y2="12"></line>
+                          <line x1="16" y1="12" x2="16" y2="12"></line>
+                          <line x1="7" y1="16" x2="17" y2="16"></line>
+                        </svg>
+                        Registro Manual
+                      </button>
+                    )}
                   </div>
 
                   <div style={{ position: "absolute", bottom: "25px", left: "0", right: "0", textAlign: "center", zIndex: 20 }}>
@@ -982,18 +988,18 @@ function UploadPlate() {
             </div>
 
             {/* Resultados del análisis OCR */}
-            {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
+            {analysisPreview && (analysisPreview.ruta_imagen || analysisPreview.plate_crop) && (
               <div className="analysis-preview" style={{ marginTop: "1.5rem" }}>
                 <p className="eyebrow">
                   {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Detección fallida"}
                 </p>
                 <div className="analysis-images">
-                  {analysisPreview.annotated_image && (
+                  {analysisPreview.ruta_imagen && (
                     <div>
                       <p className="muted-text">Imagen analizada</p>
                       <img
                         className="vehicle-photo"
-                        src={analysisPreview.annotated_image}
+                        src={analysisPreview.ruta_imagen}
                         alt="Imagen anotada por OCR"
                       />
                     </div>
@@ -1009,10 +1015,10 @@ function UploadPlate() {
                     </div>
                   )}
                 </div>
-                {analysisPreview.detected_plate && (
+                {analysisPreview.placa_detectada && (
                   <p className="muted-text" style={{ marginTop: "1rem" }}>
-                    Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
-                    {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
+                    Texto OCR: <strong>{analysisPreview.placa_detectada}</strong>
+                    {" "}(confianza: {Math.round((analysisPreview.confianza || 0) * 100)}%)
                   </p>
                 )}
               </div>
@@ -1163,18 +1169,18 @@ function UploadPlate() {
             </div>
 
             {/* Resultados del análisis OCR */}
-            {analysisPreview && (analysisPreview.annotated_image || analysisPreview.plate_crop) && (
+            {analysisPreview && (analysisPreview.ruta_imagen || analysisPreview.plate_crop) && (
               <div className="analysis-preview" style={{ marginTop: "1.5rem" }}>
                 <p className="eyebrow">
                   {analysisPreview.status === "DETECTED" ? "✅ Placa detectada" : "⚠️ Detección fallida"}
                 </p>
                 <div className="analysis-images">
-                  {analysisPreview.annotated_image && (
+                  {analysisPreview.ruta_imagen && (
                     <div>
                       <p className="muted-text">Imagen analizada</p>
                       <img
                         className="vehicle-photo"
-                        src={analysisPreview.annotated_image}
+                        src={analysisPreview.ruta_imagen}
                         alt="Imagen anotada por OCR"
                       />
                     </div>
@@ -1190,10 +1196,10 @@ function UploadPlate() {
                     </div>
                   )}
                 </div>
-                {analysisPreview.detected_plate && (
+                {analysisPreview.placa_detectada && (
                   <p className="muted-text" style={{ marginTop: "1rem" }}>
-                    Texto OCR: <strong>{analysisPreview.detected_plate}</strong>
-                    {" "}(confianza: {Math.round((analysisPreview.ocr_confidence || 0) * 100)}%)
+                    Texto OCR: <strong>{analysisPreview.placa_detectada}</strong>
+                    {" "}(confianza: {Math.round((analysisPreview.confianza || 0) * 100)}%)
                   </p>
                 )}
               </div>
@@ -1230,3 +1236,5 @@ function UploadPlate() {
 }
 
 export default UploadPlate;
+
+

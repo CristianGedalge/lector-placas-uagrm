@@ -5,30 +5,20 @@ import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
 import { registerUser } from "../api/auth";
 
-const CAREER_OPTIONS = [
-  "Ingenieria en Redes",
-  "Ingenieria Informatica",
-  "Ingenieria en Sistemas",
-  "Ingenieria Robotica"
-];
-
 function Register() {
   const { user, signIn, authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [formData, setFormData] = useState({
-    full_name: "",
-    email: "",
-    code: "",
-    role: "STUDENT",
-    faculty: "",
-    contact_info: "",
-    password: "",
+    nombre: "",
+    apellido_paterno: "",
+    apellido_materno: "",
+    carnet: "",
+    contrasena: "",
     confirmPassword: "",
-    is_admin: false
+    rol: "USUARIO"
   });
   const [error, setError] = useState("");
-  const requiresFaculty = formData.role === "STUDENT";
 
   if (authLoading) {
     return (
@@ -47,43 +37,38 @@ function Register() {
     setError("");
     setSuccess("");
 
-    if (formData.password !== formData.confirmPassword) {
-      setError("Las contrasenas no coinciden.");
+    if (formData.contrasena !== formData.confirmPassword) {
+      setError("Las contraseñas no coinciden.");
       return;
     }
 
     try {
       setLoading(true);
       await registerUser({
-        full_name: formData.full_name,
-        email: formData.email,
-        code: formData.code,
-        role: formData.role,
-        faculty: requiresFaculty ? formData.faculty : null,
-        contact_info: formData.contact_info,
-        phone: formData.contact_info,
-        password: formData.password,
-        is_admin: false
+        nombre: formData.nombre,
+        apellido_paterno: formData.apellido_paterno,
+        apellido_materno: formData.apellido_materno || null,
+        carnet: formData.carnet,
+        contrasena: formData.contrasena,
+        rol: formData.rol
       });
       
       setSuccess("Operador registrado con éxito. Iniciando sesión...");
       
       // Auto login user
       await signIn({
-        email: formData.email,
-        password: formData.password
+        carnet: formData.carnet,
+        contrasena: formData.contrasena
       });
 
       setFormData({
-        full_name: "",
-        email: "",
-        code: "",
-        role: "STUDENT",
-        faculty: "",
-        contact_info: "",
-        password: "",
+        nombre: "",
+        apellido_paterno: "",
+        apellido_materno: "",
+        carnet: "",
+        contrasena: "",
         confirmPassword: "",
-        is_admin: false
+        rol: "USUARIO"
       });
     } catch (submitError) {
       setError(submitError.message || "No se pudo completar el registro.");
@@ -96,10 +81,10 @@ function Register() {
   return (
     <section className="page-stack" style={{ maxWidth: "800px", margin: "0 auto" }}>
       <div className="hero card">
-        <p className="eyebrow">Administracion</p>
-        <h2>Registrar Operador</h2>
+        <p className="eyebrow">Administración</p>
+        <h2>Registrar Nuevo Usuario</h2>
         <p className="muted-text">
-          Completa todos los datos para crear una nueva cuenta de Operador.
+          Completa todos los datos para crear una nueva cuenta en el sistema.
         </p>
       </div>
 
@@ -109,15 +94,15 @@ function Register() {
 
         <div className="form-block" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           <label className="field-group">
-            <span>Nombre completo</span>
+            <span>Nombre</span>
             <input
               type="text"
-              placeholder="Tatiana Flores"
-              value={formData.full_name}
+              placeholder="Tatiana"
+              value={formData.nombre}
               onChange={(event) =>
                 setFormData((current) => ({
                   ...current,
-                  full_name: event.target.value
+                  nombre: event.target.value
                 }))
               }
               required
@@ -125,15 +110,15 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Correo Electronico</span>
+            <span>Apellido Paterno</span>
             <input
-              type="email"
-              placeholder="operador@siarp.com"
-              value={formData.email}
+              type="text"
+              placeholder="Flores"
+              value={formData.apellido_paterno}
               onChange={(event) =>
                 setFormData((current) => ({
                   ...current,
-                  email: event.target.value
+                  apellido_paterno: event.target.value
                 }))
               }
               required
@@ -141,89 +126,48 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Registro / Codigo Universitario</span>
+            <span>Apellido Materno (Opcional)</span>
+            <input
+              type="text"
+              placeholder="Pérez"
+              value={formData.apellido_materno}
+              onChange={(event) =>
+                setFormData((current) => ({
+                  ...current,
+                  apellido_materno: event.target.value
+                }))
+              }
+            />
+          </label>
+
+          <label className="field-group">
+            <span>Carnet de Identidad (CI / Registro)</span>
             <input
               type="text"
               placeholder="202400123"
-              value={formData.code}
+              value={formData.carnet}
               onChange={(event) =>
                 setFormData((current) => ({
                   ...current,
-                  code: event.target.value
+                  carnet: event.target.value
                 }))
               }
               required
             />
           </label>
 
-          <label className="field-group">
-            <span>Tipo de Persona (Rol Catalogo)</span>
-            <select
-              value={formData.role}
-              onChange={(event) =>
-                setFormData((current) => ({
-                  ...current,
-                  role: event.target.value,
-                  faculty: event.target.value === "STUDENT" ? current.faculty : ""
-                }))
-              }
-              required
-            >
-              <option value="ADMINISTRATIVE">Administrativo</option>
-              <option value="STUDENT">Estudiante</option>
-              <option value="TEACHER">Docente</option>
-            </select>
-          </label>
 
-          {requiresFaculty && (
-            <label className="field-group">
-              <span>Carrera</span>
-              <select
-                value={formData.faculty}
-                onChange={(event) =>
-                  setFormData((current) => ({
-                    ...current,
-                    faculty: event.target.value
-                  }))
-                }
-                required
-              >
-                <option value="">Selecciona una carrera</option>
-                {CAREER_OPTIONS.map((career) => (
-                  <option key={career} value={career}>
-                    {career}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
 
           <label className="field-group">
-            <span>Telefono / Contacto</span>
-            <input
-              type="text"
-              placeholder="70000000"
-              value={formData.contact_info}
-              onChange={(event) =>
-                setFormData((current) => ({
-                  ...current,
-                  contact_info: event.target.value
-                }))
-              }
-              required
-            />
-          </label>
-
-          <label className="field-group">
-            <span>Contrasena</span>
+            <span>Contraseña</span>
             <input
               type="password"
-              placeholder="Minimo 6 caracteres"
-              value={formData.password}
+              placeholder="Mínimo 8 caracteres, 1 mayúscula, 1 número"
+              value={formData.contrasena}
               onChange={(event) =>
                 setFormData((current) => ({
                   ...current,
-                  password: event.target.value
+                  contrasena: event.target.value
                 }))
               }
               required
@@ -231,10 +175,10 @@ function Register() {
           </label>
 
           <label className="field-group">
-            <span>Confirmar contrasena</span>
+            <span>Confirmar Contraseña</span>
             <input
               type="password"
-              placeholder="Repite la contrasena"
+              placeholder="Repite la contraseña"
               value={formData.confirmPassword}
               onChange={(event) =>
                 setFormData((current) => ({
@@ -249,7 +193,7 @@ function Register() {
 
         <div style={{ display: "flex", alignItems: "center", gap: "2rem", marginTop: "1rem" }}>
           <button type="submit" disabled={loading} style={{ padding: "0.8rem 2rem" }}>
-            {loading ? "Creando cuenta..." : "Crear cuenta de Operador"}
+            {loading ? "Creando cuenta..." : "Crear cuenta"}
           </button>
           
           <p className="helper-text" style={{ margin: 0 }}>

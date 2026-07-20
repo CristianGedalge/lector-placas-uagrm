@@ -6,30 +6,31 @@ function Sidebar({ isOpen, onClose }) {
 
   const links = [];
 
-  if (user?.role === "ADMIN") {
+  if (user?.rol === "ADMINISTRADOR") {
     links.push(
       { to: "/", label: "Dashboard" },
       { to: "/vehiculos", label: "Gestionar Vehiculos" },
       { to: "/usuarios", label: "Gestionar Usuarios" },
-      { to: "/personas", label: "Gestionar Personas" },
-      { to: "/accesos", label: "Control de Accesos" },
-      { to: "/historial", label: "Historial" },
-      { to: "/reportes", label: "Reportes" }
+      { to: "/dispositivos", label: "Gestionar Dispositivos" },
+      { to: "/accesos", label: "Control de Accesos" }
     );
-  } else if (user?.role === "DISPOSITIVO") {
+  } else if (user?.rol === "OPERADOR") {
+    links.push(
+      { to: "/vehiculos", label: "Gestionar Vehiculos" },
+      { to: "/accesos", label: "Control de Accesos" }
+    );
+  } else if (user?.rol === "DISPOSITIVO") {
     links.push(
       { to: "/subir-placa", label: "Escanear Placas" }
     );
   } else {
     links.push(
-      { to: "/subir-placa", label: "Escanear Placas" },
       { to: "/vehiculos", label: "Mis Vehiculos" },
-      { to: "/accesos", label: "Control de Accesos" },
-      { to: "/historial", label: "Mi Historial" }
+      { to: "/accesos", label: "Control de Accesos" }
     );
   }
 
-  if (user?.role !== "DISPOSITIVO") {
+  if (user?.rol !== "DISPOSITIVO") {
     links.push({ to: "/perfil", label: "Perfil" });
   }
 

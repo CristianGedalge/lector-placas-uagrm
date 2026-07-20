@@ -1,16 +1,17 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Request, Depends
+import uuid
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from app.schemas.plate import PlateAnalysisResponse, PlateScanResponse
+from app.schemas.plate import PlateAnalysisResponse, EscaneadoResponse
 from app.ai.pipeline import analyze_plate, get_pipeline_status
 from app.core.limiter import limiter
 from app.db.session import get_db
-from app.db.models import AuthUser, PlateScan, AuthRoleEnum
-from app.api.v1.auth import get_current_user, require_admin
+from app.db.models import Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum
+from app.api.v1.auth import get_current_user
 
-async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> AuthUser | None:
+async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
     try:
         return await get_current_user(request, db=db)
     except Exception:
@@ -28,19 +29,16 @@ async def analyze_plate_endpoint(
     request: Request, 
     file: UploadFile = File(...), 
     realtime: bool = False,
+    dispositivo_id: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-    current_user: AuthUser | None = Depends(get_current_user_optional)
+    current_user: Usuario | None = Depends(get_current_user_optional)
 ):
-    """
-    Recibe una imagen, valida tamaño/formato, y ejecuta el pipeline ALPR.
-    """
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=400, 
             detail="Formato de archivo no permitido. Solo se aceptan imágenes JPEG y PNG."
         )
     
-    # Leer el archivo a memoria
     image_bytes = await file.read()
     
     if len(image_bytes) > MAX_FILE_SIZE:
@@ -49,15 +47,13 @@ async def analyze_plate_endpoint(
             detail="El archivo es demasiado grande. El límite máximo es de 5MB."
         )
     
-    # REL-003: Verificar que el motor OCR esté disponible antes de procesar
     ocr_reader = getattr(request.app.state, "ocr_reader", None)
     if ocr_reader is None:
         raise HTTPException(
             status_code=503,
-            detail="El motor OCR no está disponible en este momento. Intenta nuevamente en unos instantes."
+            detail="El motor OCR no está disponible en este momento."
         )
 
-    # Ejecutar pipeline AI
     result_dict = await run_in_threadpool(
         analyze_plate,
         image_bytes,
@@ -69,32 +65,38 @@ async def analyze_plate_endpoint(
         return JSONResponse(
             status_code=int(result_dict.get("http_status", 422)),
             content=PlateAnalysisResponse(
-                status="ERROR",
-                message=result_dict.get("message", "Error desconocido durante el análisis."),
+                estado="ERROR",
+                mensaje=result_dict.get("message", "Error desconocido durante el análisis."),
             ).model_dump(),
         )
     
-    # Guardar en base de datos el escaneo de placa si se detectó texto
     status_val = result_dict.get("status")
     if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
-        from app.db.models import Vehicle, ScanStatusEnum
         normalized = result_dict.get("normalized_plate")
         
-        # Buscar si el vehículo ya existe
         vehicle_id = None
         if normalized:
-            v_res = await db.execute(select(Vehicle).where(Vehicle.license_plate == normalized))
+            v_res = await db.execute(select(Vehiculo).where(Vehiculo.placa == normalized))
             vehicle = v_res.scalars().first()
             if vehicle:
                 vehicle_id = vehicle.id
 
-        scan = PlateScan(
-            detected_plate=result_dict.get("detected_plate"),
-            normalized_plate=normalized,
-            confidence=result_dict.get("combined_confidence") or result_dict.get("ocr_confidence") or 0.0,
-            scan_status=ScanStatusEnum.DETECTED if status_val == "DETECTED" else ScanStatusEnum.LOW_CONFIDENCE,
-            vehicle_id=vehicle_id,
-            scanned_by_user_id=current_user.id if current_user else None
+        estado_enum = EstadoEscaneoEnum.DETECTADO if status_val == "DETECTED" else EstadoEscaneoEnum.BAJA_CONFIANZA
+
+        disp_uuid = None
+        if dispositivo_id:
+            try:
+                disp_uuid = uuid.UUID(dispositivo_id)
+            except ValueError:
+                pass
+
+        scan = Escaneado(
+            placa_detectada=result_dict.get("detected_plate"),
+            placa_normalizada=normalized,
+            confianza=result_dict.get("combined_confidence") or result_dict.get("ocr_confidence") or 0.0,
+            estado=estado_enum,
+            vehiculo_id=vehicle_id,
+            dispositivo_id=disp_uuid
         )
         db.add(scan)
         try:
@@ -102,29 +104,38 @@ async def analyze_plate_endpoint(
         except Exception:
             await db.rollback()
 
-    return PlateAnalysisResponse(**result_dict)
+    # Mapeo de la respuesta
+    return PlateAnalysisResponse(
+        estado="DETECTADO" if result_dict.get("status") == "DETECTED" else ("BAJA_CONFIANZA" if result_dict.get("status") == "LOW_CONFIDENCE" else result_dict.get("status")),
+        placa_detectada=result_dict.get("detected_plate"),
+        placa_normalizada=result_dict.get("normalized_plate"),
+        es_formato_valido=result_dict.get("is_valid_bolivian_format", False),
+        confianza=result_dict.get("combined_confidence"),
+        ruta_imagen=result_dict.get("annotated_image") or result_dict.get("plate_crop"),
+        mensaje=result_dict.get("message"),
+        plate_bbox=result_dict.get("plate_bbox"),
+        raw_bboxes=result_dict.get("raw_bboxes")
+    )
 
 
-@router.get("/scans", response_model=list[PlateScanResponse])
+@router.get("/scans", response_model=list[EscaneadoResponse])
 async def list_plate_scans(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: AuthUser = Depends(get_current_user),
+    current_user: Usuario = Depends(get_current_user),
 ):
-    """Retorna el historial de lecturas de placas. Administradores ven todo; Operadores ven lo suyo."""
-    query = select(PlateScan).order_by(PlateScan.created_at.desc()).offset(skip).limit(limit)
-    if current_user.role != AuthRoleEnum.ADMIN:
-        query = query.where(PlateScan.scanned_by_user_id == current_user.id)
+    query = select(Escaneado).order_by(Escaneado.creado_el.desc()).offset(skip).limit(limit)
+    # Por ahora todos ven todo o solo admins
+    if current_user.rol != RoleEnum.ADMINISTRADOR:
+        # En el futuro filtrar por dispositivos que el operador gestiona
+        pass
     result = await db.execute(query)
-    return list(result.scalars().all())
+    return [EscaneadoResponse.model_validate(x) for x in result.scalars().all()]
 
 
 @router.get("/health")
 async def health_check(request: Request):
-    """
-    Endpoint simple para verificar que la API está funcionando.
-    """
     ocr_available = getattr(request.app.state, "ocr_reader", None) is not None
     pipeline = get_pipeline_status()
     ready = bool(ocr_available and pipeline["supervision_available"])

@@ -8,7 +8,7 @@ import Sidebar from "../components/Sidebar";
 function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user } = useAuth();
-  const isDevice = user?.role === "DISPOSITIVO";
+  const isDevice = user?.rol === "DISPOSITIVO";
 
   return (
     <div className={isDevice ? "app-shell app-shell-device" : "app-shell"}>

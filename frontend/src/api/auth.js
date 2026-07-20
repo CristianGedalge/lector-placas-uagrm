@@ -15,7 +15,7 @@ function mapAuthError(error, fallbackMessage) {
   }
 
   if (!error?.response) {
-    throw new Error("No se pudo conectar con el backend. Verifica que FastAPI este encendido en el puerto 8000.");
+    throw new Error("No se pudo conectar con el backend. Verifica que FastAPI este encendido en el puerto 8000 o 8010.");
   }
 
   if (error?.code === "ECONNABORTED") {
@@ -30,19 +30,16 @@ function mapAuthError(error, fallbackMessage) {
 }
 
 function buildMockSession(credentials) {
-  const phone = credentials?.phone || credentials?.contact_info || "70000000";
   return {
     user: {
-      id: 1,
-      full_name: credentials?.full_name || credentials?.email?.split("@")[0] || "Administrador",
-      email: credentials?.email || "admin@placas.local",
-      role: credentials?.role || "STUDENT",
-      catalog_role: credentials?.catalog_role || credentials?.role || "ESTUDIANTE",
-      status: "ACTIVE",
-      code: credentials?.code || "REG-001",
-      faculty: credentials?.faculty || "",
-      phone,
-      contact_info: phone
+      id: "00000000-0000-0000-0000-000000000000",
+      nombre: "Administrador",
+      apellido_paterno: "Local",
+      apellido_materno: "",
+      carnet: credentials?.carnet || "1234567",
+      rol: "ADMINISTRADOR",
+      esta_activo: true,
+      creado_el: new Date().toISOString()
     },
     token: "demo-token"
   };
@@ -52,66 +49,7 @@ function normalizeSession(data, credentials) {
   if (data?.user && data?.token) {
     return {
       token: data.token,
-      user: {
-        ...data.user,
-        full_name:
-          data.user.full_name ||
-          data.user.name ||
-          credentials?.full_name ||
-          credentials?.email?.split("@")[0] ||
-          "Usuario",
-        role: data.user.role || credentials?.role || "STUDENT",
-        catalog_role: data.user.catalog_role || credentials?.catalog_role || null,
-        status: data.user.status || "ACTIVE",
-        code: data.user.code || credentials?.code || "No registrado",
-        faculty: data.user.faculty || credentials?.faculty || "",
-        phone:
-          data.user.phone ||
-          data.user.contact_info ||
-          credentials?.phone ||
-          credentials?.contact_info ||
-          "No registrado",
-        contact_info:
-          data.user.contact_info ||
-          data.user.phone ||
-          credentials?.contact_info ||
-          credentials?.phone ||
-          "No registrado"
-      }
-    };
-  }
-
-  if (data?.access) {
-    return {
-      token: data.access,
-      refreshToken: data.refresh,
-      user: data.user || {
-        id: data.id || 1,
-        full_name:
-          data.full_name ||
-          data.name ||
-          credentials?.full_name ||
-          credentials?.email?.split("@")[0] ||
-          "Usuario",
-        email: data.email || credentials?.email || "usuario@siarp.local",
-        role: data.role || credentials?.role || "STUDENT",
-        catalog_role: data.catalog_role || credentials?.catalog_role || null,
-        status: data.status || "ACTIVE",
-        code: data.code || credentials?.code || "No registrado",
-        faculty: data.faculty || credentials?.faculty || "",
-        phone:
-          data.phone ||
-          data.contact_info ||
-          credentials?.phone ||
-          credentials?.contact_info ||
-          "No registrado",
-        contact_info:
-          data.contact_info ||
-          data.phone ||
-          credentials?.contact_info ||
-          credentials?.phone ||
-          "No registrado"
-      }
+      user: data.user
     };
   }
 
@@ -204,7 +142,7 @@ export async function logoutUser() {
   return true;
 }
 
-// Funciones de administración para usuarios (auth_users)
+// Funciones de administración para usuarios
 export async function listUsers() {
   try {
     const { data } = await apiClient.get("/auth/users");
@@ -229,42 +167,5 @@ export async function deleteUserByAdmin(userId) {
     return true;
   } catch (error) {
     mapAuthError(error, "No se pudo eliminar el usuario.");
-  }
-}
-
-// Funciones de administración para personas universitarias (university_persons)
-export async function listUniversityPersons() {
-  try {
-    const { data } = await apiClient.get("/v1/university-persons/");
-    return data;
-  } catch (error) {
-    mapAuthError(error, "No se pudo cargar el registro de personas universitarias.");
-  }
-}
-
-export async function createUniversityPerson(payload) {
-  try {
-    const { data } = await apiClient.post("/v1/university-persons/", payload);
-    return data;
-  } catch (error) {
-    mapAuthError(error, "No se pudo crear la persona universitaria.");
-  }
-}
-
-export async function updateUniversityPerson(personId, payload) {
-  try {
-    const { data } = await apiClient.put(`/v1/university-persons/${personId}`, payload);
-    return data;
-  } catch (error) {
-    mapAuthError(error, "No se pudo actualizar la persona universitaria.");
-  }
-}
-
-export async function deleteUniversityPerson(personId) {
-  try {
-    await apiClient.delete(`/v1/university-persons/${personId}`);
-    return true;
-  } catch (error) {
-    mapAuthError(error, "No se pudo eliminar la persona universitaria.");
   }
 }

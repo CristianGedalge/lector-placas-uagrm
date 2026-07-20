@@ -32,9 +32,9 @@ from fastapi.staticfiles import StaticFiles
 from app.api.v1 import plates
 from app.api.v1.auth import router as auth_router
 from app.api.v1.dashboard import router as dashboard_router
-from app.api.v1.university_persons import router as university_persons_router
 from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.access_logs import router as access_logs_router
+from app.api.v1.devices import router as devices_router
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -103,11 +103,7 @@ app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
 app.include_router(plates.router, prefix="/api/v1/plates", tags=["Placas"])
 app.include_router(vehicles_router, prefix="/api/v1/vehicles", tags=["Vehicles"])
-app.include_router(
-    university_persons_router,
-    prefix="/api/v1/university-persons",
-    tags=["University Persons"],
-)
+app.include_router(devices_router, prefix="/api/v1/devices", tags=["Devices"])
 app.include_router(
     access_logs_router,
     prefix="/api/v1/access-logs",

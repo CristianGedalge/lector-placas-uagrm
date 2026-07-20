@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import Loader from "../components/Loader";
-import { getAccessLogs, createAccessLog, getMyVehicles } from "../api/plates";
+import { getAccessLogs, createAutoAccessLog, getMyVehicles } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import Pagination from "../components/Pagination";
 import ConfirmModal from "../components/ConfirmModal";
 
 function AccessLogs() {
   const { user } = useAuth();
+  const isStaff = user?.rol === "ADMINISTRADOR" || user?.rol === "OPERADOR";
   const [logs, setLogs] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,7 @@ function AccessLogs() {
   const [confirmConfig, setConfirmConfig] = useState({ isOpen: false, title: "", message: "", onConfirm: null, confirmColor: "#e11d48" });
 
   const [showModal, setShowModal] = useState(false);
+  const [searchPlate, setSearchPlate] = useState("");
   const [formData, setFormData] = useState({
     vehicle_id: "",
     direction: "ENTRY",
@@ -59,6 +61,7 @@ function AccessLogs() {
       zone: "Portería Principal",
       notes: ""
     });
+    setSearchPlate("");
     setError("");
     setSuccess("");
     setShowModal(true);
@@ -71,10 +74,11 @@ function AccessLogs() {
       return;
     }
 
+    const dirLabel = formData.direction === "ENTRY" ? "Ingreso" : "Salida";
     setConfirmConfig({
       isOpen: true,
       title: "Registrar Acceso Manual",
-      message: `¿Estás seguro de registrar este movimiento manual (${formData.direction === "ENTRY" ? "Ingreso" : "Salida"})?`,
+      message: `¿Confirmas registrar un ${dirLabel} manual para este vehículo?`,
       confirmColor: "var(--color-primary)",
       onConfirm: async () => {
         try {
@@ -82,17 +86,17 @@ function AccessLogs() {
           setSaving(true);
           setError("");
           setSuccess("");
-          await createAccessLog({
+          await createAutoAccessLog({
             vehicle_id: formData.vehicle_id,
-            direction: formData.direction,
             zone: formData.zone,
-            notes: formData.notes
+            notes: formData.notes,
+            direction: formData.direction
           });
           setSuccess("Acceso registrado correctamente.");
           setShowModal(false);
           fetchData();
         } catch (err) {
-          setError(err.message || "No se pudo registrar el acceso.");
+          setError(err?.response?.data?.detail || err?.message || "No se pudo registrar el acceso.");
         } finally {
           setSaving(false);
         }
@@ -120,9 +124,11 @@ function AccessLogs() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
             {isRefreshing ? 'Actualizando…' : ''}
           </button>
-          <button type="button" onClick={handleOpenModal} style={{ padding: "0.6rem 1.2rem" }}>
-            Registrar Acceso Manual
-          </button>
+          {isStaff && (
+            <button type="button" onClick={handleOpenModal} style={{ padding: "0.6rem 1.2rem" }}>
+              Registrar Acceso Manual
+            </button>
+          )}
         </div>
       </div>
 
@@ -207,6 +213,30 @@ function AccessLogs() {
 
             <div className="form-block" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <label className="field-group">
+                <span>Buscar por Placa</span>
+                <input
+                  type="text"
+                  placeholder="Escribe la placa para filtrar..."
+                  value={searchPlate}
+                  onChange={(e) => {
+                    const term = e.target.value.toUpperCase();
+                    setSearchPlate(term);
+                    // Preseleccionar si hay una sola coincidencia exacta
+                    const matched = vehicles.find(v => v.placa === term);
+                    if (matched) {
+                      setFormData(curr => ({ ...curr, vehicle_id: matched.id }));
+                    }
+                  }}
+                  style={{
+                    padding: "0.6rem 0.8rem",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(21, 62, 117, 0.2)",
+                    fontSize: "0.95rem"
+                  }}
+                />
+              </label>
+
+              <label className="field-group">
                 <span>Seleccionar Vehículo</span>
                 <select
                   value={formData.vehicle_id}
@@ -214,11 +244,13 @@ function AccessLogs() {
                   required
                 >
                   <option value="">-- Selecciona un Vehículo Autorizado --</option>
-                  {vehicles.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.license_plate} - {v.brand} {v.model} ({v.owner?.full_name})
-                    </option>
-                  ))}
+                  {vehicles
+                    .filter(v => v.placa && v.placa.toUpperCase().includes(searchPlate))
+                    .map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.placa} - {v.marca?.nombre || "Sin marca"} ({v.propietario ? `${v.propietario.nombre} ${v.propietario.apellido_paterno}` : "Sin propietario"})
+                      </option>
+                    ))}
                 </select>
               </label>
 
@@ -277,3 +309,5 @@ function AccessLogs() {
 }
 
 export default AccessLogs;
+
+
