@@ -1,5 +1,32 @@
 # MEMORY
 
+## 2026-07-25 - Validacion integral local/Docker, Neon, Cloudinary y datos operativos
+
+- PostgreSQL es externo: Compose usa `backend/.env`, no sobrescribe
+  `DATABASE_URL` y no contiene un servicio `db`. FastAPI, SQLAlchemy y Alembic
+  comparten exclusivamente esa variable.
+- Se agregaron `.dockerignore`; secretos, entornos, caches y runtime no entran
+  al contexto. Frontend usa `package-lock.json` y `npm ci`.
+- Docker instala PyTorch CPU y conserva OpenCV headless al final del build para
+  evitar `libxcb.so.1` y el conflicto transitivo de Supervision.
+- Cloudinary autenticado fue verificado sin exponer credenciales: subida WebP,
+  existencia, URL temporal, borrado y confirmacion. `exists()` captura
+  `NotFound` del SDK y devuelve `False`.
+- Axios ya no fuerza JSON globalmente; `FormData` genera multipart con boundary
+  para fotos de usuario, vehiculo y evidencias. Perfil muestra errores de
+  validacion FastAPI legibles.
+- SQLAlchemy usa `pool_pre_ping=True` y `pool_recycle=300` para no reutilizar
+  conexiones SSL cerradas, compatible con PostgreSQL estandar.
+- Validacion: 44 pruebas unitarias, build Vite, Neon con TLS/SELECT 1/Alembic
+  head/flujo autenticado y Cloudinary real local y Docker. HTTP principal 200
+  y ruta protegida sin token 401 esperado.
+- Se crearon y verificaron mediante login dos cuentas OPERADOR, dos
+  ADMINISTRADOR y una DISPOSITIVO. No guardar contrasenas en memoria.
+- Catalogos creados: Toyota, Nissan, Automóvil y Motocicleta.
+- Issues detallados en `docs/local-docker-validation-issues.md` (001-012).
+- Pendientes: dos avisos moderados React Router, camara USB/RTSP real y
+  vinculacion entre cuenta DISPOSITIVO y registro fisico Dispositivo.
+
 ## 2026-07-20 - Separación de Roles, Flujo DISPOSITIVO y Corrección de Accesos Manuales
 
 - **Gestión de Vehículos por Admin/Operador (`Vehicles.jsx`)**: Se añadió la capacidad de que los roles ADMINISTRADOR y OPERADOR puedan registrar y gestionar vehículos de cualquier usuario. Se eliminó la sección "Mis Vehículos Registrados" que no correspondía al flujo de staff. Se implementó selector de propietario con listado de todos los usuarios del sistema.
@@ -9,7 +36,7 @@
 - **Restricciones de Rol en UI**:
   - **USUARIO**: Solo puede leer accesos (sin botón de registro manual).
   - **OPERADOR y ADMINISTRADOR**: Pueden registrar accesos manuales y gestionar vehículos de otros.
-  - **DISPOSITIVO**: Acceso exclusivo a la vista de cámara en vivo (`/escanear`); no tiene registro manual, ni acceso al resto de la app. Al hacer login va directamente a la cámara.
+  - **DISPOSITIVO**: Acceso exclusivo a la vista de cámara en vivo (`/subir-placa`); no tiene registro manual, ni acceso al resto de la app. Al hacer login va directamente a la cámara.
   - Sidebar y AppRoutes actualizados para hacer cumplir estas restricciones.
 
 - **Vista Exclusiva DISPOSITIVO (`UploadPlate.jsx`)**: Una vez logueado, el rol DISPOSITIVO ve únicamente la vista de cámara sin botón de regreso ni registro manual. El selector de modo (webcam/subir imagen) se oculta. Solo existe el escaneo continuo.

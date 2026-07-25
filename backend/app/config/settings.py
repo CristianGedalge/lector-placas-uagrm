@@ -1,14 +1,18 @@
+from pathlib import Path
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
     # Required environment variables (must be defined in .env)
-    BACKEND_HOST: str
-    BACKEND_PORT: int
+    BACKEND_HOST: str = "127.0.0.1"
+    BACKEND_PORT: int = 8000
     ALLOWED_ORIGINS: list[str]
     DATABASE_URL: str
-    CAMERA_API_URL: str
+    CAMERA_API_URL: str = "http://127.0.0.1:8000/api/v1/plates/analyze"
 
     # App Settings
     APP_NAME: str = "Lector de Placas UAGRM"
@@ -45,6 +49,24 @@ class Settings(BaseSettings):
     CAMERA_REQUEST_RETRY_DELAY_SECONDS: float = 1.0
     CAMERA_JPEG_QUALITY: int = 90
 
+    # Provider-neutral media settings. Empty credentials keep local/unit tests usable.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    CLOUDINARY_SECURE: bool = True
+    CLOUDINARY_ASSET_PREFIX: str = "placas-academico"
+    CLOUDINARY_DELIVERY_TYPE: str = "authenticated"
+    MEDIA_USER_SIZE: int = 512
+    MEDIA_VEHICLE_MAX_DIMENSION: int = 1600
+    MEDIA_ACCESS_MAX_DIMENSION: int = 1600
+    MEDIA_PERMANENT_WEBP_QUALITY: int = 82
+    MEDIA_ACCESS_WEBP_QUALITY: int = 78
+    MEDIA_MAX_UPLOAD_BYTES: int = 5 * 1024 * 1024
+    MEDIA_SIGNED_URL_TTL_SECONDS: int = 300
+    MEDIA_ACCESS_RETENTION_DAYS: int = 90
+    MEDIA_UPLOAD_MAX_RETRIES: int = 3
+    MEDIA_SPOOL_DIR: str = ".runtime/media-spool"
+
     @field_validator(
         "DEBUG",
         "OCR_GPU",
@@ -53,6 +75,7 @@ class Settings(BaseSettings):
         "OCR_USE_CONTRAST",
         "OCR_DENOISE",
         "OCR_USE_THRESHOLD",
+        "CLOUDINARY_SECURE",
         mode="before",
     )
     @classmethod
@@ -72,7 +95,38 @@ class Settings(BaseSettings):
     def empty_roi_to_none(cls, value: object) -> object:
         return None if value == "" else value
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def validate_database_url(cls, value: str) -> str:
+        from sqlalchemy.engine import make_url
+
+        url = make_url(value)
+        if url.get_backend_name() != "postgresql":
+            raise ValueError("DATABASE_URL debe apuntar a PostgreSQL")
+        if url.drivername != "postgresql+psycopg":
+            raise ValueError("DATABASE_URL debe usar el driver postgresql+psycopg")
+        if not url.host or not url.database:
+            raise ValueError("DATABASE_URL debe incluir host y base de datos")
+        if url.host.endswith(".neon.tech") and url.query.get("sslmode") not in {
+            "require",
+            "verify-ca",
+            "verify-full",
+        }:
+            raise ValueError("Las conexiones a Neon requieren sslmode=require o superior")
+        return value
+
+    @field_validator("CLOUDINARY_DELIVERY_TYPE")
+    @classmethod
+    def authenticated_media_only(cls, value: str) -> str:
+        if value != "authenticated":
+            raise ValueError("CLOUDINARY_DELIVERY_TYPE debe ser authenticated")
+        return value
+
+    model_config = SettingsConfigDict(
+        env_file=BACKEND_DIR / ".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()

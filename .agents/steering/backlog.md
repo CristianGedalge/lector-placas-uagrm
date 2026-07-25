@@ -1,5 +1,18 @@
 # Backlog
 
+- `DB-EXT-001` | `done` | Prioridad `alta` | PostgreSQL externo usando solo DATABASE_URL | Dependencias: ninguna
+- `DOCKER-SEC-001` | `done` | Prioridad `critica` | Excluir secretos y artefactos de contextos Docker | Dependencias: ninguna
+- `DOCKER-OCR-001` | `done` | Prioridad `alta` | PyTorch CPU y OpenCV headless en backend | Dependencias: COMPAT-001
+- `MEDIA-001` | `done` | Prioridad `alta` | Cloudinary autenticado con WebP, URL temporal y borrado | Dependencias: DB-EXT-001
+- `MEDIA-002` | `done` | Prioridad `alta` | Corregir NotFound tras borrar en Cloudinary | Dependencias: MEDIA-001
+- `MEDIA-003` | `done` | Prioridad `alta` | Corregir multipart para fotos y evidencias | Dependencias: MEDIA-001
+- `DB-POOL-001` | `done` | Prioridad `alta` | Validar y reciclar conexiones PostgreSQL obsoletas | Dependencias: DB-EXT-001
+- `TEST-EXT-001` | `done` | Prioridad `alta` | Verificar Neon y Cloudinary local/Docker | Dependencias: MEDIA-001, DB-EXT-001
+- `ROLE-DATA-001` | `done` | Prioridad `media` | Crear cuentas operativas por rol sin guardar contrasenas | Dependencias: ROLE-001
+- `CATALOG-001` | `done` | Prioridad `media` | Crear Toyota/Nissan y Automóvil/Motocicleta | Dependencias: DB-EXT-001
+- `ROLE-DEVICE-LINK-001` | `pending` | Prioridad `alta` | Vincular cuenta DISPOSITIVO con registro fisico | Dependencias: ROLE-001
+- `SEC-FRONT-001` | `pending` | Prioridad `media` | Reevaluar avisos React Router sin regresion | Dependencias: ninguna
+
 - `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
 - `AI-001` | `done` | Prioridad `alta` | Usar Supervision para representar, filtrar, recortar y anotar resultados EasyOCR | Dependencias: ninguna
 - `AI-002` | `done` | Prioridad `alta` | Retirar detectores locales, servicios cloud y sus configuraciones | Dependencias: ninguna
@@ -55,7 +68,7 @@
 - `ROLE-002` | `done` | Prioridad `alta` | Restringir gestión de vehículos a ADMINISTRADOR y OPERADOR; eliminar sección "Mis Vehículos" del staff | Dependencias: `ROLE-001`
 - `ROLE-003` | `done` | Prioridad `alta` | Corregir error 403 del OPERADOR al listar usuarios (GET /api/auth/users) para asignar propietarios | Dependencias: `ROLE-002`
 - `ROLE-004` | `done` | Prioridad `alta` | Bloquear registro manual de accesos para el rol USUARIO; solo lectura | Dependencias: `ROLE-001`
-- `ROLE-005` | `done` | Prioridad `alta` | Bloquear la ruta /escanear y la función de escaneo para USUARIO y OPERADOR; exclusivo para DISPOSITIVO | Dependencias: `ROLE-001`
+- `ROLE-005` | `done` | Prioridad `alta` | Bloquear la ruta /subir-placa y la función de escaneo para USUARIO y OPERADOR; exclusivo para DISPOSITIVO | Dependencias: `ROLE-001`
 - `ROLE-006` | `done` | Prioridad `alta` | Rol DISPOSITIVO sin registro manual: login directo a vista de cámara sin botón regreso ni acceso al resto de la app | Dependencias: `ROLE-005`
 - `UI-003` | `done` | Prioridad `media` | Simplificar PlateNotFoundModal a icono + estado + título + placa; auto-descarte en 5 segundos | Dependencias: `ROLE-006`
 - `ACC-001` | `done` | Prioridad `alta` | Crear endpoint POST /api/v1/access-logs/auto con inferencia de dirección por estado del campus y ubicación del dispositivo | Dependencias: `ROLE-001`

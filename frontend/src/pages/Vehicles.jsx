@@ -13,7 +13,8 @@ import {
   getVehicleTypes,
   createVehicleType,
   updateVehicleType,
-  deleteVehicleType
+  deleteVehicleType,
+  uploadVehiclePhoto
 } from "../api/plates";
 import { listUsers } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
@@ -159,6 +160,7 @@ function Vehicles() {
       marca_id: v.marca_id,
       tipo_vehiculo_id: v.tipo_vehiculo_id,
       propietario_usuario_id: v.propietario_usuario_id
+      ,photoFile: null
     });
     setError("");
     setSuccess("");
@@ -186,6 +188,9 @@ function Vehicles() {
             tipo_vehiculo_id: editingVehicle.tipo_vehiculo_id,
             propietario_usuario_id: editingVehicle.propietario_usuario_id
           });
+          if (editingVehicle.photoFile) {
+            await uploadVehiclePhoto(editingVehicle.id, editingVehicle.photoFile);
+          }
           setSuccess(`Vehículo ${plateVal} actualizado con éxito.`);
           setEditingVehicle(null);
           loadData();
@@ -915,6 +920,19 @@ function Vehicles() {
                     </select>
                   </label>
                 )}
+                <label className="field-group">
+                  <span>Foto privada del vehiculo</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setEditingVehicle((current) => ({
+                        ...current,
+                        photoFile: event.target.files?.[0] || null
+                      }))
+                    }
+                  />
+                </label>
               </div>
             </div>
 

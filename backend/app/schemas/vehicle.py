@@ -54,6 +54,7 @@ class VehiculoCreate(VehiculoBase):
 class VehiculoResponse(VehiculoBase):
     id: UUID
     esta_activo: bool
+    foto_id: UUID | None = None
     creado_el: datetime
     actualizado_el: datetime
     marca: MarcaResponse | None = None

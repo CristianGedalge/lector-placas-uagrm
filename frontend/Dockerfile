@@ -2,9 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copiar e instalar dependencias
+# Copiar e instalar dependencias reproducibles desde el lockfile
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copiar el código del frontend
 COPY . .

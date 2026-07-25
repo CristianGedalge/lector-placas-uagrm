@@ -6,6 +6,7 @@ import {
   uploadPlateImage,
   createAccessLog,
   createAutoAccessLog,
+  createAutoAccessWithEvidence,
   getBrands,
   getVehicleTypes
 } from "../api/plates";
@@ -116,7 +117,7 @@ function UploadPlate() {
     }));
   };
 
-  const handleLookupPlate = async (plateValue) => {
+  const handleLookupPlate = async (plateValue, evidence = null) => {
     resetLookupState();
     setLookupLoading(true);
 
@@ -126,11 +127,19 @@ function UploadPlate() {
       
       // Placa encontrada → Registrar acceso automáticamente (Ingreso/Salida inferido)
       try {
-        const autoLog = await createAutoAccessLog({
+        const autoResult = evidence
+          ? await createAutoAccessWithEvidence({
+              vehicle_id: result.id,
+              zone: accessZone,
+              notes: ""
+            }, evidence)
+          : await createAutoAccessLog({
           vehicle_id: result.id,
           zone: accessZone,
           notes: ""
         });
+        const autoLog = autoResult.access || autoResult;
+        if (autoResult.image_status) autoLog.image_status = autoResult.image_status;
         setAutoAccessLog(autoLog);
         setActiveModal("access_confirmed");
         
@@ -204,7 +213,7 @@ function UploadPlate() {
       if (analysis?.placa_normalizada) {
         // OCR exitoso con formato boliviano confirmado
         setManualPlate(analysis.placa_normalizada);
-        await handleLookupPlate(analysis.placa_normalizada);
+        await handleLookupPlate(analysis.placa_normalizada, file);
       } else if (analysis?.placa_detectada) {
         // OCR detectó texto pero no cumple el formato: rellenar campo para corrección manual
         const rawClean = analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase();
@@ -311,11 +320,26 @@ function UploadPlate() {
           if (winner) {
             // Confirmado por consenso → auto-captura
             const [, winnerData] = winner;
+            // El polling usa 640px para OCR. Solo al confirmar capturamos una
+            // evidencia panoramica a la resolucion nativa de la camara.
+            const evidenceCanvas = document.createElement("canvas");
+            evidenceCanvas.width = videoRef.current.videoWidth || canvas.width;
+            evidenceCanvas.height = videoRef.current.videoHeight || canvas.height;
+            evidenceCanvas.getContext("2d").drawImage(
+              videoRef.current,
+              0,
+              0,
+              evidenceCanvas.width,
+              evidenceCanvas.height
+            );
+            const evidenceBlob = await new Promise((resolve) =>
+              evidenceCanvas.toBlob(resolve, "image/jpeg", 0.92)
+            );
             voteMap.clear();
             stopCamera();
             setAnalysisPreview(analysis);
             setManualPlate(normalizedText);
-            handleLookupPlate(normalizedText);
+            handleLookupPlate(normalizedText, evidenceBlob || blob);
             return;
           }
 

@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import cv2
 import numpy as np
@@ -14,6 +14,17 @@ class PlatesAPITests(unittest.TestCase):
     def setUp(self):
         app = FastAPI()
         app.state.ocr_reader = object()
+        self.db = MagicMock()
+        query_result = MagicMock()
+        query_result.scalars.return_value.first.return_value = None
+        self.db.execute = AsyncMock(return_value=query_result)
+        self.db.commit = AsyncMock()
+        self.db.rollback = AsyncMock()
+
+        async def override_db():
+            yield self.db
+
+        app.dependency_overrides[plates.get_db] = override_db
         app.include_router(plates.router, prefix="/api/v1/plates")
         self.client = TestClient(app)
 
@@ -78,6 +89,12 @@ class PlatesAPITests(unittest.TestCase):
             es_formato_valido=True,
         )
         self.assertEqual(response.estado, "BAJA_CONFIANZA")
+
+    @patch("cloudinary.uploader.upload")
+    def test_polling_ocr_does_not_upload_to_cloudinary(self, upload):
+        response = self.client.get("/api/v1/plates/health")
+        self.assertEqual(response.status_code, 200)
+        upload.assert_not_called()
 
 
 if __name__ == "__main__":

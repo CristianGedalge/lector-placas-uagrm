@@ -1,15 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import asyncio
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
-    Acceso, Escaneado, RoleEnum, TipoAccesoEnum, EstadoCampus,
+    Acceso, ArchivoMultimedia, Escaneado, MediaProviderEnum, MediaStatusEnum,
+    MediaTypeEnum, RoleEnum, TipoAccesoEnum, EstadoCampus,
     UbicacionVehiculoEnum, Dispositivo, Vehiculo, EstadoEscaneoEnum
 )
+from app.config.settings import settings
 from app.db.session import get_db
 from app.schemas.access_log import AccesoCreate, AccesoResponse, AccesoAutoCreate
+from app.schemas.media import AccessCreationResponse
 from app.api.v1.auth import get_current_user
+from app.services.media_tasks import process_media_record, spool_directory
 
 router = APIRouter()
 
@@ -67,6 +75,7 @@ async def create_access_log(
     stmt_reload = (
         select(Acceso)
         .options(
+            selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
             .selectinload(Vehiculo.propietario),
@@ -87,6 +96,11 @@ async def create_auto_access_log(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
+    access, _ = await _create_auto_access_log(payload, db, current_user)
+    return access
+
+
+async def _create_auto_access_log(payload, db, current_user, evidence: bytes | None = None):
     if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -160,6 +174,29 @@ async def create_auto_access_log(
     db.add(log)
     await db.flush()
 
+    media = None
+    if evidence is not None:
+        media_type = (
+            MediaTypeEnum.ACCESS_ENTRY
+            if inferred_tipo_acceso == TipoAccesoEnum.ENTRADA
+            else MediaTypeEnum.ACCESS_EXIT
+        )
+        media = ArchivoMultimedia(
+            proveedor=MediaProviderEnum.CLOUDINARY,
+            tipo=media_type,
+            estado=MediaStatusEnum.PENDING,
+            resource_type="image",
+            delivery_type=settings.CLOUDINARY_DELIVERY_TYPE,
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(days=settings.MEDIA_ACCESS_RETENTION_DAYS),
+        )
+        db.add(media)
+        await db.flush()
+        spool_path = spool_directory() / f"{media.id}.upload"
+        await asyncio.to_thread(spool_path.write_bytes, evidence)
+        media.spool_path = str(spool_path)
+        log.imagen_id = media.id
+
     nuevo_estado = UbicacionVehiculoEnum.DENTRO if inferred_tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
     estado_result = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehiculo.id))
     estado_campus = estado_result.scalar_one_or_none()
@@ -181,6 +218,7 @@ async def create_auto_access_log(
     stmt_reload = (
         select(Acceso)
         .options(
+            selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
             .selectinload(Vehiculo.propietario),
@@ -192,7 +230,39 @@ async def create_auto_access_log(
     )
     res_reload = await db.execute(stmt_reload)
     log_loaded = res_reload.scalar_one()
-    return AccesoResponse.model_validate(log_loaded)
+    return AccesoResponse.model_validate(log_loaded), media
+
+
+@router.post(
+    "/auto-with-evidence",
+    response_model=AccessCreationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_auto_access_with_evidence(
+    background_tasks: BackgroundTasks,
+    vehicle_id: UUID = Form(...),
+    zone: str | None = Form(None),
+    notes: str | None = Form(""),
+    direction: str | None = Form(None),
+    image: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    evidence = await image.read(settings.MEDIA_MAX_UPLOAD_BYTES + 1)
+    if len(evidence) > settings.MEDIA_MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="La imagen excede el tamano permitido")
+    payload = AccesoAutoCreate(
+        vehicle_id=vehicle_id, zone=zone, notes=notes, direction=direction
+    )
+    access, media = await _create_auto_access_log(
+        payload, db, current_user, evidence=evidence
+    )
+    background_tasks.add_task(process_media_record, media.id)
+    return AccessCreationResponse(
+        access_registered=True,
+        image_status=media.estado,
+        access=access.model_dump(mode="json"),
+    )
 
 
 @router.get("/", response_model=list[AccesoResponse])
@@ -205,6 +275,7 @@ async def list_access_logs(
     stmt = (
         select(Acceso)
         .options(
+            selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
             .selectinload(Vehiculo.propietario),

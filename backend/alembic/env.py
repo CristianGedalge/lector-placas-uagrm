@@ -13,11 +13,12 @@ from alembic import context
 
 # import our models
 from app.db.models import Base
-from app.db.session import DATABASE_URL
+from app.config.settings import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -71,7 +72,7 @@ async def run_async_migrations():
     """
     
     config_section = config.get_section(config.config_ini_section)
-    config_section["sqlalchemy.url"] = DATABASE_URL
+    config_section["sqlalchemy.url"] = settings.DATABASE_URL
     
     connectable = async_engine_from_config(
         config_section,

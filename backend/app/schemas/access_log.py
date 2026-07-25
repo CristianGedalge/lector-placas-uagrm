@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, model_validator
-from app.db.models import TipoAccesoEnum
+from app.db.models import MediaStatusEnum, TipoAccesoEnum
 
 
 class AccesoCreate(BaseModel):
@@ -31,6 +31,8 @@ class AccesoResponse(BaseModel):
     zone: str
     timestamp: datetime
     vehicle: Optional[dict] = None
+    image_id: UUID | None = None
+    image_status: MediaStatusEnum | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,6 +77,8 @@ class AccesoResponse(BaseModel):
                 "direction": direction_val,
                 "zone": data.ubicacion,
                 "timestamp": data.creado_el,
-                "vehicle": vehicle_dict
+                "vehicle": vehicle_dict,
+                "image_id": data.imagen_id,
+                "image_status": data.imagen.estado if getattr(data, "imagen", None) else None,
             }
         return data

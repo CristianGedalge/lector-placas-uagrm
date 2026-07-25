@@ -39,6 +39,7 @@ class UsuarioResponse(BaseModel):
     carnet: str
     rol: RoleEnum
     esta_activo: bool
+    foto_id: UUID | None = None
     creado_el: datetime
     actualizado_el: datetime
 

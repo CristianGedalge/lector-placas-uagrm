@@ -131,6 +131,22 @@ export async function deleteProfile() {
   }
 }
 
+export async function uploadProfilePhoto(userId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post(`/v1/media/users/${userId}/photo`, form);
+  return data;
+}
+
+export async function deleteProfilePhoto(userId) {
+  await apiClient.delete(`/v1/media/users/${userId}/photo`);
+}
+
+export async function getMediaUrl(mediaId) {
+  const { data } = await apiClient.get(`/v1/media/${mediaId}/url`);
+  return data;
+}
+
 export async function logoutUser() {
   try {
     if (import.meta.env.VITE_USE_MOCK_AUTH !== "true") {

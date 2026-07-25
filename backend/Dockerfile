@@ -12,14 +12,19 @@ WORKDIR /app
 
 # Instalar dependencias del sistema necesarias para OpenCV y EasyOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar e instalar dependencias de Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cpu \
+      torch==2.13.0 torchvision==0.28.0 && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall --yes opencv-python && \
+    pip install --no-cache-dir --no-deps --force-reinstall \
+      opencv-python-headless==4.10.0.84
 
 # Copiar el código fuente de la aplicación
 COPY . .
