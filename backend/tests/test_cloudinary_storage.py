@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+from cloudinary.exceptions import NotFound
+
 from app.services.cloudinary_storage import CloudinaryStorage
 
 
@@ -48,6 +50,12 @@ class CloudinaryStorageTests(unittest.TestCase):
     def test_exists(self, resource, _config):
         resource.return_value = {"public_id": "uuid"}
         self.assertTrue(CloudinaryStorage().exists("uuid"))
+
+    @patch("cloudinary.config")
+    @patch("cloudinary.api.resource")
+    def test_exists_returns_false_for_provider_not_found(self, resource, _config):
+        resource.side_effect = NotFound("Resource not found")
+        self.assertFalse(CloudinaryStorage().exists("uuid"))
 
     @patch("cloudinary.config")
     @patch("cloudinary.utils.private_download_url")

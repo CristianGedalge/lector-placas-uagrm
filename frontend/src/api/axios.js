@@ -8,10 +8,7 @@ const DEFAULT_TIMEOUT = 30_000; // 30 segundos para el resto de peticiones
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   timeout: DEFAULT_TIMEOUT,
-  withCredentials: true,
-  headers: {
-    "Content-Type": "application/json"
-  }
+  withCredentials: true
 });
 
 apiClient.interceptors.request.use((config) => {

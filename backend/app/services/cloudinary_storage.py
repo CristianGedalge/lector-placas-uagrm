@@ -109,6 +109,7 @@ class CloudinaryStorage(StorageService):
     def exists(self, public_id: str) -> bool:
         try:
             import cloudinary.api
+            from cloudinary.exceptions import NotFound
 
             cloudinary.api.resource(
                 public_id,
@@ -116,6 +117,8 @@ class CloudinaryStorage(StorageService):
                 type=settings.CLOUDINARY_DELIVERY_TYPE,
             )
             return True
+        except NotFound:
+            return False
         except Exception as exc:
             if getattr(exc, "http_code", None) == 404:
                 return False

@@ -10,6 +10,7 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 - Base de datos: PostgreSQL + SQLAlchemy + Alembic
 - IA actual: OpenCV + EasyOCR + Supervision, completamente local
 - Captura automatica: agente separado para webcam USB o RTSP
+- Medios privados: Cloudinary autenticado con WebP y URLs temporales firmadas
 - Frontend separado: React 18 + JavaScript/JSX + CSS, construido con Vite
 
 ## Arquitectura real
@@ -21,6 +22,26 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 - `backend/app/services/`: servicios locales separados, incluido el agente de camara USB/RTSP
 - `frontend/`: aplicacion React/Vite del cliente web
 - `.agents/`: memoria operativa del proyecto
+
+## Dependencias externas
+
+- PostgreSQL es externo a la aplicacion y se configura exclusivamente mediante
+  `DATABASE_URL`; Compose no declara ni exige un servicio `db`.
+- La misma `DATABASE_URL` es consumida por FastAPI, SQLAlchemy y Alembic.
+- Se admiten PostgreSQL local, PostgreSQL accesible desde Docker y Neon sin
+  cambiar codigo ni Compose. Neon requiere TLS.
+- Cloudinary se configura desde `backend/.env`; nunca registrar credenciales,
+  URLs firmadas ni identificadores sensibles en memoria o logs.
+- `backend/.env` no se versiona y queda excluido del contexto Docker.
+
+## Roles vigentes
+
+- `ADMINISTRADOR`: panel, usuarios, catalogos y dispositivos.
+- `OPERADOR`: gestion operativa de vehiculos y accesos manuales.
+- `DISPOSITIVO`: acceso exclusivo al flujo de escaneo `/subir-placa`.
+- `USUARIO`: propietario regular de vehiculos y consulta autorizada.
+- El registro fisico `Dispositivo` y la cuenta `Usuario` con rol `DISPOSITIVO`
+  siguen siendo entidades separadas; no asumir que crear una genera la otra.
 
 ## Reglas de negocio obligatorias
 

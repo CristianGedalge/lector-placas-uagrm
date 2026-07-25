@@ -49,7 +49,11 @@ function Profile() {
       await refreshProfile();
       setMessage("Foto de perfil actualizada.");
     } catch (photoError) {
-      setError(photoError?.response?.data?.detail || "No se pudo actualizar la foto.");
+      const detail = photoError?.response?.data?.detail;
+      const message = Array.isArray(detail)
+        ? detail.map((item) => item?.msg).filter(Boolean).join(". ")
+        : detail;
+      setError(message || "No se pudo actualizar la foto.");
     } finally {
       setPhotoSaving(false);
     }
