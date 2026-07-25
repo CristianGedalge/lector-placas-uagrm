@@ -83,6 +83,29 @@ export async function createAutoAccessLog(payload) {
   return data;
 }
 
+export async function createAutoAccessWithEvidence(payload, image) {
+  const form = new FormData();
+  form.append("vehicle_id", payload.vehicle_id);
+  if (payload.zone) form.append("zone", payload.zone);
+  if (payload.notes) form.append("notes", payload.notes);
+  if (payload.direction) form.append("direction", payload.direction);
+  form.append("image", image, "access-evidence.jpg");
+  const { data } = await apiClient.post("/v1/access-logs/auto-with-evidence", form);
+  return data;
+}
+
+export async function uploadVehiclePhoto(vehicleId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post(`/v1/media/vehicles/${vehicleId}/photo`, form);
+  return data;
+}
+
+export async function getMediaUrl(mediaId) {
+  const { data } = await apiClient.get(`/v1/media/${mediaId}/url`);
+  return data;
+}
+
 export async function getBrands() {
   const { data } = await apiClient.get("/v1/vehicles/brands");
   return data;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Loader from "../components/Loader";
-import { getAccessLogs, createAutoAccessLog, getMyVehicles } from "../api/plates";
+import { getAccessLogs, createAutoAccessLog, getMediaUrl, getMyVehicles } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import Pagination from "../components/Pagination";
 import ConfirmModal from "../components/ConfirmModal";
@@ -15,6 +15,15 @@ function AccessLogs() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const viewEvidence = async (mediaId) => {
+    try {
+      const result = await getMediaUrl(mediaId);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err?.response?.data?.detail || "La evidencia no esta disponible.");
+    }
+  };
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -146,6 +155,7 @@ function AccessLogs() {
               <th style={{ padding: "1rem" }}>Vehículo</th>
               <th style={{ padding: "1rem" }}>Propietario</th>
               <th style={{ padding: "1rem" }}>Notas</th>
+              <th style={{ padding: "1rem" }}>Evidencia</th>
             </tr>
           </thead>
           <tbody>
@@ -179,11 +189,16 @@ function AccessLogs() {
                 <td style={{ padding: "1rem", color: "#666", fontSize: "0.9rem" }}>
                   {log.notes || "-"}
                 </td>
+                <td style={{ padding: "1rem" }}>
+                  {log.image_status === "READY" ? (
+                    <button type="button" className="ghost-button" onClick={() => viewEvidence(log.image_id)}>Ver</button>
+                  ) : log.image_status === "FAILED" ? "Fallida" : log.image_status === "PROCESSING" ? "Procesando" : log.image_status === "PENDING" ? "Pendiente" : "-"}
+                </td>
               </tr>
             ))}
             {!logs.length && (
               <tr>
-                <td colSpan="7" style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
+                <td colSpan="8" style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
                   No se registran movimientos en la bitácora.
                 </td>
               </tr>

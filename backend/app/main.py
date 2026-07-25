@@ -35,7 +35,9 @@ from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.access_logs import router as access_logs_router
 from app.api.v1.devices import router as devices_router
+from app.api.v1.media import router as media_router
 from app.config.settings import settings
+from app.db.session import database_target
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,13 @@ def _ocr_languages() -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Inicializa EasyOCR una vez y libera la referencia al apagar."""
+    target = database_target()
+    logger.info(
+        "Base configurada: provider=%s host=%s database=%s",
+        target["provider"],
+        target["host"],
+        target["database"],
+    )
     if easyocr is None:
         logger.warning("EasyOCR no esta instalado; el pipeline OCR estara deshabilitado.")
         app.state.ocr_reader = None
@@ -104,6 +113,7 @@ app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboar
 app.include_router(plates.router, prefix="/api/v1/plates", tags=["Placas"])
 app.include_router(vehicles_router, prefix="/api/v1/vehicles", tags=["Vehicles"])
 app.include_router(devices_router, prefix="/api/v1/devices", tags=["Devices"])
+app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
 app.include_router(
     access_logs_router,
     prefix="/api/v1/access-logs",

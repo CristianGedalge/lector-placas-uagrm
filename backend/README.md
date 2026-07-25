@@ -24,6 +24,20 @@ pip install -r requirements.txt
 
 Usa `.env.example` como referencia minima. No se deben subir secretos reales.
 
+PostgreSQL es una dependencia externa. `DATABASE_URL` es la unica fuente de
+conexion usada por FastAPI, SQLAlchemy, scripts y Alembic. Copia `.env.example`
+a `.env` y elige la URL correspondiente:
+
+- Backend en el host y PostgreSQL instalado: `localhost` y su puerto local.
+- Backend en Docker y PostgreSQL instalado en el host: `host.docker.internal`
+  en Docker Desktop.
+- Otra instancia PostgreSQL: el host y puerto publicados por el proveedor.
+- Neon: el host entregado por Neon y `?sslmode=require`.
+
+Compose no contiene PostgreSQL, no presupone un host de base de datos y no
+sobrescribe `DATABASE_URL`: el contenedor backend recibe `backend/.env`
+mediante `env_file`. Cambiar de base requiere editar solamente ese archivo.
+
 ## Comandos principales
 
 Migraciones:
@@ -32,6 +46,34 @@ Migraciones:
 cd backend
 set PYTHONPATH=.
 alembic upgrade head
+```
+
+Prueba segura de conexion (`SELECT 1`; en Neon tambien exige SSL activo):
+
+```powershell
+cd backend
+python -m scripts.check_database
+```
+
+## Multimedia academica
+
+Cloudinary es opcional y se configura exclusivamente en `backend/.env`.
+Consulta `docs/cloudinary-integration.md`. Sin credenciales la API principal y
+las pruebas unitarias funcionan, pero las operaciones multimedia responden con
+un error de configuracion sanitizado.
+
+Pruebas:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -t . -v
+$env:RUN_CLOUDINARY_TESTS="1"
+.\.venv\Scripts\python.exe -m unittest tests.test_cloudinary_integration -v
+```
+
+Retencion:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\cleanup_expired_media.py --dry-run
 ```
 
 Servidor:

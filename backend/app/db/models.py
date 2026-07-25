@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import Uuid
 
@@ -38,6 +38,25 @@ class UbicacionVehiculoEnum(str, enum.Enum):
     FUERA = "FUERA"
 
 
+class MediaProviderEnum(str, enum.Enum):
+    CLOUDINARY = "CLOUDINARY"
+
+
+class MediaTypeEnum(str, enum.Enum):
+    USER_PROFILE = "USER_PROFILE"
+    VEHICLE_REGISTRATION = "VEHICLE_REGISTRATION"
+    ACCESS_ENTRY = "ACCESS_ENTRY"
+    ACCESS_EXIT = "ACCESS_EXIT"
+
+
+class MediaStatusEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    READY = "READY"
+    FAILED = "FAILED"
+    DELETED = "DELETED"
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -49,11 +68,13 @@ class Usuario(Base):
     contrasena_hash = Column(String, nullable=False)
     rol = Column(Enum(RoleEnum), default=RoleEnum.USUARIO, nullable=False)
     esta_activo = Column(Boolean, default=True, nullable=False)
+    foto_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     vehiculos = relationship("Vehiculo", back_populates="propietario")
     accesos_gestionados = relationship("Acceso", back_populates="operador")
+    foto = relationship("ArchivoMultimedia", foreign_keys=[foto_id])
 
 
 class Marca(Base):
@@ -82,6 +103,7 @@ class Vehiculo(Base):
     tipo_vehiculo_id = Column(Uuid, ForeignKey("tipos_vehiculo.id"), nullable=False)
     propietario_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False)
     esta_activo = Column(Boolean, default=True, nullable=False)
+    foto_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -90,6 +112,7 @@ class Vehiculo(Base):
     propietario = relationship("Usuario", back_populates="vehiculos")
     escaneos = relationship("Escaneado", back_populates="vehiculo")
     estado_campus = relationship("EstadoCampus", back_populates="vehiculo", uselist=False)
+    foto = relationship("ArchivoMultimedia", foreign_keys=[foto_id])
 
 
 class EstadoCampus(Base):
@@ -168,7 +191,38 @@ class Acceso(Base):
     ubicacion = Column(String, nullable=False)
     escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False)
     operador_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True)
+    imagen_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
 
     escaneado = relationship("Escaneado", back_populates="acceso")
     operador = relationship("Usuario", back_populates="accesos_gestionados")
+    imagen = relationship("ArchivoMultimedia", foreign_keys=[imagen_id])
+
+
+class ArchivoMultimedia(Base):
+    __tablename__ = "archivos_multimedia"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    proveedor = Column(Enum(MediaProviderEnum), nullable=False, default=MediaProviderEnum.CLOUDINARY)
+    tipo = Column(Enum(MediaTypeEnum), nullable=False)
+    estado = Column(Enum(MediaStatusEnum), nullable=False, default=MediaStatusEnum.PENDING, index=True)
+    asset_id = Column(String, nullable=True, unique=True)
+    public_id = Column(String, nullable=True, unique=True)
+    resource_type = Column(String, nullable=False, default="image")
+    delivery_type = Column(String, nullable=False, default="authenticated")
+    formato = Column(String, nullable=True)
+    ancho = Column(Integer, nullable=True)
+    alto = Column(Integer, nullable=True)
+    peso_bytes = Column(Integer, nullable=True)
+    intentos = Column(Integer, nullable=False, default=0)
+    ultimo_error = Column(Text, nullable=True)
+    spool_path = Column(String, nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    deleted_at = Column(DateTime(timezone=True), nullable=True)

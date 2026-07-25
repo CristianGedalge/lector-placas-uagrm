@@ -1,0 +1,69 @@
+import io
+import unittest
+from unittest.mock import patch
+
+from PIL import Image
+
+from app.services.image_processing import ImageProcessingError, ImageProcessingService
+
+
+def encoded(fmt="JPEG", size=(120, 80), exif=None):
+    output = io.BytesIO()
+    options = {"exif": exif} if exif is not None else {}
+    Image.new("RGB", size, "navy").save(output, format=fmt, **options)
+    return output.getvalue()
+
+
+class ImageProcessingTests(unittest.TestCase):
+    def setUp(self):
+        self.service = ImageProcessingService()
+
+    def test_jpeg_to_webp(self):
+        result = self.service.process(encoded("JPEG"), "VEHICLE_REGISTRATION")
+        self.assertEqual(result.format, "webp")
+        self.assertEqual(Image.open(io.BytesIO(result.content)).format, "WEBP")
+
+    def test_png_to_webp(self):
+        result = self.service.process(encoded("PNG"), "ACCESS_ENTRY")
+        self.assertEqual(Image.open(io.BytesIO(result.content)).format, "WEBP")
+
+    def test_user_is_center_cropped(self):
+        result = self.service.process(encoded(size=(900, 600)), "USER_PROFILE")
+        self.assertEqual((result.width, result.height), (512, 512))
+
+    def test_vehicle_is_not_upscaled(self):
+        result = self.service.process(encoded(size=(300, 200)), "VEHICLE_REGISTRATION")
+        self.assertEqual((result.width, result.height), (300, 200))
+
+    def test_access_dimension_is_limited(self):
+        with patch(
+            "app.services.image_processing.settings.MEDIA_ACCESS_MAX_DIMENSION", 100
+        ):
+            result = self.service.process(encoded(size=(300, 150)), "ACCESS_EXIT")
+        self.assertEqual((result.width, result.height), (100, 50))
+
+    def test_exif_is_removed_and_orientation_is_applied(self):
+        exif = Image.Exif()
+        exif[274] = 6
+        exif[270] = "private metadata"
+        result = self.service.process(
+            encoded(size=(40, 20), exif=exif), "VEHICLE_REGISTRATION"
+        )
+        saved = Image.open(io.BytesIO(result.content))
+        self.assertEqual(saved.size, (20, 40))
+        self.assertEqual(len(saved.getexif()), 0)
+
+    def test_corrupt_file_is_rejected(self):
+        with self.assertRaises(ImageProcessingError):
+            self.service.process(b"not-an-image", "ACCESS_ENTRY")
+
+    def test_oversized_file_is_rejected_before_decode(self):
+        with patch(
+            "app.services.image_processing.settings.MEDIA_MAX_UPLOAD_BYTES", 4
+        ):
+            with self.assertRaises(ImageProcessingError):
+                self.service.process(b"12345", "ACCESS_ENTRY")
+
+
+if __name__ == "__main__":
+    unittest.main()
