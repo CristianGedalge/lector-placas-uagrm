@@ -43,7 +43,11 @@ async def get_dashboard_summary(
     vehicles_inside = campus_result.scalar() or 0
 
     # Escaneos de placas (Telemetría)
-    scans_query = select(Escaneado).order_by(Escaneado.creado_el.desc())
+    scans_query = (
+        select(Escaneado)
+        .options(selectinload(Escaneado.vehiculo))
+        .order_by(Escaneado.creado_el.desc())
+    )
     scans_result = await db.execute(scans_query)
     scans = list(scans_result.scalars().all())
     total_scans = len(scans)
@@ -70,7 +74,8 @@ async def get_dashboard_summary(
             "confianza": s.confianza,
             "estado": s.estado.value if hasattr(s.estado, "value") else str(s.estado),
             "creado_el": s.creado_el.isoformat(),
-            "has_vehicle": s.vehiculo_id is not None
+            "has_vehicle": s.vehiculo_id is not None,
+            "vehicle_photo_id": str(s.vehiculo.foto_id) if s.vehiculo and s.vehiculo.foto_id else None,
         })
 
     return {

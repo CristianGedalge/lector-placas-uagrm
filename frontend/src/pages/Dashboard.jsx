@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Loader from "../components/Loader";
-import { getDashboardSummary, getPlateScans, getAccessLogs } from "../api/plates";
+import { getDashboardSummary, getPlateScans, getAccessLogs, getMediaUrl } from "../api/plates";
 import { useAuth } from "../hooks/useAuth";
 import parseApiError from "../utils/errors";
 
@@ -169,6 +169,7 @@ function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [scans, setScans] = useState([]);
   const [accesses, setAccesses] = useState([]);
+  const [vehiclePhotoUrls, setVehiclePhotoUrls] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -203,11 +204,38 @@ function Dashboard() {
     }
   }, [user?.id, loadDashboard]);
 
+  const recentScans = dashboardData?.recent_scans || [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const photoIds = [...new Set(recentScans.map((scan) => scan.vehicle_photo_id).filter(Boolean))];
+
+    if (!photoIds.length) {
+      setVehiclePhotoUrls({});
+      return () => { cancelled = true; };
+    }
+
+    Promise.all(
+      photoIds.map(async (id) => {
+        try {
+          const { url } = await getMediaUrl(id);
+          return [id, url];
+        } catch {
+          return [id, ""];
+        }
+      })
+    ).then((entries) => {
+      if (!cancelled) {
+        setVehiclePhotoUrls(Object.fromEntries(entries));
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [dashboardData]);
+
   if (loading) {
     return <Loader label="Cargando resumen de telemetría..." />;
   }
-
-  const recentScans = dashboardData?.recent_scans || [];
 
   // ── Derivar datos para gráficas ──────────────────────────────────────────
   const scansByStatus = [
@@ -444,12 +472,25 @@ function Dashboard() {
                 <th style={{ padding: "0.8rem" }}>Placa Normalizada</th>
                 <th style={{ padding: "0.8rem" }}>Confianza</th>
                 <th style={{ padding: "0.8rem" }}>Estado</th>
+                <th style={{ padding: "0.8rem" }}>Foto</th>
                 <th style={{ padding: "0.8rem" }}>BD Vehículo</th>
               </tr>
             </thead>
             <tbody>
               {recentScans.map((s) => (
                 <tr key={s.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                  <td style={{ padding: "0.5rem 0.8rem" }}>
+                    {s.vehicle_photo_id && vehiclePhotoUrls[s.vehicle_photo_id] ? (
+                      <img
+                        src={vehiclePhotoUrls[s.vehicle_photo_id]}
+                        alt={`Vehículo ${s.placa_normalizada || s.placa_detectada || "registrado"}`}
+                        title="Foto del vehículo"
+                        style={{ width: "44px", height: "44px", borderRadius: "8px", objectFit: "cover", border: "1px solid rgba(21, 62, 117, 0.18)" }}
+                      />
+                    ) : (
+                      <span style={{ color: "#94a3b8" }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
                     {new Date(s.creado_el).toLocaleString()}
                   </td>
@@ -485,7 +526,7 @@ function Dashboard() {
               ))}
               {!recentScans.length && (
                 <tr>
-                  <td colSpan="6" style={{ padding: "1.5rem", textAlign: "center", color: "#666" }}>
+                  <td colSpan="7" style={{ padding: "1.5rem", textAlign: "center", color: "#666" }}>
                     No hay escaneos recientes en la bitácora.
                   </td>
                 </tr>
