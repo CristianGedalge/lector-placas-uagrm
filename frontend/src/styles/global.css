@@ -591,8 +591,11 @@ textarea:focus {
     position: fixed;
     inset: 0;
     border: 0;
-    background: rgba(16, 24, 40, 0.38);
+    border-radius: 0;
+    background: rgba(16, 24, 40, 0.4) !important;
+    box-shadow: none !important;
     z-index: 10;
+    padding: 0;
   }
 
   .content-area,
@@ -1074,4 +1077,17 @@ textarea:focus {
   display: block;
 }
 .field-hint.valid   { color: #10b981; }
-.field-hint.invalid { color: #ef4444; }
+.field-hint.invalid { color: #ef4444; }
+
+/* Responsive user details in topbar */
+@media (max-width: 680px) {
+  .navbar-user-details {
+    display: none !important;
+  }
+  .topbar-heading h1 {
+    font-size: 1.15rem !important;
+  }
+  .topbar-heading p {
+    font-size: 0.65rem !important;
+  }
+}

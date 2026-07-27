@@ -144,6 +144,7 @@ class Dispositivo(Base):
     ubicacion = Column(String, nullable=False)
     tipo_dispositivo_id = Column(Uuid, ForeignKey("tipos_dispositivo.id"), nullable=False)
     esta_activo = Column(Boolean, default=True, nullable=False)
+    webhook_url = Column(String, nullable=True)  # URL del actuador de barrera (simulador o ESP32)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 

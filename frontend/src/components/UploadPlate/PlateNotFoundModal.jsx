@@ -11,11 +11,10 @@ export default function PlateNotFoundModal({
     const timer = setTimeout(() => {
       setActiveModal(null);
       setManualPlate("");
-      if (activeTab === "camera") startCamera(true);
     }, 5000); // 5 segundos
 
     return () => clearTimeout(timer);
-  }, [setActiveModal, setManualPlate, activeTab, startCamera]);
+  }, [setActiveModal, setManualPlate]);
 
   return (
     <div className="modal-backdrop">

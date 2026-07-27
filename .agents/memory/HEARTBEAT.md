@@ -1,25 +1,22 @@
 # HEARTBEAT
 
-## Estado vigente - 2026-07-25
+## Estado vigente - 2026-07-27
 
-- Foco: ejecucion local/Docker con PostgreSQL externo, Neon y Cloudinary.
-- Validado: 44 pruebas, build Vite, HTTP/proxy/OpenAPI, Neon TLS/SELECT 1/Alembic
-  y Cloudinary real local y Docker.
-- Corregido: multipart Axios, `NotFound` Cloudinary, pool PostgreSQL con
-  `pool_pre_ping`, Docker headless/CPU y exclusion de secretos del contexto.
-- Datos: dos operadores, dos administradores, una cuenta dispositivo y los
-  catalogos Toyota/Nissan/Automóvil/Motocicleta. No guardar contrasenas.
-- Flujo DISPOSITIVO: login a `/subir-placa`; la cuenta no esta vinculada
-  automaticamente con la entidad fisica `Dispositivo`.
-- Pendientes: camara USB/RTSP real, calibracion OCR, vinculo cuenta-dispositivo,
-  repositorio remoto y dos avisos moderados React Router.
-- Proximo paso: modelar el vinculo de identidad del dispositivo y probar con
-  hardware real.
-
-- Foco actual: Consolidación del sistema de roles (ADMINISTRADOR, OPERADOR, DISPOSITIVO, USUARIO) y del flujo de registro de accesos vehiculares manuales y automáticos.
-- Ultimo avance: Se completó la separación de flujos por rol en el frontend (Vehicles.jsx, AccessLogs.jsx, UploadPlate.jsx, Sidebar, AppRoutes). El rol DISPOSITIVO tiene acceso exclusivo a la vista de cámara en vivo, con registro automático de Ingreso/Salida inferido por el estado del campus. El endpoint `/api/v1/access-logs/auto` ahora acepta `direction` explícita del operador además de inferirla. Se corrigió el error 422 del formulario de acceso manual (endpoint incorrecto), el mensaje vacío del ConfirmModal (clave `message` vs `mensaje`) y se añadió búsqueda de placa en tiempo real en el modal de acceso manual.
-- Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz; submódulos en frontend/src/components/ y páginas en frontend/src/pages/.
-- Inventario confirmado: Suite completa de 23 pruebas unitarias y empaquetado de producción Vite completados correctamente (100% exitoso).
-- Bloqueos: `CAM-004` y `OCR-PHYSICAL-001` siguen bloqueados por hardware físico real. `REPO-001` pendiente de repositorio remoto vacío.
-- Proximo paso: Integrar y calibrar con cámaras IP en el entorno físico de la universidad. Validar flujo completo DISPOSITIVO con login → vista de cámara → registro automático de acceso.
-- Estado del Alpha: Roles diferenciados, pipeline OCR optimizado, accesos manuales y automáticos funcionales, Dashboard premium unificado, gestión de vehículos por admin/operador completa.
+- **Foco**: Integración del celular como dispositivo de cámara por WiFi local y simulador visual de barrera de acceso.
+- **Validado**: 44 pruebas unitarias, build Vite, migración Alembic `3aa735770818` aplicada a Neon, HTTPS en Vite con certificado auto-firmado.
+- **Completado en esta sesión**:
+  - `BACKEND_HOST=0.0.0.0` y CORS ajustado para IP LAN (`192.168.0.14`).
+  - Vite con `host: true` y `https: true` mediante `@vitejs/plugin-basic-ssl`.
+  - Columna `webhook_url` en `Dispositivo` (BD migrada).
+  - `_trigger_barrier_webhook` en `plates.py` (background, silencioso).
+  - Auto-resolución del `Dispositivo` por nombre del usuario `DISPOSITIVO` logueado.
+  - Nuevo router `barrier.py`: `POST /trigger`, `GET /events` (SSE), `GET /simulator` (HTML animado).
+  - Campo `webhook_url` en modales crear/editar de `Devices.jsx`.
+  - `Permissions-Policy: camera=(*)` habilitado para cámara en red local.
+- **Estado de red**:
+  - Celular accede vía `https://192.168.0.14:5173` (acepta certificado auto-firmado la 1ª vez).
+  - Simulador de barrera: `http://localhost:8000/api/v1/barrier/simulator`.
+  - Firewall puertos 5173/8000 pendiente de ejecutar como Administrador.
+- **Convención de vinculación Dispositivo ↔ Usuario**: El nombre del `Dispositivo` registrado en el panel de admin debe coincidir exactamente con el `nombre` del `Usuario` de rol `DISPOSITIVO`. El backend los empareja automáticamente en `plates.py`.
+- **Bloqueos vigentes**: `CAM-004` y `OCR-PHYSICAL-001` siguen bloqueados por hardware físico. `REPO-001` pendiente de repositorio remoto vacío. Firewall requiere terminal de Administrador.
+- **Próximo paso**: Registrar el dispositivo en el panel admin con `webhook_url`, crear la cuenta `DISPOSITIVO` con el mismo nombre, probar el flujo completo celular → OCR → barrera simulada.

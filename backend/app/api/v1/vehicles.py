@@ -291,11 +291,18 @@ async def update_vehicle(
     vehicle_id: uuid.UUID,
     vehicle_in: VehiculoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(require_staff),
+    current_user: Usuario = Depends(get_current_user),
 ):
     vehicle = await get_vehicle_with_relations(vehicle_id, db)
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehículo no encontrado.")
+
+    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]:
+        if vehicle.propietario_usuario_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para actualizar este vehículo.",
+            )
 
     owner_result = await db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id))
     owner = owner_result.scalars().first()
@@ -318,6 +325,12 @@ async def update_vehicle(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Los administradores y operadores no pueden registrar vehículos a su propio nombre.",
+            )
+    else:
+        if vehicle_in.propietario_usuario_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No puedes cambiar el propietario de este vehículo.",
             )
 
     vehicle.placa = vehicle_in.placa.upper().strip()
@@ -342,12 +355,20 @@ async def update_vehicle(
 async def delete_vehicle(
     vehicle_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(require_staff)
+    current_user: Usuario = Depends(get_current_user)
 ):
     vehicle = await get_vehicle_with_relations(vehicle_id, db)
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehículo no encontrado.")
 
+    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]:
+        if vehicle.propietario_usuario_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para eliminar este vehículo.",
+            )
+
     await db.delete(vehicle)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+

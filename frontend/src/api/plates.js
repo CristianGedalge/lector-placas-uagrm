@@ -101,6 +101,10 @@ export async function uploadVehiclePhoto(vehicleId, file) {
   return data;
 }
 
+export async function deleteVehiclePhoto(vehicleId) {
+  await apiClient.delete(`/v1/media/vehicles/${vehicleId}/photo`);
+}
+
 export async function getMediaUrl(mediaId) {
   const { data } = await apiClient.get(`/v1/media/${mediaId}/url`);
   return data;

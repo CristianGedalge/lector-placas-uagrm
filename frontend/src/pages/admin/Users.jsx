@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, memo } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
-import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser } from "../api/auth";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
+import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser } from "../../api/auth";
 
 const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit }) => (
   <tr style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>

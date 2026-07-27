@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import UploadImage from "../components/UploadImage";
+import UploadImage from "../../components/UploadImage";
 import {
   createVehicle,
   lookupVehicleByPlate,
@@ -9,11 +9,11 @@ import {
   createAutoAccessWithEvidence,
   getBrands,
   getVehicleTypes
-} from "../api/plates";
-import { useAuth } from "../hooks/useAuth";
-import { formatPlate } from "../utils/formatters";
-import VehicleFoundModal from "../components/UploadPlate/VehicleFoundModal";
-import PlateNotFoundModal from "../components/UploadPlate/PlateNotFoundModal";
+} from "../../api/plates";
+import { useAuth } from "../../hooks/useAuth";
+import { formatPlate } from "../../utils/formatters";
+import VehicleFoundModal from "../../components/UploadPlate/VehicleFoundModal";
+import PlateNotFoundModal from "../../components/UploadPlate/PlateNotFoundModal";
 
 const ownerInitialState = {
   code: "",
@@ -77,7 +77,10 @@ function UploadPlate() {
   const [activeModal, setActiveModal] = useState(null); // null | "file" | "snapshot"
 
   useEffect(() => {
-    if (activeTab === "camera") {
+    // Si hay algún modal abierto (que no sea para sacar foto "snapshot"), detenemos la cámara
+    const isModalOpen = activeModal && activeModal !== "snapshot";
+
+    if (activeTab === "camera" && !isModalOpen) {
       startCamera(true);
     } else if (activeModal === "snapshot") {
       startCamera(false);
@@ -149,10 +152,6 @@ function UploadPlate() {
           setLookupResult(null);
           setAutoAccessLog(null);
           setManualPlate("");
-          // Si estábamos en modo cámara, la reiniciamos para seguir escaneando
-          if (activeTab === "camera") {
-            startCamera(true);
-          }
         }, 5000);
         
       } catch (autoErr) {

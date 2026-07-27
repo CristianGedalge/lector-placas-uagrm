@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import ConfirmModal from "../ConfirmModal";
 
 function Sidebar({ isOpen, onClose }) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   const links = [];
 
@@ -25,6 +28,7 @@ function Sidebar({ isOpen, onClose }) {
     );
   } else {
     links.push(
+      { to: "/", label: "Inicio" },
       { to: "/vehiculos", label: "Mis Vehiculos" },
       { to: "/accesos", label: "Control de Accesos" }
     );
@@ -52,6 +56,24 @@ function Sidebar({ isOpen, onClose }) {
               <span className="nav-text">{link.label}</span>
             </NavLink>
           ))}
+          {user?.rol !== "DISPOSITIVO" && (
+            <button
+              type="button"
+              onClick={() => setIsLogoutConfirmOpen(true)}
+              className="nav-link nav-link-icon"
+              style={{
+                background: "none",
+                border: "none",
+                textAlign: "left",
+                width: "100%",
+                cursor: "pointer",
+                marginTop: "1.5rem",
+                color: "#fca5a5"
+              }}
+            >
+              <span className="nav-text">Cerrar Sesión</span>
+            </button>
+          )}
         </nav>
       </aside>
       {isOpen && (
@@ -62,6 +84,18 @@ function Sidebar({ isOpen, onClose }) {
           aria-label="Cerrar menu"
         />
       )}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Cerrar Sesión"
+        message="¿Estás seguro de que deseas cerrar tu sesión en el sistema?"
+        confirmColor="var(--color-danger, #ef4444)"
+        onConfirm={() => {
+          setIsLogoutConfirmOpen(false);
+          signOut();
+          onClose();
+        }}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
     </>
   );
 }

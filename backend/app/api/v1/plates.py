@@ -1,5 +1,7 @@
 import uuid
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
+import asyncio
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +10,15 @@ from app.schemas.plate import PlateAnalysisResponse, EscaneadoResponse
 from app.ai.pipeline import analyze_plate, get_pipeline_status
 from app.core.limiter import limiter
 from app.db.session import get_db
-from app.db.models import Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum
+from app.db.models import (
+    Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum,
+    Acceso, ArchivoMultimedia, EstadoCampus, Dispositivo,
+    TipoAccesoEnum, UbicacionVehiculoEnum, MediaProviderEnum,
+    MediaTypeEnum, MediaStatusEnum
+)
 from app.api.v1.auth import get_current_user
+from app.services.media_tasks import process_media_record, spool_directory
+from app.config.settings import settings
 
 async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
     try:
@@ -23,10 +32,23 @@ router = APIRouter()
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png"]
 
+
+async def _trigger_barrier_webhook(url: str, direction: str) -> None:
+    """Dispara el webhook del actuador de barrera en background.
+    Nunca lanza excepcion: si la barrera esta offline, el flujo continua normal."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post(url, json={"action": "open", "direction": direction})
+    except Exception:
+        pass  # Barrera offline no es error critico del sistema
+
+
 @router.post("/analyze", response_model=PlateAnalysisResponse)
 @limiter.limit("60/minute")
 async def analyze_plate_endpoint(
     request: Request, 
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     realtime: bool = False,
     dispositivo_id: str | None = Form(None),
@@ -74,31 +96,127 @@ async def analyze_plate_endpoint(
     if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
         normalized = result_dict.get("normalized_plate")
         
-        vehicle_id = None
+        vehicle = None
         if normalized:
             v_res = await db.execute(select(Vehiculo).where(Vehiculo.placa == normalized))
             vehicle = v_res.scalars().first()
-            if vehicle:
-                vehicle_id = vehicle.id
 
         estado_enum = EstadoEscaneoEnum.DETECTADO if status_val == "DETECTED" else EstadoEscaneoEnum.BAJA_CONFIANZA
 
         disp_uuid = None
+        dispositivo = None
         if dispositivo_id:
             try:
                 disp_uuid = uuid.UUID(dispositivo_id)
+                disp_res = await db.execute(select(Dispositivo).where(Dispositivo.id == disp_uuid))
+                dispositivo = disp_res.scalars().first()
             except ValueError:
                 pass
+
+        # Si no hay dispositivo_id explícito pero el usuario autenticado es DISPOSITIVO,
+        # resolver automáticamente por nombre (según convención del sistema)
+        if dispositivo is None and current_user is not None and current_user.rol.value == "DISPOSITIVO":
+            disp_res = await db.execute(
+                select(Dispositivo).where(
+                    Dispositivo.nombre == current_user.nombre,
+                    Dispositivo.esta_activo == True
+                )
+            )
+            dispositivo = disp_res.scalars().first()
+            if dispositivo:
+                disp_uuid = dispositivo.id
 
         scan = Escaneado(
             placa_detectada=result_dict.get("detected_plate"),
             placa_normalizada=normalized,
             confianza=result_dict.get("combined_confidence") or result_dict.get("ocr_confidence") or 0.0,
             estado=estado_enum,
-            vehiculo_id=vehicle_id,
+            vehiculo_id=vehicle.id if vehicle else None,
             dispositivo_id=disp_uuid
         )
         db.add(scan)
+        
+        if vehicle:
+            # 1. Determinar el tipo de acceso (ENTRADA o SALIDA)
+            tipo_acceso = None
+            if dispositivo:
+                name_lower = dispositivo.nombre.lower()
+                if "entrada" in name_lower or "ingreso" in name_lower:
+                    tipo_acceso = TipoAccesoEnum.ENTRADA
+                elif "salida" in name_lower or "egreso" in name_lower:
+                    tipo_acceso = TipoAccesoEnum.SALIDA
+            
+            if tipo_acceso is None:
+                # Consultar el último estado en el campus del vehículo
+                estado_res = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehicle.id))
+                estado_campus = estado_res.scalars().first()
+                if estado_campus and estado_campus.estado == UbicacionVehiculoEnum.DENTRO:
+                    tipo_acceso = TipoAccesoEnum.SALIDA
+                else:
+                    tipo_acceso = TipoAccesoEnum.ENTRADA
+
+            # 2. Registrar el acceso
+            ubicacion_acceso = dispositivo.ubicacion if dispositivo else "Portería Principal"
+            log = Acceso(
+                tipo_acceso=tipo_acceso,
+                ubicacion=ubicacion_acceso,
+                escaneado=scan,
+                operador_usuario_id=None
+            )
+            db.add(log)
+
+            # 3. Guardar imagen de evidencia
+            media_type = (
+                MediaTypeEnum.ACCESS_ENTRY
+                if tipo_acceso == TipoAccesoEnum.ENTRADA
+                else MediaTypeEnum.ACCESS_EXIT
+            )
+            
+            # Generar el UUID manualmente para evitar la necesidad de flush
+            media_uuid = uuid.uuid4()
+            media = ArchivoMultimedia(
+                id=media_uuid,
+                proveedor=MediaProviderEnum.CLOUDINARY,
+                tipo=media_type,
+                estado=MediaStatusEnum.PENDING,
+                resource_type="image",
+                delivery_type=settings.CLOUDINARY_DELIVERY_TYPE,
+                expires_at=datetime.now(timezone.utc) + timedelta(days=settings.MEDIA_ACCESS_RETENTION_DAYS),
+            )
+            db.add(media)
+
+            # Spool local de la imagen usando el UUID generado
+            spool_path = spool_directory() / f"{media_uuid}.upload"
+            await asyncio.to_thread(spool_path.write_bytes, image_bytes)
+            media.spool_path = str(spool_path)
+            log.imagen = media
+
+            # 4. Actualizar EstadoCampus
+            estado_res = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehicle.id))
+            estado_campus = estado_res.scalars().first()
+            nuevo_estado = UbicacionVehiculoEnum.DENTRO if tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
+            if estado_campus:
+                estado_campus.estado = nuevo_estado
+                estado_campus.ultimo_acceso = log
+            else:
+                estado_campus = EstadoCampus(
+                    vehiculo_id=vehicle.id,
+                    estado=nuevo_estado,
+                    ultimo_acceso=log
+                )
+                db.add(estado_campus)
+
+            # 5. Encolar tarea de subida a Cloudinary
+            background_tasks.add_task(process_media_record, media_uuid)
+
+            # 6. Disparar webhook de barrera si el dispositivo tiene URL configurada
+            if dispositivo and dispositivo.webhook_url:
+                background_tasks.add_task(
+                    _trigger_barrier_webhook,
+                    dispositivo.webhook_url,
+                    tipo_acceso.value
+                )
+ 
         try:
             await db.commit()
         except Exception:

@@ -288,7 +288,28 @@ async def list_access_logs(
         .limit(limit)
     )
 
-    # Dependiendo de permisos, filtrar. Por ahora todos
+    # Si es un usuario normal, filtrar solo sus propios vehiculos
+    if current_user.rol == RoleEnum.USUARIO:
+        stmt = (
+            select(Acceso)
+            .join(Acceso.escaneado)
+            .join(Escaneado.vehiculo)
+            .where(Vehiculo.propietario_usuario_id == current_user.id)
+            .options(
+                selectinload(Acceso.imagen),
+                selectinload(Acceso.escaneado)
+                .selectinload(Escaneado.vehiculo)
+                .selectinload(Vehiculo.propietario),
+                selectinload(Acceso.escaneado)
+                .selectinload(Escaneado.vehiculo)
+                .selectinload(Vehiculo.marca)
+            )
+            .order_by(Acceso.creado_el.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+
     result = await db.execute(stmt)
     logs = result.scalars().all()
     return [AccesoResponse.model_validate(x) for x in logs]
+

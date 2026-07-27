@@ -1,16 +1,48 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardLayout from "../layouts/DashboardLayout";
-import Dashboard from "../pages/Dashboard";
-import Login from "../pages/Login";
+import Dashboard from "../pages/admin/Dashboard";
+import Login from "../pages/auth/Login";
 import Profile from "../pages/Profile";
-import Register from "../pages/Register";
-import UploadPlate from "../pages/UploadPlate";
-import Users from "../pages/Users";
-import Vehicles from "../pages/Vehicles";
-import Devices from "../pages/Devices";
-import AccessLogs from "../pages/AccessLogs";
+import Register from "../pages/auth/Register";
+import UploadPlate from "../pages/device/UploadPlate";
+import Users from "../pages/admin/Users";
+import Vehicles from "../pages/operator/Vehicles";
+import UserVehicles from "../pages/user/UserVehicles";
+import UserDashboard from "../pages/user/UserDashboard";
+import UserAccessLogs from "../pages/user/UserAccessLogs";
+import Devices from "../pages/admin/Devices";
+import AccessLogs from "../pages/operator/AccessLogs";
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
+
+function VehiclesRoute() {
+  const { user, authLoading } = useAuth();
+
+  if (authLoading) {
+    return <Loader label="Cargando ruta..." />;
+  }
+
+  if (user?.rol === "ADMINISTRADOR" || user?.rol === "OPERADOR") {
+    return <Vehicles />;
+  }
+
+  return <UserVehicles />;
+}
+
+function AccessLogsRoute() {
+  const { user, authLoading } = useAuth();
+
+  if (authLoading) {
+    return <Loader label="Cargando ruta..." />;
+  }
+
+  if (user?.rol === "ADMINISTRADOR" || user?.rol === "OPERADOR") {
+    return <AccessLogs />;
+  }
+
+  return <UserAccessLogs />;
+}
+
 
 function ProtectedLayout() {
   const { user, authLoading } = useAuth();
@@ -61,7 +93,7 @@ function HomeRoute() {
     return <Loader label="Cargando..." />;
   }
 
-  if (user?.rol === "ADMINISTRADOR") {
+  if (user?.rol === "ADMINISTRADOR" || user?.rol === "OPERADOR") {
     return <Dashboard />;
   }
 
@@ -69,7 +101,7 @@ function HomeRoute() {
     return <Navigate to="/subir-placa" replace />;
   }
 
-  return <Navigate to="/vehiculos" replace />;
+  return <UserDashboard />;
 }
 
 function AppRoutes() {
@@ -83,8 +115,8 @@ function AppRoutes() {
         <Route path="/perfil" element={<Profile />} />
         <Route path="/usuarios" element={<AdminRoute><Users /></AdminRoute>} />
         <Route path="/dispositivos" element={<AdminRoute><Devices /></AdminRoute>} />
-        <Route path="/vehiculos" element={<Vehicles />} />
-        <Route path="/accesos" element={<AccessLogs />} />
+        <Route path="/vehiculos" element={<VehiclesRoute />} />
+        <Route path="/accesos" element={<AccessLogsRoute />} />
       </Route>
     </Routes>
   );

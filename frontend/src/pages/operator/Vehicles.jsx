@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
 import {
   getVehicles,
   createVehicle,
@@ -14,12 +14,66 @@ import {
   createVehicleType,
   updateVehicleType,
   deleteVehicleType,
-  uploadVehiclePhoto
-} from "../api/plates";
-import { listUsers } from "../api/auth";
-import { useAuth } from "../hooks/useAuth";
-import { formatPlate, validatePlateForm } from "../utils/formatters";
-import Pagination from "../components/Pagination";
+  uploadVehiclePhoto,
+  deleteVehiclePhoto,
+  getMediaUrl
+} from "../../api/plates";
+import { listUsers } from "../../api/auth";
+import { useAuth } from "../../hooks/useAuth";
+import { formatPlate, validatePlateForm } from "../../utils/formatters";
+import Pagination from "../../components/Pagination";
+function VehicleTablePhoto({ fotoId }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!fotoId) {
+      setUrl("");
+      return;
+    }
+    setLoading(true);
+    getMediaUrl(fotoId)
+      .then((res) => {
+        setUrl(res.url);
+      })
+      .catch((err) => {
+        console.error("Error cargando url de la foto del vehiculo:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [fotoId]);
+
+  if (!fotoId) {
+    return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Sin foto</span>;
+  }
+
+  if (loading) {
+    return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Cargando...</span>;
+  }
+
+  if (!url) {
+    return <span style={{ color: "#ef4444", fontSize: "0.85rem" }}>Error</span>;
+  }
+
+  return (
+    <img 
+      src={url} 
+      alt="Vehículo" 
+      style={{ 
+        width: "60px", 
+        height: "40px", 
+        objectFit: "cover", 
+        borderRadius: "4px", 
+        border: "1px solid #cbd5e1",
+        cursor: "pointer",
+        display: "block"
+      }} 
+      onClick={() => window.open(url, "_blank")}
+      title="Ver foto en tamaño completo"
+    />
+  );
+}
 
 function Vehicles() {
   const { user } = useAuth();
@@ -39,13 +93,15 @@ function Vehicles() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [filterType, setFilterType] = useState(isStaff ? "ALL" : "MY");
+  const [filterType, setFilterType] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   // Formularios Modales
   const [creatingVehicle, setCreatingVehicle] = useState(null);
   const [editingVehicle, setEditingVehicle] = useState(null);
+  const [editingVehiclePhotoUrl, setEditingVehiclePhotoUrl] = useState("");
+
 
   const [creatingBrand, setCreatingBrand] = useState(null); // { nombre: "" }
   const [editingBrand, setEditingBrand] = useState(null); // { id, nombre: "" }
@@ -67,39 +123,33 @@ function Vehicles() {
       setError("");
       setSuccess("");
 
-      const filterId = isStaff ? undefined : user?.id;
-      const [vehiclesData, brandsData, typesData] = await Promise.all([
-        getVehicles(filterId),
+      const [vehiclesData, brandsData, typesData, usersData] = await Promise.all([
+        getVehicles(undefined),
         getBrands(),
-        getVehicleTypes()
+        getVehicleTypes(),
+        listUsers()
       ]);
 
       setVehicles(vehiclesData || []);
       setBrands(brandsData || []);
       setTypes(typesData || []);
-
-      if (isStaff) {
-        const usersData = await listUsers();
-        const normalUsers = (usersData || []).filter(u => u.rol === "USUARIO");
-        setUsers(normalUsers);
-      }
+      const normalUsers = (usersData || []).filter(u => u.rol === "USUARIO");
+      setUsers(normalUsers);
     } catch (err) {
       setError("No se pudo cargar la información del sistema.");
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [user, isStaff]);
+  }, []);
+
 
   useEffect(() => {
     if (user?.id) {
       loadData();
-      if (!isStaff) {
-        setFilterType("MY");
-        setActiveTab("vehicles");
-      }
     }
-  }, [user, loadData, isStaff]);
+  }, [user, loadData]);
+
 
   // ── ACCIONES: VEHÍCULOS ──────────────────────────────────────────
   const handleOpenCreateVehicle = () => {
@@ -108,11 +158,14 @@ function Vehicles() {
       color: "",
       marca_id: brands[0]?.id || "",
       tipo_vehiculo_id: types[0]?.id || "",
-      propietario_usuario_id: isStaff ? (users[0]?.id || "") : user?.id
+      propietario_usuario_id: users[0]?.id || "",
+      photoFile: null
     });
     setError("");
     setSuccess("");
   };
+
+
 
   const handleCreateVehicleSubmit = (e) => {
     e.preventDefault();
@@ -133,13 +186,16 @@ function Vehicles() {
         try {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
           setSaving(true);
-          await createVehicle({
+          const newVehicle = await createVehicle({
             placa: plateVal,
             color: creatingVehicle.color,
             marca_id: creatingVehicle.marca_id,
             tipo_vehiculo_id: creatingVehicle.tipo_vehiculo_id,
             propietario_usuario_id: creatingVehicle.propietario_usuario_id
           });
+          if (creatingVehicle.photoFile) {
+            await uploadVehiclePhoto(newVehicle.id, creatingVehicle.photoFile);
+          }
           setSuccess(`Vehículo ${plateVal} registrado con éxito.`);
           setCreatingVehicle(null);
           loadData();
@@ -152,19 +208,57 @@ function Vehicles() {
     });
   };
 
-  const handleOpenEditVehicle = (v) => {
+
+  const handleOpenEditVehicle = async (v) => {
     setEditingVehicle({
       id: v.id,
       placa: v.placa,
       color: v.color,
       marca_id: v.marca_id,
       tipo_vehiculo_id: v.tipo_vehiculo_id,
-      propietario_usuario_id: v.propietario_usuario_id
-      ,photoFile: null
+      propietario_usuario_id: v.propietario_usuario_id,
+      foto_id: v.foto_id,
+      photoFile: null
     });
+    setEditingVehiclePhotoUrl("");
     setError("");
     setSuccess("");
+
+    if (v.foto_id) {
+      try {
+        const result = await getMediaUrl(v.foto_id);
+        setEditingVehiclePhotoUrl(result.url);
+      } catch (err) {
+        console.error("No se pudo cargar la foto del vehiculo:", err);
+      }
+    }
   };
+
+  const handleDeleteVehiclePhoto = (vehicleId) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Eliminar Foto",
+      message: "¿Estás seguro de que deseas eliminar la foto de este vehículo?",
+      confirmColor: "var(--color-danger, #ef4444)",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
+          await deleteVehiclePhoto(vehicleId);
+          setEditingVehiclePhotoUrl("");
+          setEditingVehicle(current => ({ ...current, foto_id: null }));
+          setSuccess("Foto del vehículo eliminada.");
+          loadData();
+        } catch (err) {
+          setError(err.message || "No se pudo eliminar la foto.");
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
+  };
+
+
 
   const handleEditVehicleSubmit = (e) => {
     e.preventDefault();
@@ -441,6 +535,7 @@ function Vehicles() {
                 <thead>
                   <tr style={{ borderBottom: "2px solid rgba(21, 62, 117, 0.1)", color: "#153e75" }}>
                     <th style={{ padding: "1rem" }}>Placa</th>
+                    <th style={{ padding: "1rem" }}>Foto</th>
                     <th style={{ padding: "1rem" }}>Marca</th>
                     <th style={{ padding: "1rem" }}>Tipo</th>
                     <th style={{ padding: "1rem" }}>Color</th>
@@ -466,6 +561,9 @@ function Vehicles() {
                         >
                           {v.placa}
                         </span>
+                      </td>
+                      <td style={{ padding: "1rem" }}>
+                        <VehicleTablePhoto fotoId={v.foto_id} />
                       </td>
                       <td style={{ padding: "1rem", fontWeight: "bold" }}>
                         {v.marca?.nombre || "N/A"}
@@ -758,41 +856,49 @@ function Vehicles() {
                   )}
                 </label>
 
-                {isStaff ? (
-                  <label className="field-group">
-                    <span>Propietario Asociado</span>
-                    {users.length > 0 ? (
-                       <select
-                        value={creatingVehicle.propietario_usuario_id}
-                        onChange={(event) =>
-                          setCreatingVehicle((current) => ({
-                            ...current,
-                            propietario_usuario_id: event.target.value
-                          }))
-                        }
-                        required
-                      >
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.nombre} {u.apellido_paterno} ({u.carnet})
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", color: "#e11d48", background: "#fef2f2", border: "1px solid #fee2e2", padding: "0.5rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "5px" }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        <span>No hay usuarios registrados en el sistema.</span>
-                      </div>
-                    )}
-                  </label>
-                ) : (
-                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: "0.5rem", alignItems: "center", background: "#f0f9ff", border: "1px solid #e0f2fe", padding: "0.6rem 1rem", borderRadius: "8px", fontSize: "0.85rem", color: "#0369a1" }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                    <span>El vehículo se registrará bajo tu propio nombre: <strong>{user?.nombre} {user?.apellido_paterno}</strong>.</span>
-                  </div>
-                )}
+                <label className="field-group">
+                  <span>Propietario Asociado</span>
+                  {users.length > 0 ? (
+                     <select
+                      value={creatingVehicle.propietario_usuario_id}
+                      onChange={(event) =>
+                        setCreatingVehicle((current) => ({
+                          ...current,
+                          propietario_usuario_id: event.target.value
+                        }))
+                      }
+                      required
+                    >
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.nombre} {u.apellido_paterno} ({u.carnet})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", color: "#e11d48", background: "#fef2f2", border: "1px solid #fee2e2", padding: "0.5rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "5px" }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      <span>No hay usuarios registrados en el sistema.</span>
+                    </div>
+                  )}
+                </label>
+
+                <label className="field-group">
+                  <span>Foto privada del vehículo (Opcional)</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setCreatingVehicle((current) => ({
+                        ...current,
+                        photoFile: event.target.files?.[0] || null
+                      }))
+                    }
+                  />
+                </label>
               </div>
             </div>
+
 
             <div className="modal-actions" style={{ marginTop: "1.5rem" }}>
               <button type="submit" disabled={saving || !brands.length || !types.length}>
@@ -899,29 +1005,45 @@ function Vehicles() {
                   </select>
                 </label>
 
-                {isStaff && (
-                  <label className="field-group">
-                    <span>Propietario Asociado</span>
-                    <select
-                      value={editingVehicle.propietario_usuario_id}
-                      onChange={(event) =>
-                        setEditingVehicle((current) => ({
-                          ...current,
-                          propietario_usuario_id: event.target.value
-                        }))
-                      }
-                      required
-                    >
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nombre} {u.apellido_paterno} ({u.carnet})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
                 <label className="field-group">
-                  <span>Foto privada del vehiculo</span>
+                  <span>Propietario Asociado</span>
+                  <select
+                    value={editingVehicle.propietario_usuario_id}
+                    onChange={(event) =>
+                      setEditingVehicle((current) => ({
+                        ...current,
+                        propietario_usuario_id: event.target.value
+                      }))
+                    }
+                    required
+                  >
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.nombre} {u.apellido_paterno} ({u.carnet})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>Foto privada del vehículo</span>
+                  {editingVehiclePhotoUrl && (
+                    <div style={{ marginBottom: "0.5rem" }}>
+                      <img 
+                        src={editingVehiclePhotoUrl} 
+                        alt="Foto del vehículo" 
+                        style={{ maxWidth: "200px", borderRadius: "8px", border: "1px solid #ddd", display: "block", marginBottom: "0.5rem" }} 
+                      />
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteVehiclePhoto(editingVehicle.id)}
+                        style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}
+                      >
+                        Eliminar foto
+                      </button>
+                    </div>
+                  )}
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
@@ -932,7 +1054,8 @@ function Vehicles() {
                       }))
                     }
                   />
-                </label>
+                </div>
+
               </div>
             </div>
 

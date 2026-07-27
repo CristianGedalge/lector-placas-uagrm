@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import Loader from "../components/Loader";
-import { getAccessLogs, createAutoAccessLog, getMediaUrl, getMyVehicles } from "../api/plates";
-import { useAuth } from "../hooks/useAuth";
-import Pagination from "../components/Pagination";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import { getAccessLogs, createAutoAccessLog, getMediaUrl, getMyVehicles } from "../../api/plates";
+import { useAuth } from "../../hooks/useAuth";
+import Pagination from "../../components/Pagination";
+import ConfirmModal from "../../components/ConfirmModal";
 
 function AccessLogs() {
   const { user } = useAuth();
@@ -15,13 +15,18 @@ function AccessLogs() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [selectedEvidenceUrl, setSelectedEvidenceUrl] = useState(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
 
   const viewEvidence = async (mediaId) => {
     try {
+      setEvidenceLoading(true);
       const result = await getMediaUrl(mediaId);
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      setSelectedEvidenceUrl(result.url);
     } catch (err) {
       setError(err?.response?.data?.detail || "La evidencia no esta disponible.");
+    } finally {
+      setEvidenceLoading(false);
     }
   };
 
@@ -319,6 +324,59 @@ function AccessLogs() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
       />
+      {/* Modal para visualizar la evidencia */}
+      {(selectedEvidenceUrl || evidenceLoading) && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setSelectedEvidenceUrl(null)}
+          style={{ zIndex: 100 }}
+        >
+          <div 
+            className="modal-card" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              maxWidth: "700px", 
+              width: "90%", 
+              padding: "1.5rem", 
+              borderRadius: "16px",
+              background: "#ffffff"
+            }}
+          >
+            <div className="modal-header" style={{ marginBottom: "1rem" }}>
+              <div>
+                <p className="eyebrow" style={{ textTransform: "uppercase" }}>Bitácora de Acceso</p>
+                <h2 style={{ fontSize: "1.45rem", color: "#1e3a8a" }}>Evidencia de Detección</h2>
+              </div>
+              <button 
+                type="button" 
+                className="ghost-button" 
+                onClick={() => setSelectedEvidenceUrl(null)}
+                style={{ padding: "0.5rem 1rem" }}
+              >
+                Cerrar
+              </button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", background: "#f1f5f9", borderRadius: "12px", overflow: "hidden", minHeight: "350px", maxHeight: "70vh", position: "relative" }}>
+              {evidenceLoading ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "center" }}>
+                  <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#1e3a8a" }}>Cargando evidencia...</span>
+                </div>
+              ) : (
+                <img 
+                  src={selectedEvidenceUrl} 
+                  alt="Evidencia del Acceso" 
+                  style={{ 
+                    maxWidth: "100%", 
+                    maxHeight: "70vh", 
+                    objectFit: "contain",
+                    display: "block" 
+                  }} 
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

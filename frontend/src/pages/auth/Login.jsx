@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 
-import Loader from "../components/Loader";
-import { useAuth } from "../hooks/useAuth";
+import Loader from "../../components/Loader";
+import { useAuth } from "../../hooks/useAuth";
 
 function Login() {
   const { user, authLoading, signInLoading, signIn } = useAuth();

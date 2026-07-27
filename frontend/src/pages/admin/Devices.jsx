@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
 import {
   getDevices,
   createDevice,
@@ -10,8 +10,8 @@ import {
   createDeviceType,
   updateDeviceType,
   deleteDeviceType
-} from "../api/devices";
-import { useAuth } from "../hooks/useAuth";
+} from "../../api/devices";
+import { useAuth } from "../../hooks/useAuth";
 
 function Devices() {
   const { user } = useAuth();
@@ -76,7 +76,8 @@ function Devices() {
       nombre: "",
       ubicacion: "",
       tipo_dispositivo_id: types[0]?.id || "",
-      esta_activo: true
+      esta_activo: true,
+      webhook_url: ""
     });
     setError("");
     setSuccess("");
@@ -118,7 +119,8 @@ function Devices() {
       nombre: d.nombre,
       ubicacion: d.ubicacion,
       tipo_dispositivo_id: d.tipo_dispositivo_id,
-      esta_activo: d.esta_activo
+      esta_activo: d.esta_activo,
+      webhook_url: d.webhook_url || ""
     });
     setError("");
     setSuccess("");
@@ -499,6 +501,19 @@ function Devices() {
                   />
                   <span>Dispositivo habilitado y transmitiendo</span>
                 </label>
+
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>🔔 URL de Webhook — Barrera / Actuador</span>
+                  <input
+                    type="url"
+                    placeholder="http://localhost:8000/api/v1/barrier/trigger"
+                    value={creatingDevice.webhook_url || ""}
+                    onChange={(e) => setCreatingDevice(prev => ({ ...prev, webhook_url: e.target.value }))}
+                  />
+                  <small style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
+                    Opcional. Cuando se autorice un vehículo, el sistema enviará una señal POST a esta URL para abrir la barrera o actuador. Usa <strong>http://localhost:8000/api/v1/barrier/trigger</strong> para el simulador local.
+                  </small>
+                </label>
               </div>
             </div>
 
@@ -570,6 +585,19 @@ function Devices() {
                     style={{ width: "auto" }}
                   />
                   <span>Dispositivo habilitado y transmitiendo</span>
+                </label>
+
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>🔔 URL de Webhook — Barrera / Actuador</span>
+                  <input
+                    type="url"
+                    placeholder="http://localhost:8000/api/v1/barrier/trigger"
+                    value={editingDevice.webhook_url || ""}
+                    onChange={(e) => setEditingDevice(prev => ({ ...prev, webhook_url: e.target.value }))}
+                  />
+                  <small style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
+                    Opcional. Señal automática al autorizar un vehículo. Usa <strong>http://localhost:8000/api/v1/barrier/trigger</strong> para el simulador local.
+                  </small>
                 </label>
               </div>
             </div>

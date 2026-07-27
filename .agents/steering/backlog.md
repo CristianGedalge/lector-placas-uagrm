@@ -10,7 +10,7 @@
 - `TEST-EXT-001` | `done` | Prioridad `alta` | Verificar Neon y Cloudinary local/Docker | Dependencias: MEDIA-001, DB-EXT-001
 - `ROLE-DATA-001` | `done` | Prioridad `media` | Crear cuentas operativas por rol sin guardar contrasenas | Dependencias: ROLE-001
 - `CATALOG-001` | `done` | Prioridad `media` | Crear Toyota/Nissan y Automóvil/Motocicleta | Dependencias: DB-EXT-001
-- `ROLE-DEVICE-LINK-001` | `pending` | Prioridad `alta` | Vincular cuenta DISPOSITIVO con registro fisico | Dependencias: ROLE-001
+- `ROLE-DEVICE-LINK-001` | `done` | Prioridad `alta` | Vincular cuenta DISPOSITIVO con registro fisico por nombre (auto-resolución en plates.py) | Dependencias: ROLE-001
 - `SEC-FRONT-001` | `pending` | Prioridad `media` | Reevaluar avisos React Router sin regresion | Dependencias: ninguna
 
 - `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
@@ -78,6 +78,26 @@
 - `ACC-005` | `done` | Prioridad `media` | Corregir ConfirmModal con mensaje vacío (typo mensaje→message) en AccessLogs.jsx | Dependencias: ninguna
 - `ACC-006` | `done` | Prioridad `media` | Añadir buscador de placa en tiempo real en modal de acceso manual con filtrado del selector | Dependencias: `ACC-004`
 - `ACC-007` | `done` | Prioridad `media` | Corregir etiquetas del dropdown de vehículos en AccessLogs.jsx (v.placa, v.marca?.nombre, v.propietario) | Dependencias: `ACC-004`
-- `CAM-004` | `blocked` | Prioridad `media` | Validar captura continua con webcam USB y RTSP reales | Dependencias: hardware y stream reales
-- `OCR-PHYSICAL-001` | `blocked` | Prioridad `alta` | Calibrar OCR, ROI e iluminacion con placas y camaras fisicas | Dependencias: hardware real
-- `REPO-001` | `in_progress` | Prioridad `alta` | Crear y publicar el repositorio conjunto de backend y frontend | Dependencias: repositorio remoto vacío
+- `UI-USER-001` | `done` | Prioridad `alta` | Reestructurar vistas de usuario regular a UserVehicles e implementar subida/eliminación opcional de fotos con ConfirmModal | Dependencias: `UI-001`
+- `UI-STAFF-001` | `done` | Prioridad `alta` | Separar físicamente las carpetas del Administrador (admin/) y del Operador (operator/) en el frontend, actualizando imports y AppRoutes | Dependencias: `UI-USER-001`
+- `UI-USER-002` | `done` | Prioridad `alta` | Rediseñar UserVehicles.jsx reemplazando tablas tradicionales por cuadrículas de tarjetas premium responsivas con simulación física de placas | Dependencias: `UI-USER-001`
+- `UI-USER-003` | `done` | Prioridad `alta` | Crear UserAccessLogs.jsx con diseño de línea de tiempo interactivo para accesos del alumno y rediseñar Profile.jsx con avatar circular premium | Dependencias: `UI-USER-002`
+- `UI-NAV-001` | `done` | Prioridad `alta` | Restringir deactivación de cuenta a administradores, añadir cerrar sesión al Sidebar, e integrar avatar superior en Navbar | Dependencias: `UI-USER-003`
+- `UI-USER-004` | `done` | Prioridad `alta` | Reemplazar el botón de registro del encabezado por una tarjeta interactiva "+" en el grid de UserVehicles | Dependencias: `UI-NAV-001`
+- `ACC-USER-001` | `done` | Prioridad `alta` | Filtrar GET /api/v1/access-logs/ para USUARIO: solo retorna accesos de sus propios vehículos | Dependencias: `UI-USER-003`
+- `UI-NAV-002` | `done` | Prioridad `media` | Añadir enlace "Inicio" en Sidebar para rol USUARIO encima de "Mis Vehículos" | Dependencias: `UI-NAV-001`
+- `CAM-WIFI-001` | `done` | Prioridad `alta` | Configurar backend (0.0.0.0) y Vite (host:true, https:true) para acceso desde celular por WiFi local | Dependencias: `CAM-001`
+- `CAM-WIFI-002` | `done` | Prioridad `alta` | Instalar @vitejs/plugin-basic-ssl y habilitar HTTPS en Vite para getUserMedia en Chrome Android | Dependencias: `CAM-WIFI-001`
+- `CAM-WIFI-003` | `pending` | Prioridad `media` | Ejecutar reglas de firewall Windows (puertos 5173/8000) como Administrador | Dependencias: `CAM-WIFI-001`
+- `BARRIER-001` | `done` | Prioridad `alta` | Añadir columna webhook_url a Dispositivo + schemas + migración Alembic 3aa735770818 | Dependencias: ninguna
+- `BARRIER-002` | `done` | Prioridad `alta` | Implementar _trigger_barrier_webhook en plates.py (background, silencioso) | Dependencias: `BARRIER-001`
+- `BARRIER-003` | `done` | Prioridad `alta` | Auto-resolución de Dispositivo por nombre de Usuario DISPOSITIVO en plates.py | Dependencias: `BARRIER-001`, `ROLE-DEVICE-LINK-001`
+- `BARRIER-004` | `done` | Prioridad `alta` | Crear router barrier.py con POST /trigger, GET /events (SSE) y GET /simulator (HTML animado) | Dependencias: `BARRIER-002`
+- `BARRIER-005` | `done` | Prioridad `media` | Añadir campo webhook_url en modales crear/editar de Devices.jsx | Dependencias: `BARRIER-001`
+- `BARRIER-006` | `pending` | Prioridad `media` | Probar flujo completo: celular escanea placa → OCR → webhook → barrera sube en simulador | Dependencias: `CAM-WIFI-002`, `BARRIER-004`
+
+
+
+
+
+
