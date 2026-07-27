@@ -36,6 +36,7 @@ from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.access_logs import router as access_logs_router
 from app.api.v1.devices import router as devices_router
 from app.api.v1.media import router as media_router
+from app.api.v1.registration_requests import router as registration_requests_router
 from app.config.settings import settings
 from app.db.session import database_target
 
@@ -114,6 +115,7 @@ app.include_router(plates.router, prefix="/api/v1/plates", tags=["Placas"])
 app.include_router(vehicles_router, prefix="/api/v1/vehicles", tags=["Vehicles"])
 app.include_router(devices_router, prefix="/api/v1/devices", tags=["Devices"])
 app.include_router(media_router, prefix="/api/v1/media", tags=["Media"])
+app.include_router(registration_requests_router, prefix="/api/v1/vehicle-registration-requests", tags=["Vehicle Registration Requests"])
 app.include_router(
     access_logs_router,
     prefix="/api/v1/access-logs",

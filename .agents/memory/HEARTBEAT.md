@@ -16,6 +16,17 @@
 - Proximo paso: modelar el vinculo de identidad del dispositivo y probar con
   hardware real.
 
+- Fase 1 placas desconocidas implementada en rama `feat/unknown-vehicle-phase1`:
+  el análisis no-realtime de una placa válida no registrada guarda una única
+  imagen WebP authenticated en Cloudinary, crea solicitud PENDING y expone
+  bandeja staff con aprobación/rechazo transaccional. El polling realtime no
+  sube imágenes ni crea solicitudes. No se detectan marca/color todavía.
+- Incidencia corregida: Neon tenía `alembic_version=3aa735770818`, revisión
+  ausente en el checkout. Se añadió ancla de compatibilidad y se ejecutó
+  `alembic upgrade head`; Neon quedó en `a1b2c3d4e5f6` con la tabla nueva.
+- Bandeja rediseñada: tarjetas compactas + modal estilo registro manual, con
+  catálogos legibles, placa editable, evidencia Cloudinary y confirmaciones.
+
 - Foco actual: Consolidación del sistema de roles (ADMINISTRADOR, OPERADOR, DISPOSITIVO, USUARIO) y del flujo de registro de accesos vehiculares manuales y automáticos.
 - Ultimo avance: Se completó la separación de flujos por rol en el frontend (Vehicles.jsx, AccessLogs.jsx, UploadPlate.jsx, Sidebar, AppRoutes). El rol DISPOSITIVO tiene acceso exclusivo a la vista de cámara en vivo, con registro automático de Ingreso/Salida inferido por el estado del campus. El endpoint `/api/v1/access-logs/auto` ahora acepta `direction` explícita del operador además de inferirla. Se corrigió el error 422 del formulario de acceso manual (endpoint incorrecto), el mensaje vacío del ConfirmModal (clave `message` vs `mensaje`) y se añadió búsqueda de placa en tiempo real en el modal de acceso manual.
 - Estructura actual: backend/ y frontend/ directos en la raíz; docker-compose.yml en la raíz; submódulos en frontend/src/components/ y páginas en frontend/src/pages/.

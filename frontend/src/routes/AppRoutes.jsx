@@ -9,6 +9,7 @@ import Users from "../pages/Users";
 import Vehicles from "../pages/Vehicles";
 import Devices from "../pages/Devices";
 import AccessLogs from "../pages/AccessLogs";
+import VehicleRegistrationRequests from "../pages/VehicleRegistrationRequests";
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
 
@@ -85,6 +86,7 @@ function AppRoutes() {
         <Route path="/dispositivos" element={<AdminRoute><Devices /></AdminRoute>} />
         <Route path="/vehiculos" element={<Vehicles />} />
         <Route path="/accesos" element={<AccessLogs />} />
+        <Route path="/solicitudes-vehiculos" element={<VehicleRegistrationRequests />} />
       </Route>
     </Routes>
   );

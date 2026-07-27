@@ -5,7 +5,8 @@ export default function PlateNotFoundModal({
   setActiveModal,
   setManualPlate,
   activeTab,
-  startCamera
+  startCamera,
+  requestSent = false
 }) {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -28,10 +29,10 @@ export default function PlateNotFoundModal({
             </svg>
           </div>
           <p className="eyebrow" style={{ color: "#dc2626", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "1rem" }}>
-            Acceso denegado
+            {requestSent ? "Revisión requerida" : "Acceso denegado"}
           </p>
           <h2 style={{ marginBottom: "1rem", fontSize: "1.8rem", color: "#153e75" }}>
-            Placa no registrada
+            {requestSent ? "Vehículo desconocido. Solicitud enviada a revisión" : "Placa no registrada"}
           </h2>
           {manualPlate && (
             <p style={{ fontFamily: "monospace", fontSize: "1.6rem", fontWeight: "bold", color: "#153e75", margin: 0 }}>

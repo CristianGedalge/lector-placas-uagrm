@@ -12,6 +12,9 @@
 - `CATALOG-001` | `done` | Prioridad `media` | Crear Toyota/Nissan y Automóvil/Motocicleta | Dependencias: DB-EXT-001
 - `ROLE-DEVICE-LINK-001` | `pending` | Prioridad `alta` | Vincular cuenta DISPOSITIVO con registro fisico | Dependencias: ROLE-001
 - `SEC-FRONT-001` | `pending` | Prioridad `media` | Reevaluar avisos React Router sin regresion | Dependencias: ninguna
+- `UNKNOWN-VEHICLE-PHASE1` | `done` | Prioridad `alta` | Solicitudes de registro para placas válidas no registradas con evidencia Cloudinary y bandeja staff | Dependencias: MEDIA-001
+- `UNKNOWN-VEHICLE-DB-001` | `done` | Prioridad `critica` | Alinear grafo Alembic con revisión 3aa735770818 desplegada en Neon y aplicar tabla de solicitudes | Dependencias: UNKNOWN-VEHICLE-PHASE1
+- `UNKNOWN-VEHICLE-UI-001` | `done` | Prioridad `alta` | Rediseñar revisión de solicitudes con modal y catálogos legibles | Dependencias: UNKNOWN-VEHICLE-PHASE1
 
 - `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
 - `AI-001` | `done` | Prioridad `alta` | Usar Supervision para representar, filtrar, recortar y anotar resultados EasyOCR | Dependencias: ninguna

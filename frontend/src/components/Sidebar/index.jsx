@@ -13,11 +13,13 @@ function Sidebar({ isOpen, onClose }) {
       { to: "/usuarios", label: "Gestionar Usuarios" },
       { to: "/dispositivos", label: "Gestionar Dispositivos" },
       { to: "/accesos", label: "Control de Accesos" }
+      ,{ to: "/solicitudes-vehiculos", label: "Solicitudes de Vehiculos" }
     );
   } else if (user?.rol === "OPERADOR") {
     links.push(
       { to: "/vehiculos", label: "Gestionar Vehiculos" },
       { to: "/accesos", label: "Control de Accesos" }
+      ,{ to: "/solicitudes-vehiculos", label: "Solicitudes de Vehiculos" }
     );
   } else if (user?.rol === "DISPOSITIVO") {
     links.push(

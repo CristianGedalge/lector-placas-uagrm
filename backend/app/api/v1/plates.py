@@ -9,6 +9,10 @@ from app.ai.pipeline import analyze_plate, get_pipeline_status
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.db.models import Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum
+from app.db.models import ArchivoMultimedia, MediaProviderEnum, MediaStatusEnum, MediaTypeEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo
+from app.services.image_processing import ImageProcessingService, ImageProcessingError
+from app.services.cloudinary_storage import CloudinaryStorage
+from app.services.storage import StorageError
 from app.api.v1.auth import get_current_user
 
 async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
@@ -99,8 +103,30 @@ async def analyze_plate_endpoint(
             dispositivo_id=disp_uuid
         )
         db.add(scan)
+        solicitud_id = None
         try:
+            await db.flush()
+            # El polling nunca persiste evidencias ni crea solicitudes.
+            if (not realtime and status_val == "DETECTED" and normalized and
+                    result_dict.get("is_valid_bolivian_format", False) and
+                    vehicle_id is None and current_user is not None):
+                pending = await db.scalar(select(SolicitudRegistroVehiculo).where(
+                    SolicitudRegistroVehiculo.placa_sugerida == normalized,
+                    SolicitudRegistroVehiculo.estado == SolicitudRegistroEstadoEnum.PENDING,
+                ))
+                if not pending:
+                    processed = await run_in_threadpool(ImageProcessingService().process, image_bytes, MediaTypeEnum.VEHICLE_REGISTRATION.value)
+                    uploaded = await run_in_threadpool(CloudinaryStorage().upload, processed.content, MediaTypeEnum.VEHICLE_REGISTRATION.value)
+                    media = ArchivoMultimedia(proveedor=MediaProviderEnum.CLOUDINARY, tipo=MediaTypeEnum.VEHICLE_REGISTRATION, estado=MediaStatusEnum.READY, asset_id=uploaded.asset_id, public_id=uploaded.public_id, resource_type=uploaded.resource_type, delivery_type=uploaded.delivery_type, formato=uploaded.format, ancho=uploaded.width, alto=uploaded.height, peso_bytes=uploaded.bytes, intentos=1)
+                    db.add(media); await db.flush()
+                    solicitud = SolicitudRegistroVehiculo(escaneado_id=scan.id, imagen_id=media.id, placa_sugerida=normalized, confianza_placa=scan.confianza or 0.0, estado=SolicitudRegistroEstadoEnum.PENDING, creado_por_usuario_id=current_user.id)
+                    db.add(solicitud); await db.flush(); solicitud_id = solicitud.id
+                else:
+                    solicitud_id = pending.id
             await db.commit()
+        except (ImageProcessingError, StorageError):
+            await db.rollback()
+            raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
         except Exception:
             await db.rollback()
 
@@ -112,9 +138,10 @@ async def analyze_plate_endpoint(
         es_formato_valido=result_dict.get("is_valid_bolivian_format", False),
         confianza=result_dict.get("combined_confidence"),
         ruta_imagen=result_dict.get("annotated_image") or result_dict.get("plate_crop"),
-        mensaje=result_dict.get("message"),
         plate_bbox=result_dict.get("plate_bbox"),
         raw_bboxes=result_dict.get("raw_bboxes")
+        ,solicitud_id=solicitud_id,
+        mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )
 
 
