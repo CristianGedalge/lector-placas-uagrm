@@ -2,11 +2,27 @@ import { useEffect, useState, useCallback, memo } from "react";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser } from "../api/auth";
+import { getMediaUrl } from "../api/plates";
 
-const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit }) => (
+const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit, userPhotoUrl }) => (
   <tr style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
-    <td style={{ padding: "1rem", fontWeight: "bold" }}>
-      {user.nombre} {user.apellido_paterno} {user.apellido_materno || ""}
+    <td style={{ padding: "1rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        {userPhotoUrl ? (
+          <img
+            src={userPhotoUrl}
+            alt={`Foto de perfil de ${user.nombre}`}
+            style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "50%", border: "1px solid rgba(21, 62, 117, 0.15)" }}
+          />
+        ) : (
+          <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: "0.8rem" }}>
+            Sin foto
+          </div>
+        )}
+        <span style={{ fontWeight: "bold" }}>
+          {user.nombre} {user.apellido_paterno} {user.apellido_materno || ""}
+        </span>
+      </div>
     </td>
     <td style={{ padding: "1rem", fontFamily: "monospace", color: "#153e75", fontWeight: "bold" }}>
       {user.carnet}
@@ -35,18 +51,20 @@ const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete
         {user.esta_activo ? "ACTIVO" : "INACTIVO"}
       </span>
     </td>
-    <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+    <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
       <button
         type="button"
         onClick={() => handleEdit(user)}
-        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+        title="Editar usuario"
+        style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-primary)", color: "white", border: "none", cursor: "pointer" }}
       >
-        Editar
+        <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>edit</span>
       </button>
       <button
         type="button"
         onClick={() => handleStatusToggle(user)}
-        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: user.esta_activo ? "#f2a104" : "green" }}
+        title={user.esta_activo ? "Desactivar usuario" : "Activar usuario"}
+        style={{ minWidth: "90px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: user.esta_activo ? "#f2a104" : "green", color: "white", border: "none", cursor: "pointer", fontSize: "0.75rem", fontWeight: "600", padding: "0 0.6rem" }}
       >
         {user.esta_activo ? "Desactivar" : "Activar"}
       </button>
@@ -54,9 +72,10 @@ const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete
         type="button"
         className="danger-button"
         onClick={() => handleDelete(user.id)}
-        style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+        title="Eliminar usuario"
+        style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#e11d48", color: "white", border: "none", cursor: "pointer" }}
       >
-        Eliminar
+        <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>delete</span>
       </button>
     </td>
   </tr>
@@ -64,6 +83,7 @@ const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete
 
 function Users() {
   const [users, setUsers] = useState([]);
+  const [userPhotoUrls, setUserPhotoUrls] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -117,6 +137,36 @@ function Users() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    const photoIds = [...new Set(users.map((user) => user.foto_id).filter(Boolean))];
+    if (!photoIds.length) return;
+
+    const missingPhotoIds = photoIds.filter((photoId) => !userPhotoUrls[photoId]);
+    if (!missingPhotoIds.length) return;
+
+    let isMounted = true;
+    Promise.all(
+      missingPhotoIds.map(async (photoId) => {
+        try {
+          const response = await getMediaUrl(photoId);
+          return [photoId, response?.url || ""];
+        } catch {
+          return [photoId, ""];
+        }
+      })
+    ).then((entries) => {
+      if (!isMounted) return;
+      setUserPhotoUrls((current) => ({
+        ...current,
+        ...Object.fromEntries(entries)
+      }));
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [users, userPhotoUrls]);
 
   const handleRoleToggle = useCallback((user) => {
     const nextRole = user.rol === "ADMINISTRADOR" ? "OPERADOR" : "ADMINISTRADOR";
@@ -330,6 +380,7 @@ function Users() {
               <UserRow
                 key={u.id}
                 user={u}
+                userPhotoUrl={userPhotoUrls[u.foto_id] || ""}
                 handleRoleToggle={handleRoleToggle}
                 handleStatusToggle={handleStatusToggle}
                 handleDelete={handleDelete}

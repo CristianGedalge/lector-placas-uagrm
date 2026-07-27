@@ -18,17 +18,22 @@ function Profile() {
   const [error, setError] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoSaving, setPhotoSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
-  useEffect(() => {
-    if (user) {
+  const syncFormWithUser = (sourceUser = user) => {
+    if (sourceUser) {
       setFormData({
-        nombre: user.nombre || "",
-        apellido_paterno: user.apellido_paterno || "",
-        apellido_materno: user.apellido_materno || "",
-        carnet: user.carnet || "",
+        nombre: sourceUser.nombre || "",
+        apellido_paterno: sourceUser.apellido_paterno || "",
+        apellido_materno: sourceUser.apellido_materno || "",
+        carnet: sourceUser.carnet || "",
         contrasena: ""
       });
     }
+  };
+
+  useEffect(() => {
+    syncFormWithUser(user);
   }, [user]);
 
   useEffect(() => {
@@ -77,6 +82,13 @@ function Profile() {
     }));
   };
 
+  const handleCancel = () => {
+    setError("");
+    setMessage("");
+    syncFormWithUser();
+    setIsEditing(false);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -92,6 +104,7 @@ function Profile() {
       });
       setFormData((current) => ({ ...current, contrasena: "" }));
       setMessage("Perfil actualizado correctamente.");
+      setIsEditing(false);
     } catch (submitError) {
       setError(submitError.mensaje || "No se pudo actualizar el perfil.");
     }
@@ -123,45 +136,93 @@ function Profile() {
           <p className="eyebrow">Cuenta</p>
           <h3>Perfil</h3>
         </div>
+        {!isEditing && (
+          <button type="button" className="ghost-button" onClick={() => setIsEditing(true)} aria-label="Editar perfil">
+            Editar
+          </button>
+        )}
       </div>
 
       <form className="registration-form" onSubmit={handleSubmit}>
         <div className="form-block">
           <h4>Foto privada</h4>
-          {photoUrl && <img className="vehicle-photo" src={photoUrl} alt="Perfil" style={{ maxWidth: "180px" }} />}
-          <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} disabled={photoSaving} />
-          {user?.foto_id && <button type="button" className="ghost-button" onClick={handleDeletePhoto}>Eliminar foto</button>}
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+            {photoUrl ? (
+              <img
+                className="vehicle-photo"
+                src={photoUrl}
+                alt={`Foto de perfil de ${user?.nombre || "usuario"}`}
+                style={{ width: "128px", height: "128px", maxWidth: "128px", marginBottom: 0, borderRadius: "50%", objectFit: "cover" }}
+              />
+            ) : (
+              <div
+                aria-label="Sin foto de perfil"
+                style={{ width: "128px", height: "128px", borderRadius: "50%", display: "grid", placeItems: "center", background: "#e8eef7", color: "#153e75", fontSize: "2.5rem", fontWeight: 700 }}
+              >
+                {(user?.nombre || "?").charAt(0).toUpperCase()}
+              </div>
+            )}
+            <p className="muted-text" style={{ margin: 0 }}>
+              {isEditing
+                ? "Puedes actualizar tu foto y tus datos personales."
+                : "Aquí puedes ver tus datos actuales. Activa la edición para modificarlos."}
+            </p>
+          </div>
+          {isEditing && (
+            <>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePhoto} disabled={photoSaving} />
+              {user?.foto_id && <button type="button" className="ghost-button" onClick={handleDeletePhoto}>Eliminar foto</button>}
+            </>
+          )}
         </div>
         <div className="details-grid">
           <label className="field-group">
             <span>Nombre</span>
-            <input value={formData.nombre} onChange={handleChange("nombre")} required />
+            {isEditing ? (
+              <input value={formData.nombre} onChange={handleChange("nombre")} required />
+            ) : (
+              <div className="muted-text" style={{ paddingTop: "0.25rem" }}>{formData.nombre || "Sin información"}</div>
+            )}
           </label>
 
           <label className="field-group">
             <span>Apellido Paterno</span>
-            <input value={formData.apellido_paterno} onChange={handleChange("apellido_paterno")} required />
+            {isEditing ? (
+              <input value={formData.apellido_paterno} onChange={handleChange("apellido_paterno")} required />
+            ) : (
+              <div className="muted-text" style={{ paddingTop: "0.25rem" }}>{formData.apellido_paterno || "Sin información"}</div>
+            )}
           </label>
 
           <label className="field-group">
             <span>Apellido Materno</span>
-            <input value={formData.apellido_materno} onChange={handleChange("apellido_materno")} />
+            {isEditing ? (
+              <input value={formData.apellido_materno} onChange={handleChange("apellido_materno")} />
+            ) : (
+              <div className="muted-text" style={{ paddingTop: "0.25rem" }}>{formData.apellido_materno || "Sin información"}</div>
+            )}
           </label>
 
           <label className="field-group">
             <span>Carnet</span>
-            <input value={formData.carnet} onChange={handleChange("carnet")} required />
+            {isEditing ? (
+              <input value={formData.carnet} onChange={handleChange("carnet")} required />
+            ) : (
+              <div className="muted-text" style={{ paddingTop: "0.25rem" }}>{formData.carnet || "Sin información"}</div>
+            )}
           </label>
 
-          <label className="field-group">
-            <span>Nueva contrasena</span>
-            <input
-              type="password"
-              placeholder="Deja vacio si no deseas cambiarla"
-              value={formData.contrasena}
-              onChange={handleChange("contrasena")}
-            />
-          </label>
+          {isEditing && (
+            <label className="field-group">
+              <span>Nueva contrasena</span>
+              <input
+                type="password"
+                placeholder="Deja vacio si no deseas cambiarla"
+                value={formData.contrasena}
+                onChange={handleChange("contrasena")}
+              />
+            </label>
+          )}
         </div>
 
         {message && <p className="success-text">{message}</p>}
@@ -171,9 +232,16 @@ function Profile() {
           <button type="button" className="danger-button" onClick={handleDelete}>
             Desactivar cuenta
           </button>
-          <button type="submit" disabled={profileSaving}>
-            {profileSaving ? "Guardando..." : "Guardar cambios"}
-          </button>
+          {isEditing ? (
+            <>
+              <button type="button" className="ghost-button" onClick={handleCancel}>
+                Cancelar
+              </button>
+              <button type="submit" disabled={profileSaving}>
+                {profileSaving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </>
+          ) : null}
         </div>
       </form>
     </section>

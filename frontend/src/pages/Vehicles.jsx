@@ -14,7 +14,8 @@ import {
   createVehicleType,
   updateVehicleType,
   deleteVehicleType,
-  uploadVehiclePhoto
+  uploadVehiclePhoto,
+  getMediaUrl
 } from "../api/plates";
 import { listUsers } from "../api/auth";
 import { useAuth } from "../hooks/useAuth";
@@ -33,6 +34,7 @@ function Vehicles() {
   const [brands, setBrands] = useState([]);
   const [types, setTypes] = useState([]);
   const [users, setUsers] = useState([]);
+  const [vehiclePhotoUrls, setVehiclePhotoUrls] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -46,6 +48,7 @@ function Vehicles() {
   // Formularios Modales
   const [creatingVehicle, setCreatingVehicle] = useState(null);
   const [editingVehicle, setEditingVehicle] = useState(null);
+  const [viewingVehicle, setViewingVehicle] = useState(null);
 
   const [creatingBrand, setCreatingBrand] = useState(null); // { nombre: "" }
   const [editingBrand, setEditingBrand] = useState(null); // { id, nombre: "" }
@@ -101,6 +104,36 @@ function Vehicles() {
     }
   }, [user, loadData, isStaff]);
 
+  useEffect(() => {
+    const photoIds = [...new Set(vehicles.map((vehicle) => vehicle.foto_id).filter(Boolean))];
+    if (!photoIds.length) return;
+
+    const missingPhotoIds = photoIds.filter((photoId) => !vehiclePhotoUrls[photoId]);
+    if (!missingPhotoIds.length) return;
+
+    let isMounted = true;
+    Promise.all(
+      missingPhotoIds.map(async (photoId) => {
+        try {
+          const response = await getMediaUrl(photoId);
+          return [photoId, response?.url || ""];
+        } catch {
+          return [photoId, ""];
+        }
+      })
+    ).then((entries) => {
+      if (!isMounted) return;
+      setVehiclePhotoUrls((current) => ({
+        ...current,
+        ...Object.fromEntries(entries)
+      }));
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [vehicles, vehiclePhotoUrls]);
+
   // ── ACCIONES: VEHÍCULOS ──────────────────────────────────────────
   const handleOpenCreateVehicle = () => {
     setCreatingVehicle({
@@ -108,7 +141,8 @@ function Vehicles() {
       color: "",
       marca_id: brands[0]?.id || "",
       tipo_vehiculo_id: types[0]?.id || "",
-      propietario_usuario_id: isStaff ? (users[0]?.id || "") : user?.id
+      propietario_usuario_id: isStaff ? (users[0]?.id || "") : user?.id,
+      photoFile: null
     });
     setError("");
     setSuccess("");
@@ -133,13 +167,16 @@ function Vehicles() {
         try {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
           setSaving(true);
-          await createVehicle({
+          const createdVehicle = await createVehicle({
             placa: plateVal,
             color: creatingVehicle.color,
             marca_id: creatingVehicle.marca_id,
             tipo_vehiculo_id: creatingVehicle.tipo_vehiculo_id,
             propietario_usuario_id: creatingVehicle.propietario_usuario_id
           });
+          if (creatingVehicle.photoFile) {
+            await uploadVehiclePhoto(createdVehicle.id, creatingVehicle.photoFile);
+          }
           setSuccess(`Vehículo ${plateVal} registrado con éxito.`);
           setCreatingVehicle(null);
           loadData();
@@ -152,6 +189,12 @@ function Vehicles() {
     });
   };
 
+  const handleOpenVehicleDetails = (v) => {
+    setViewingVehicle(v);
+    setError("");
+    setSuccess("");
+  };
+
   const handleOpenEditVehicle = (v) => {
     setEditingVehicle({
       id: v.id,
@@ -159,9 +202,11 @@ function Vehicles() {
       color: v.color,
       marca_id: v.marca_id,
       tipo_vehiculo_id: v.tipo_vehiculo_id,
-      propietario_usuario_id: v.propietario_usuario_id
-      ,photoFile: null
+      propietario_usuario_id: v.propietario_usuario_id,
+      foto_id: v.foto_id || null,
+      photoFile: null
     });
+    setViewingVehicle(null);
     setError("");
     setSuccess("");
   };
@@ -440,18 +485,28 @@ function Vehicles() {
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid rgba(21, 62, 117, 0.1)", color: "#153e75" }}>
+                    <th style={{ padding: "1rem" }}>Foto</th>
                     <th style={{ padding: "1rem" }}>Placa</th>
                     <th style={{ padding: "1rem" }}>Marca</th>
-                    <th style={{ padding: "1rem" }}>Tipo</th>
                     <th style={{ padding: "1rem" }}>Color</th>
                     <th style={{ padding: "1rem" }}>Propietario</th>
-                    <th style={{ padding: "1rem" }}>Carnet/Registro</th>
                     <th style={{ padding: "1rem", textAlign: "right" }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentVehicles.map((v) => (
                     <tr key={v.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                      <td style={{ padding: "1rem" }}>
+                        {v.foto_id && vehiclePhotoUrls[v.foto_id] ? (
+                          <img
+                            src={vehiclePhotoUrls[v.foto_id]}
+                            alt={`Foto del vehículo ${v.placa}`}
+                            style={{ width: "84px", height: "84px", objectFit: "cover", borderRadius: "10px", border: "1px solid rgba(21, 62, 117, 0.15)" }}
+                          />
+                        ) : (
+                          <span className="muted-text">Sin foto</span>
+                        )}
+                      </td>
                       <td style={{ padding: "1rem" }}>
                         <span 
                           style={{ 
@@ -471,32 +526,36 @@ function Vehicles() {
                         {v.marca?.nombre || "N/A"}
                       </td>
                       <td style={{ padding: "1rem" }}>
-                        {v.tipo?.nombre || "N/A"}
-                      </td>
-                      <td style={{ padding: "1rem" }}>
                         {v.color}
                       </td>
                       <td style={{ padding: "1rem" }}>
                         {v.propietario ? `${v.propietario.nombre} ${v.propietario.apellido_paterno}` : "N/A"}
                       </td>
-                      <td style={{ padding: "1rem", fontFamily: "monospace" }}>
-                        {v.propietario?.carnet || "N/A"}
-                      </td>
-                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                         <button
                           type="button"
                           onClick={() => handleOpenEditVehicle(v)}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+                          title="Editar vehículo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-primary)", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Editar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenVehicleDetails(v)}
+                          title="Ver detalles"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f766e", color: "white", border: "none", cursor: "pointer" }}
+                        >
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>visibility</span>
                         </button>
                         <button
                           type="button"
                           className="danger-button"
                           onClick={() => handleDeleteVehicle(v)}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+                          title="Eliminar vehículo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#e11d48", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Eliminar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>delete</span>
                         </button>
                       </td>
                     </tr>
@@ -791,6 +850,20 @@ function Vehicles() {
                     <span>El vehículo se registrará bajo tu propio nombre: <strong>{user?.nombre} {user?.apellido_paterno}</strong>.</span>
                   </div>
                 )}
+                <label className="field-group">
+                  <span>Foto privada del vehículo</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setCreatingVehicle((current) => ({
+                        ...current,
+                        photoFile: event.target.files?.[0] || null
+                      }))
+                    }
+                  />
+                  <small className="muted-text">Opcional. Se guarda de forma privada junto al registro.</small>
+                </label>
               </div>
             </div>
 
@@ -800,6 +873,75 @@ function Vehicles() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal de Detalles de Vehículo */}
+      {viewingVehicle && (
+        <div className="modal-backdrop">
+          <div className="modal-card modal-large" style={{ maxWidth: "720px" }}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Detalle</p>
+                <h2>Información del vehículo</h2>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => setViewingVehicle(null)}>
+                Cerrar
+              </button>
+            </div>
+
+            <div className="form-block">
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <div style={{ width: "min(260px, 100%)", aspectRatio: "1 / 1", background: "#f8fafc", borderRadius: "16px", border: "1px solid rgba(21, 62, 117, 0.12)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {viewingVehicle.foto_id && vehiclePhotoUrls[viewingVehicle.foto_id] ? (
+                      <img
+                        src={vehiclePhotoUrls[viewingVehicle.foto_id]}
+                        alt={`Foto del vehículo ${viewingVehicle.placa}`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <span className="muted-text">Sin foto registrada</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="details-grid" style={{ display: "grid", gap: "0.8rem" }}>
+                  <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+                    <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Placa</p>
+                    <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", fontFamily: "monospace" }}>{viewingVehicle.placa}</p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.8rem" }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Marca</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.marca?.nombre || "N/A"}</p>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Tipo</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.tipo?.nombre || "N/A"}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.8rem" }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Color</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.color || "N/A"}</p>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Carnet / Registro</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.propietario?.carnet || "N/A"}</p>
+                    </div>
+                  </div>
+                  <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+                    <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Propietario</p>
+                    <p style={{ margin: 0, fontWeight: "600" }}>
+                      {viewingVehicle.propietario ? `${viewingVehicle.propietario.nombre} ${viewingVehicle.propietario.apellido_paterno}` : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
 
@@ -819,6 +961,35 @@ function Vehicles() {
 
             <div className="form-block">
               <h4>Datos del vehículo</h4>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                <div style={{ width: "min(220px, 100%)", aspectRatio: "1 / 1", background: "#f8fafc", borderRadius: "16px", border: "1px solid rgba(21, 62, 117, 0.12)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {editingVehicle.foto_id && vehiclePhotoUrls[editingVehicle.foto_id] ? (
+                    <img
+                      src={vehiclePhotoUrls[editingVehicle.foto_id]}
+                      alt={`Foto actual del vehículo ${editingVehicle.placa}`}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <span className="muted-text">Sin foto guardada</span>
+                  )}
+                </div>
+                <div style={{ width: "100%", maxWidth: "320px" }}>
+                  <label className="field-group" style={{ marginBottom: 0 }}>
+                    <span>Foto privada del vehículo</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) =>
+                        setEditingVehicle((current) => ({
+                          ...current,
+                          photoFile: event.target.files?.[0] || null
+                        }))
+                      }
+                    />
+                    <small className="muted-text">Puedes subir una nueva foto para reemplazar la actual.</small>
+                  </label>
+                </div>
+              </div>
               <div className="details-grid">
                 <label className="field-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -920,19 +1091,6 @@ function Vehicles() {
                     </select>
                   </label>
                 )}
-                <label className="field-group">
-                  <span>Foto privada del vehiculo</span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        photoFile: event.target.files?.[0] || null
-                      }))
-                    }
-                  />
-                </label>
               </div>
             </div>
 

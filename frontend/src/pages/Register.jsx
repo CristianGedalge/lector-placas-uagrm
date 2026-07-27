@@ -3,7 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
-import { registerUser } from "../api/auth";
+import { registerUser, uploadProfilePhoto } from "../api/auth";
 
 function Register() {
   const { user, signIn, authLoading } = useAuth();
@@ -19,6 +19,7 @@ function Register() {
     rol: "USUARIO"
   });
   const [error, setError] = useState("");
+  const [photoFile, setPhotoFile] = useState(null);
 
   if (authLoading) {
     return (
@@ -44,7 +45,7 @@ function Register() {
 
     try {
       setLoading(true);
-      await registerUser({
+      const registeredSession = await registerUser({
         nombre: formData.nombre,
         apellido_paterno: formData.apellido_paterno,
         apellido_materno: formData.apellido_materno || null,
@@ -52,14 +53,24 @@ function Register() {
         contrasena: formData.contrasena,
         rol: formData.rol
       });
-      
-      setSuccess("Operador registrado con éxito. Iniciando sesión...");
-      
+
       // Auto login user
-      await signIn({
+      const session = await signIn({
         carnet: formData.carnet,
         contrasena: formData.contrasena
       });
+
+      const userId = registeredSession?.user?.id || session?.user?.id;
+
+      if (photoFile && userId) {
+        try {
+          await uploadProfilePhoto(userId, photoFile);
+        } catch (photoError) {
+          setError("La cuenta se creó, pero no se pudo subir la foto.");
+        }
+      }
+
+      setSuccess("Operador registrado con éxito. Iniciando sesión...");
 
       setFormData({
         nombre: "",
@@ -70,6 +81,7 @@ function Register() {
         confirmPassword: "",
         rol: "USUARIO"
       });
+      setPhotoFile(null);
     } catch (submitError) {
       setError(submitError.message || "No se pudo completar el registro.");
       console.error(submitError);
@@ -188,6 +200,18 @@ function Register() {
               }
               required
             />
+          </label>
+
+          <label className="field-group">
+            <span>Foto opcional</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => setPhotoFile(event.target.files?.[0] || null)}
+            />
+            <small className="muted-text" style={{ marginTop: "0.25rem" }}>
+              Puedes dejarla vacía si no deseas agregar una foto en este momento.
+            </small>
           </label>
         </div>
 
