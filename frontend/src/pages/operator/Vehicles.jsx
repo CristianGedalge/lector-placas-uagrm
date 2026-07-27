@@ -22,6 +22,7 @@ import { listUsers } from "../../api/auth";
 import { useAuth } from "../../hooks/useAuth";
 import { formatPlate, validatePlateForm } from "../../utils/formatters";
 import Pagination from "../../components/Pagination";
+
 function VehicleTablePhoto({ fotoId }) {
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -87,21 +88,22 @@ function Vehicles() {
   const [brands, setBrands] = useState([]);
   const [types, setTypes] = useState([]);
   const [users, setUsers] = useState([]);
+  const [vehiclePhotoUrls, setVehiclePhotoUrls] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [zoomedImage, setZoomedImage] = useState(null);
 
   const [filterType, setFilterType] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Formularios Modales
   const [creatingVehicle, setCreatingVehicle] = useState(null);
   const [editingVehicle, setEditingVehicle] = useState(null);
+  const [viewingVehicle, setViewingVehicle] = useState(null);
   const [editingVehiclePhotoUrl, setEditingVehiclePhotoUrl] = useState("");
-
 
   const [creatingBrand, setCreatingBrand] = useState(null); // { nombre: "" }
   const [editingBrand, setEditingBrand] = useState(null); // { id, nombre: "" }
@@ -151,7 +153,36 @@ function Vehicles() {
   }, [user, loadData]);
 
 
-  // ── ACCIONES: VEHÍCULOS ──────────────────────────────────────────
+  useEffect(() => {
+    const photoIds = [...new Set(vehicles.map((vehicle) => vehicle.foto_id).filter(Boolean))];
+    if (!photoIds.length) return;
+
+    const missingPhotoIds = photoIds.filter((photoId) => !vehiclePhotoUrls[photoId]);
+    if (!missingPhotoIds.length) return;
+
+    let isMounted = true;
+    Promise.all(
+      missingPhotoIds.map(async (photoId) => {
+        try {
+          const response = await getMediaUrl(photoId);
+          return [photoId, response?.url || ""];
+        } catch {
+          return [photoId, ""];
+        }
+      })
+    ).then((entries) => {
+      if (!isMounted) return;
+      setVehiclePhotoUrls((current) => ({
+        ...current,
+        ...Object.fromEntries(entries)
+      }));
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [vehicles, vehiclePhotoUrls]);
+
   const handleOpenCreateVehicle = () => {
     setCreatingVehicle({
       placa: "",
@@ -185,7 +216,6 @@ function Vehicles() {
       onConfirm: async () => {
         try {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-          setSaving(true);
           const newVehicle = await createVehicle({
             placa: plateVal,
             color: creatingVehicle.color,
@@ -208,6 +238,11 @@ function Vehicles() {
     });
   };
 
+  const handleOpenVehicleDetails = (v) => {
+    setViewingVehicle(v);
+    setError("");
+    setSuccess("");
+  };
 
   const handleOpenEditVehicle = async (v) => {
     setEditingVehicle({
@@ -534,19 +569,30 @@ function Vehicles() {
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
                   <tr style={{ borderBottom: "2px solid rgba(21, 62, 117, 0.1)", color: "#153e75" }}>
-                    <th style={{ padding: "1rem" }}>Placa</th>
                     <th style={{ padding: "1rem" }}>Foto</th>
+                    <th style={{ padding: "1rem" }}>Placa</th>
                     <th style={{ padding: "1rem" }}>Marca</th>
-                    <th style={{ padding: "1rem" }}>Tipo</th>
                     <th style={{ padding: "1rem" }}>Color</th>
                     <th style={{ padding: "1rem" }}>Propietario</th>
-                    <th style={{ padding: "1rem" }}>Carnet/Registro</th>
                     <th style={{ padding: "1rem", textAlign: "right" }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {currentVehicles.map((v) => (
                     <tr key={v.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                      <td style={{ padding: "1rem" }}>
+                        {v.foto_id && vehiclePhotoUrls[v.foto_id] ? (
+                          <img
+                            src={vehiclePhotoUrls[v.foto_id]}
+                            alt={`Foto del vehículo ${v.placa}`}
+                            style={{ width: "84px", height: "84px", objectFit: "cover", borderRadius: "10px", border: "1px solid rgba(21, 62, 117, 0.15)", cursor: "pointer" }}
+                            onClick={() => setZoomedImage(vehiclePhotoUrls[v.foto_id])}
+                            title="Ver foto en tamaño completo"
+                          />
+                        ) : (
+                          <span className="muted-text">Sin foto</span>
+                        )}
+                      </td>
                       <td style={{ padding: "1rem" }}>
                         <span 
                           style={{ 
@@ -562,14 +608,8 @@ function Vehicles() {
                           {v.placa}
                         </span>
                       </td>
-                      <td style={{ padding: "1rem" }}>
-                        <VehicleTablePhoto fotoId={v.foto_id} />
-                      </td>
                       <td style={{ padding: "1rem", fontWeight: "bold" }}>
                         {v.marca?.nombre || "N/A"}
-                      </td>
-                      <td style={{ padding: "1rem" }}>
-                        {v.tipo?.nombre || "N/A"}
                       </td>
                       <td style={{ padding: "1rem" }}>
                         {v.color}
@@ -577,24 +617,31 @@ function Vehicles() {
                       <td style={{ padding: "1rem" }}>
                         {v.propietario ? `${v.propietario.nombre} ${v.propietario.apellido_paterno}` : "N/A"}
                       </td>
-                      <td style={{ padding: "1rem", fontFamily: "monospace" }}>
-                        {v.propietario?.carnet || "N/A"}
-                      </td>
-                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                         <button
                           type="button"
                           onClick={() => handleOpenEditVehicle(v)}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+                          title="Editar vehículo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-primary)", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Editar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>edit</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenVehicleDetails(v)}
+                          title="Ver detalles"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#0f766e", color: "white", border: "none", cursor: "pointer" }}
+                        >
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>visibility</span>
                         </button>
                         <button
                           type="button"
                           className="danger-button"
                           onClick={() => handleDeleteVehicle(v)}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+                          title="Eliminar vehículo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#e11d48", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Eliminar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>delete</span>
                         </button>
                       </td>
                     </tr>
@@ -855,7 +902,6 @@ function Vehicles() {
                     </div>
                   )}
                 </label>
-
                 <label className="field-group">
                   <span>Propietario Asociado</span>
                   {users.length > 0 ? (
@@ -909,6 +955,75 @@ function Vehicles() {
         </div>
       )}
 
+      {/* Modal de Detalles de Vehículo */}
+      {viewingVehicle && (
+        <div className="modal-backdrop">
+          <div className="modal-card modal-large" style={{ maxWidth: "720px" }}>
+            <div className="modal-header">
+              <div>
+                <p className="eyebrow">Detalle</p>
+                <h2>Información del vehículo</h2>
+              </div>
+              <button type="button" className="ghost-button" onClick={() => setViewingVehicle(null)}>
+                Cerrar
+              </button>
+            </div>
+
+            <div className="form-block">
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+                <div style={{ display: "flex", justifyContent: "center" }}>
+                  <div style={{ width: "min(260px, 100%)", aspectRatio: "1 / 1", background: "#f8fafc", borderRadius: "16px", border: "1px solid rgba(21, 62, 117, 0.12)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {viewingVehicle.foto_id && vehiclePhotoUrls[viewingVehicle.foto_id] ? (
+                      <img
+                        src={vehiclePhotoUrls[viewingVehicle.foto_id]}
+                        alt={`Foto del vehículo ${viewingVehicle.placa}`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    ) : (
+                      <span className="muted-text">Sin foto registrada</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="details-grid" style={{ display: "grid", gap: "0.8rem" }}>
+                  <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+                    <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Placa</p>
+                    <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", fontFamily: "monospace" }}>{viewingVehicle.placa}</p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.8rem" }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Marca</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.marca?.nombre || "N/A"}</p>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Tipo</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.tipo?.nombre || "N/A"}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "0.8rem" }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Color</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.color || "N/A"}</p>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.8rem 1rem" }}>
+                      <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Carnet / Registro</p>
+                      <p style={{ margin: 0, fontWeight: "600" }}>{viewingVehicle.propietario?.carnet || "N/A"}</p>
+                    </div>
+                  </div>
+                  <div style={{ background: "#f8fafc", border: "1px solid rgba(21, 62, 117, 0.12)", borderRadius: "10px", padding: "0.9rem 1rem" }}>
+                    <p className="eyebrow" style={{ marginBottom: "0.25rem" }}>Propietario</p>
+                    <p style={{ margin: 0, fontWeight: "600" }}>
+                      {viewingVehicle.propietario ? `${viewingVehicle.propietario.nombre} ${viewingVehicle.propietario.apellido_paterno}` : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Modal de Edición de Vehículo */}
       {editingVehicle && (
         <div className="modal-backdrop">
@@ -925,6 +1040,35 @@ function Vehicles() {
 
             <div className="form-block">
               <h4>Datos del vehículo</h4>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                <div style={{ width: "min(220px, 100%)", aspectRatio: "1 / 1", background: "#f8fafc", borderRadius: "16px", border: "1px solid rgba(21, 62, 117, 0.12)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {editingVehicle.foto_id && vehiclePhotoUrls[editingVehicle.foto_id] ? (
+                    <img
+                      src={vehiclePhotoUrls[editingVehicle.foto_id]}
+                      alt={`Foto actual del vehículo ${editingVehicle.placa}`}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <span className="muted-text">Sin foto guardada</span>
+                  )}
+                </div>
+                <div style={{ width: "100%", maxWidth: "320px" }}>
+                  <label className="field-group" style={{ marginBottom: 0 }}>
+                    <span>Foto privada del vehículo</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) =>
+                        setEditingVehicle((current) => ({
+                          ...current,
+                          photoFile: event.target.files?.[0] || null
+                        }))
+                      }
+                    />
+                    <small className="muted-text">Puedes subir una nueva foto para reemplazar la actual.</small>
+                  </label>
+                </div>
+              </div>
               <div className="details-grid">
                 <label className="field-group">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -1055,7 +1199,6 @@ function Vehicles() {
                     }
                   />
                 </div>
-
               </div>
             </div>
 
@@ -1201,6 +1344,67 @@ function Vehicles() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
       />
+
+      {/* Modal de Zoom de Imagen */}
+      {zoomedImage && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setZoomedImage(null)} 
+          style={{ cursor: "zoom-out", zIndex: 1000 }}
+          title="Hacer clic para cerrar"
+        >
+          <div 
+            style={{ 
+              position: "relative",
+              maxWidth: "90%",
+              maxHeight: "90%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={zoomedImage} 
+              alt="Foto ampliada" 
+              style={{ 
+                maxWidth: "100%", 
+                maxHeight: "80vh", 
+                borderRadius: "12px", 
+                boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                border: "4px solid white",
+                objectFit: "contain",
+                display: "block"
+              }} 
+            />
+            <button
+              type="button"
+              onClick={() => setZoomedImage(null)}
+              style={{
+                position: "absolute",
+                top: "-15px",
+                right: "-15px",
+                width: "36px",
+                height: "36px",
+                borderRadius: "50%",
+                background: "#ffffff",
+                color: "#1e293b",
+                border: "none",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                fontSize: "18px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              title="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

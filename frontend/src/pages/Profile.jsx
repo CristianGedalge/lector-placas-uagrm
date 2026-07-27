@@ -19,6 +19,7 @@ function Profile() {
   const [error, setError] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [photoSaving, setPhotoSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const [confirmConfig, setConfirmConfig] = useState({
     isOpen: false,
@@ -28,16 +29,20 @@ function Profile() {
     onConfirm: null
   });
 
-  useEffect(() => {
-    if (user) {
+  const syncFormWithUser = (sourceUser = user) => {
+    if (sourceUser) {
       setFormData({
-        nombre: user.nombre || "",
-        apellido_paterno: user.apellido_paterno || "",
-        apellido_materno: user.apellido_materno || "",
-        carnet: user.carnet || "",
+        nombre: sourceUser.nombre || "",
+        apellido_paterno: sourceUser.apellido_paterno || "",
+        apellido_materno: sourceUser.apellido_materno || "",
+        carnet: sourceUser.carnet || "",
         contrasena: ""
       });
     }
+  };
+
+  useEffect(() => {
+    syncFormWithUser(user);
   }, [user]);
 
   useEffect(() => {
@@ -106,6 +111,13 @@ function Profile() {
     }));
   };
 
+  const handleCancel = () => {
+    setError("");
+    setMessage("");
+    syncFormWithUser();
+    setIsEditing(false);
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setError("");
@@ -121,6 +133,7 @@ function Profile() {
       });
       setFormData((current) => ({ ...current, contrasena: "" }));
       setMessage("Perfil actualizado correctamente.");
+      setIsEditing(false);
     } catch (submitError) {
       setError(submitError.mensaje || "No se pudo actualizar el perfil.");
     }
@@ -374,6 +387,11 @@ function Profile() {
             </form>
           </div>
         </div>
+        {!isEditing && (
+          <button type="button" className="ghost-button" onClick={() => setIsEditing(true)} aria-label="Editar perfil">
+            Editar
+          </button>
+        )}
       </div>
 
       <ConfirmModal

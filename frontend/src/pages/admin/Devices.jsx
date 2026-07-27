@@ -340,21 +340,23 @@ function Devices() {
                         </span>
                       </td>
                       {isAdmin && (
-                        <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                        <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                           <button
                             type="button"
                             onClick={() => handleOpenEditDevice(d)}
-                            style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+                            title="Editar dispositivo"
+                            style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-primary)", color: "white", border: "none", cursor: "pointer" }}
                           >
-                            Editar
+                            <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>edit</span>
                           </button>
                           <button
                             type="button"
                             className="danger-button"
                             onClick={() => handleDeleteDevice(d)}
-                            style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+                            title="Eliminar dispositivo"
+                            style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#e11d48", color: "white", border: "none", cursor: "pointer" }}
                           >
-                            Eliminar
+                            <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>delete</span>
                           </button>
                         </td>
                       )}
@@ -405,21 +407,23 @@ function Devices() {
                       <td style={{ padding: "1rem", fontFamily: "monospace", fontSize: "0.85rem", color: "#666" }}>
                         {t.id}
                       </td>
-                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <td style={{ padding: "1rem", textAlign: "right", display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
                         <button
                           type="button"
                           onClick={() => setEditingType({ id: t.id, nombre: t.nombre })}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem", background: "var(--color-primary)" }}
+                          title="Editar tipo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-primary)", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Editar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>edit</span>
                         </button>
                         <button
                           type="button"
                           className="danger-button"
                           onClick={() => handleDeleteType(t)}
-                          style={{ fontSize: "0.75rem", padding: "0.4rem 0.8rem" }}
+                          title="Eliminar tipo"
+                          style={{ width: "34px", height: "34px", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", background: "#e11d48", color: "white", border: "none", cursor: "pointer" }}
                         >
-                          Eliminar
+                          <span className="material-symbols-rounded" style={{ fontSize: "18px" }}>delete</span>
                         </button>
                       </td>
                     </tr>

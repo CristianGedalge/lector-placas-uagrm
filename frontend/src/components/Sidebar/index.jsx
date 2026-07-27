@@ -62,16 +62,19 @@ function Sidebar({ isOpen, onClose }) {
               onClick={() => setIsLogoutConfirmOpen(true)}
               className="nav-link nav-link-icon"
               style={{
-                background: "none",
-                border: "none",
+                background: "rgba(220, 38, 38, 0.15)",
+                border: "1px solid rgba(220, 38, 38, 0.3)",
+                borderRadius: "8px",
                 textAlign: "left",
-                width: "100%",
+                width: "calc(100% - 1.5rem)",
                 cursor: "pointer",
-                marginTop: "1.5rem",
-                color: "#fca5a5"
+                marginTop: "2rem",
+                color: "#f87171",
+                padding: "0.75rem 1rem",
+                margin: "2rem 0.75rem 0.75rem 0.75rem"
               }}
             >
-              <span className="nav-text">Cerrar Sesión</span>
+              <span className="nav-text" style={{ fontWeight: "700" }}>Cerrar Sesión</span>
             </button>
           )}
         </nav>
