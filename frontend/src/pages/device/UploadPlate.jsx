@@ -91,10 +91,8 @@ function UploadPlate() {
       stopCamera();
     }
     return () => {
-      // Solo apagar si el componente se desmonta o cambia de pestaña
-      if (activeTab !== "camera") {
-        stopCamera();
-      }
+      // Siempre detener el stream al re-ejecutar el efecto para evitar acumulación de streams
+      stopCamera();
     };
   }, [activeTab, activeModal === "snapshot"]);
 
@@ -514,6 +512,10 @@ function UploadPlate() {
   };
 
   const startCamera = async (isLive = false) => {
+    // Si ya hay un stream activo, detenerlo antes de pedir uno nuevo
+    if (streamRef.current) {
+      stopCamera();
+    }
     try {
       setCameraError("");
       const stream = await navigator.mediaDevices.getUserMedia({

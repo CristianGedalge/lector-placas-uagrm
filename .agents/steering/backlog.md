@@ -99,8 +99,10 @@
 - `BARRIER-005` | `done` | Prioridad `media` | Añadir campo webhook_url en modales crear/editar de Devices.jsx | Dependencias: `BARRIER-001`
 - `BARRIER-006` | `pending` | Prioridad `media` | Probar flujo completo: celular escanea placa → OCR → webhook → barrera sube en simulador | Dependencias: `CAM-WIFI-002`, `BARRIER-004`
 
-
-
-
-
-
+- `SEC-011` | `done` | Prioridad `critica` | Token JWT fuera de localStorage, solo cookie httpOnly | Dependencias: ninguna
+- `SEC-012` | `done` | Prioridad `alta` | PII propietario_nombre solo para autenticados en /analyze | Dependencias: ninguna
+- `SEC-013` | `done` | Prioridad `critica` | Excepción de BD en plates.py no debe ser tragada (retorna 500) | Dependencias: ninguna
+- `SEC-014` | `done` | Prioridad `media` | TOCTOU race condition en cooldown con FOR UPDATE | Dependencias: ninguna
+- `ROB-001` | `done` | Prioridad `media` | Reemplazar asyncio.gather sobre misma AsyncSession por awaits secuenciales | Dependencias: ninguna
+- `ROB-002` | `done` | Prioridad `media` | Corregir acumulación de streams de cámara en UploadPlate.jsx | Dependencias: ninguna
+- `ROB-003` | `done` | Prioridad `baja` | Documentar limitación de TTLCache in-process no distribuido | Dependencias: ninguna

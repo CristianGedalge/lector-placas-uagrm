@@ -154,12 +154,14 @@ async def analyze_plate_endpoint(
         
         if vehicle:
             # Check if there is a recent access for this vehicle to prevent duplicates (cooldown)
+            # TOCTOU-001: FOR UPDATE lock para evitar race conditions entre SELECT e INSERT
             last_acceso_query = (
                 select(Acceso)
                 .join(Escaneado)
                 .where(Escaneado.vehiculo_id == vehicle.id)
                 .order_by(Acceso.creado_el.desc())
                 .limit(1)
+                .with_for_update()
             )
             last_acceso_res = await db.execute(last_acceso_query)
             last_acceso = last_acceso_res.scalar_one_or_none()
@@ -284,8 +286,16 @@ async def analyze_plate_endpoint(
         except (ImageProcessingError, StorageError):
             await db.rollback()
             raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
-        except Exception:
+        except Exception as exc:
             await db.rollback()
+            logger.error("Error inesperado al persistir escaneo/solicitud: %s", exc, exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content=PlateAnalysisResponse(
+                    estado="ERROR",
+                    mensaje="Error interno al guardar el registro del escaneo.",
+                ).model_dump(),
+            )
 
     # Mapeo de la respuesta
     return PlateAnalysisResponse(
@@ -302,9 +312,10 @@ async def analyze_plate_endpoint(
         acceso_id=acceso_id,
         tipo_acceso=tipo_acceso_registrado,
         es_registrado=vehicle is not None,
+        # SEC-011: Solo exponer datos del propietario a usuarios autenticados
         propietario_nombre=(
             f"{vehicle.propietario.nombre} {vehicle.propietario.apellido_paterno}".strip()
-            if (vehicle and vehicle.propietario) else None
+            if (vehicle and vehicle.propietario and current_user is not None) else None
         ),
         mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )

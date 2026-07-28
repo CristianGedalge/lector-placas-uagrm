@@ -26,6 +26,12 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 # Cache de usuarios autenticados: evita 1 SELECT por request (TTL 30s)
+# ⚠️ Limitación conocida: TTLCache es in-process, no distribuido.
+#   Si otro worker/admin modifica el usuario (ej. desactiva), este cache
+#   puede estar stale hasta 30s. get_current_user verifica esta_activo al
+#   salir del cache, pero solo cubre el worker local.
+#   Estrategias futuras: (1) Redis centralizado con pub/sub, (2) TTL más corto
+#   (ej. 5s), (3) Cache por request en vez de跨-request.
 user_cache = TTLCache(maxsize=512, ttl=30)
 
 async def _get_cached_user(user_uuid: UUID, db: AsyncSession) -> Usuario | None:
