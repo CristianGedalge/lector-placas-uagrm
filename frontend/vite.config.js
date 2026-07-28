@@ -22,6 +22,10 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
           changeOrigin: true
         }
+      },
+      hmr: {
+        protocol: 'wss',
+        clientPort: 5173
       }
     }
   };
