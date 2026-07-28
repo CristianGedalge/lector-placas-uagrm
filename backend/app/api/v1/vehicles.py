@@ -1,4 +1,3 @@
-import asyncio
 import json
 import uuid
 from typing import List
@@ -227,12 +226,10 @@ async def get_vehicle_detail(vehicle_id: uuid.UUID, db: AsyncSession = Depends(g
 @router.post("/", response_model=VehiculoResponse, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(vehicle_in: VehiculoCreate, db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     
-    # Validar propietario, marca y tipo en paralelo (3 round-trips -> 1)
-    owner_res, marca_res, tipo_res = await asyncio.gather(
-        db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id)),
-        db.execute(select(Marca).where(Marca.id == vehicle_in.marca_id)),
-        db.execute(select(TipoVehiculo).where(TipoVehiculo.id == vehicle_in.tipo_vehiculo_id)),
-    )
+    # Validar propietario, marca y tipo (secuencial: AsyncSession no es thread-safe para concurrente)
+    owner_res = await db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id))
+    marca_res = await db.execute(select(Marca).where(Marca.id == vehicle_in.marca_id))
+    tipo_res = await db.execute(select(TipoVehiculo).where(TipoVehiculo.id == vehicle_in.tipo_vehiculo_id))
     owner = owner_res.scalars().first()
     if not owner or not owner.esta_activo:
         raise HTTPException(

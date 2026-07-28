@@ -91,10 +91,8 @@ function UploadPlate() {
       stopCamera();
     }
     return () => {
-      // Solo apagar si el componente se desmonta o cambia de pestaña
-      if (activeTab !== "camera") {
-        stopCamera();
-      }
+      // Siempre detener el stream al re-ejecutar el efecto para evitar acumulación de streams
+      stopCamera();
     };
   }, [activeTab, activeModal === "snapshot"]);
 
@@ -237,6 +235,7 @@ function UploadPlate() {
             direction: tipoAcceso === "ENTRADA" ? "ENTRY" : "EXIT",
             zone: "Portería Principal",
             timestamp: new Date().toISOString(),
+            vehiculo_id: analysisResult.vehiculo_id,
           });
           setActiveModal("access_confirmed");
           setTimeout(() => {
@@ -501,7 +500,7 @@ function UploadPlate() {
     } catch (e) {
       if (e.name !== "AbortError" && e.code !== "ERR_CANCELED") {
         console.error("Error en detectFrame:", e);
-        setScanError(e.response?.data?.detail || e.mensaje || String(e));
+        setScanError(e.response?.data?.detail || e.mensaje || "Error al procesar la imagen.");
         setTrackingBoxes([]);
       }
     } finally {
@@ -514,6 +513,10 @@ function UploadPlate() {
   };
 
   const startCamera = async (isLive = false) => {
+    // Si ya hay un stream activo, detenerlo antes de pedir uno nuevo
+    if (streamRef.current) {
+      stopCamera();
+    }
     try {
       setCameraError("");
       const stream = await navigator.mediaDevices.getUserMedia({

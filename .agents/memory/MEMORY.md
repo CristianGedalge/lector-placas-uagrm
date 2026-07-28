@@ -1,5 +1,19 @@
 # MEMORY
 
+## 2026-07-28 — 4R Review completa + Fixes de seguridad y robustez
+
+- **SDD Init**: Inicializado con engram (capture_prompt: false para artefactos automáticos). Strict TDD activado. Testing capabilities detectadas.
+- **4R Review**: Ejecutadas las 4R completas (Risk, Resilience, Readability, Reliability) vía gentle-ai review sobre el último commit (26 archivos, 1372 líneas). Estado: **approved**.
+- **SEC-011 (CRITICAL)**: Se descubrió que `storage.js` guardaba el token JWT en localStorage (regresión de una migración previa a cookie httpOnly). Corregido: ahora solo guarda el usuario. El `Authorization: Bearer` header se eliminó de axios — la cookie `session_token` httpOnly con `withCredentials: true` es suficiente.
+- **SEC-012 (WARNING)**: `propietario_nombre` se devolvía en `/api/v1/plates/analyze` incluso para llamadas no autenticadas. Corregido: ahora solo se incluye si `current_user is not None`.
+- **SEC-013 (CRITICAL)**: El bloque `except Exception: await db.rollback()` en `plates.py` tragaba cualquier error de BD y devolvía una respuesta exitosa con datos incompletos. Corregido: ahora loggea con `exc_info=True` y retorna HTTP 500.
+- **SEC-014 (WARNING)**: El cooldown de accesos duplicados usaba SELECT-then-INSERT sin lock atómico (TOCTOU). Corregido: agregado `.with_for_update()` en la consulta del último acceso.
+- **ROB-001 (WARNING)**: `create_vehicle` ejecutaba 3 `db.execute` concurrentes sobre la misma `AsyncSession` vía `asyncio.gather`. Corregido: ahora ejecuta 3 awaits secuenciales. Se eliminó el import de `asyncio`.
+- **ROB-002 (WARNING)**: En `UploadPlate.jsx`, el cleanup del `useEffect` de cámara NO detenía el stream si `activeTab === 'camera'`, acumulando streams. Corregido: cleanup siempre llama `stopCamera()`, y `startCamera()` verifica y detiene stream previo.
+- **ROB-003 (WARNING)**: La limitación de TTLCache in-process documentada en auth.py con estrategias futuras.
+- **Backlog actualizado**: 7 nuevos items (SEC-011 a SEC-014, ROB-001 a ROB-003) marcados como done.
+- **Verificación**: Compileall Python y build Vite no ejecutados por falta de .venv.
+
 ## 2026-07-27 - Celular como Dispositivo de Cámara por WiFi + Simulador de Barrera SSE
 
 - **Configuración de red local**: `BACKEND_HOST` cambiado de `127.0.0.1` a `0.0.0.0` para que FastAPI escuche en todas las interfaces WiFi. `ALLOWED_ORIGINS` actualizado con `https://192.168.0.14:5173`. Vite configurado con `host: true` y `https: true` usando `@vitejs/plugin-basic-ssl`.
