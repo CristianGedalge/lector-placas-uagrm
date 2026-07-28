@@ -120,7 +120,7 @@ function UploadPlate() {
     }));
   };
 
-  const handleLookupPlate = async (plateValue, evidence = null) => {
+  const handleLookupPlate = async (plateValue, evidence = null, analysisResult = null) => {
     resetLookupState();
     setLookupLoading(true);
 
@@ -165,6 +165,21 @@ function UploadPlate() {
     } catch (error) {
       const status = error?.response?.status;
       if (status === 404) {
+        if (evidence && !analysisResult?.solicitud_id) {
+          try {
+            const form = new FormData();
+            form.append("file", evidence, "unknown-vehicle.jpg");
+            analysisResult = await uploadPlateImage(form);
+          } catch (requestError) {
+            setLookupError(requestError?.response?.data?.detail || "No se pudo enviar la solicitud de revisión.");
+            return;
+          }
+        }
+        if (analysisResult?.solicitud_id) {
+          setManualPlate(plateValue);
+          setActiveModal("plate_request_sent");
+          return;
+        }
         // Placa no registrada → informar al usuario
         setManualPlate(plateValue);
         setActiveModal("plate_not_found");
@@ -212,7 +227,7 @@ function UploadPlate() {
       if (analysis?.placa_normalizada) {
         // OCR exitoso con formato boliviano confirmado
         setManualPlate(analysis.placa_normalizada);
-        await handleLookupPlate(analysis.placa_normalizada, file);
+        await handleLookupPlate(analysis.placa_normalizada, file, analysis);
       } else if (analysis?.placa_detectada) {
         // OCR detectó texto pero no cumple el formato: rellenar campo para corrección manual
         const rawClean = analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase();
@@ -338,7 +353,7 @@ function UploadPlate() {
             stopCamera();
             setAnalysisPreview(analysis);
             setManualPlate(normalizedText);
-            handleLookupPlate(normalizedText, evidenceBlob || blob);
+            handleLookupPlate(normalizedText, evidenceBlob || blob, analysis);
             return;
           }
 
@@ -906,6 +921,16 @@ function UploadPlate() {
           setManualPlate={setManualPlate}
           activeTab={activeTab}
           startCamera={startCamera}
+        />
+      )}
+      {activeModal === "plate_request_sent" && (
+        <PlateNotFoundModal
+          manualPlate={manualPlate}
+          setActiveModal={setActiveModal}
+          setManualPlate={setManualPlate}
+          activeTab={activeTab}
+          startCamera={startCamera}
+          requestSent
         />
       )}
 

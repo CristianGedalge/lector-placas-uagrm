@@ -287,6 +287,13 @@
 - Se agrego `.agents/scripts/verify-project.ps1` para compilar Python, comprobar APIs/versiones, inventariar dataset/modelos y construir el frontend sin red, BD ni entrenamiento.
 - Se corrigio memoria obsoleta: el dataset contiene train/valid/test/data.yaml y existe `yolov8n.pt`; sigue faltando un `best.pt` entrenado.
 
+## 2026-07-27
+
+- Fase 1 de placas desconocidas: `solicitudes_registro_vehiculo`, endpoints staff de bandeja/aprobación/rechazo y migración Alembic `a1b2c3d4e5f6`.
+- El endpoint `/api/v1/plates/analyze` reutiliza los bytes originales del análisis solo cuando `realtime=false`, la placa es válida/no registrada y existe usuario autenticado; procesa WebP y sube una sola evidencia authenticated. Polling no sube ni crea solicitudes.
+- La aprobación valida placa, propietario, marca y tipo, crea `Vehiculo` con la foto dentro de la misma transacción y marca `APPROVED`; rechazo no crea vehículo.
+- Verificación: `compileall` y build Vite correctos. Pytest bloqueado en este entorno por dependencias ausentes (`cloudinary`, `slowapi`).
+
 ## 2026-07-14
 
 - Objetivo: auditar completamente el repositorio y corregir lo necesario para alinearlo con la correccion tecnica del lector de placas.

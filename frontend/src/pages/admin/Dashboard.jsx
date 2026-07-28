@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import Loader from "../../components/Loader";
-import { getDashboardSummary, getPlateScans, getAccessLogs } from "../../api/plates";
+import { getDashboardSummary, getPlateScans, getAccessLogs, getMediaUrl } from "../../api/plates";
 import { useAuth } from "../../hooks/useAuth";
 import parseApiError from "../../utils/errors";
 

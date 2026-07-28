@@ -57,6 +57,12 @@ class MediaStatusEnum(str, enum.Enum):
     DELETED = "DELETED"
 
 
+class SolicitudRegistroEstadoEnum(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
 
@@ -227,3 +233,26 @@ class ArchivoMultimedia(Base):
         nullable=False,
     )
     deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class SolicitudRegistroVehiculo(Base):
+    __tablename__ = "solicitudes_registro_vehiculo"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False, unique=True)
+    imagen_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=False)
+    placa_sugerida = Column(String, nullable=False, index=True)
+    confianza_placa = Column(Float, nullable=False)
+    estado = Column(Enum(SolicitudRegistroEstadoEnum), nullable=False, default=SolicitudRegistroEstadoEnum.PENDING, index=True)
+    creado_por_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False)
+    revisado_por_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True)
+    vehiculo_creado_id = Column(Uuid, ForeignKey("vehiculos.id"), nullable=True)
+    creado_el = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    revisado_el = Column(DateTime(timezone=True), nullable=True)
+    actualizado_el = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    escaneado = relationship("Escaneado")
+    imagen = relationship("ArchivoMultimedia")
+    creador = relationship("Usuario", foreign_keys=[creado_por_usuario_id])
+    revisor = relationship("Usuario", foreign_keys=[revisado_por_usuario_id])
+    vehiculo_creado = relationship("Vehiculo", foreign_keys=[vehiculo_creado_id])

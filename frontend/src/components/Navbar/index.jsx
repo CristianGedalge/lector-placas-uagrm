@@ -3,8 +3,9 @@ import { useAuth } from "../../hooks/useAuth";
 import { getMediaUrl } from "../../api/auth";
 
 function Navbar({ onMenuToggle }) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [photoUrl, setPhotoUrl] = useState("");
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     if (!user?.foto_id) {
@@ -36,9 +37,13 @@ function Navbar({ onMenuToggle }) {
           <h1>Analisis y registro de placas</h1>
         </div>
       </div>
-      <div className="topbar-actions topbar-actions-compact">
+      <div className="topbar-actions topbar-actions-compact" style={{ position: "relative" }}>
         {user?.rol !== "DISPOSITIVO" && (
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <div 
+            style={{ display: "flex", alignItems: "center", gap: "1rem", cursor: "pointer" }}
+            onClick={() => setShowMenu((prev) => !prev)}
+            title="Abrir menú de usuario"
+          >
             <div className="navbar-user-details" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", textAlign: "right" }}>
               <span style={{ fontSize: "0.9rem", fontWeight: "bold", color: "#1e293b" }}>
                 {user?.nombre ? `${user.nombre} ${user.apellido_paterno}` : "Invitado"}
@@ -83,6 +88,44 @@ function Navbar({ onMenuToggle }) {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "#64748b" }}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               )}
             </div>
+          </div>
+        )}
+
+        {showMenu && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 0.35rem)",
+              right: 0,
+              background: "#fff",
+              border: "1px solid #d9e2ec",
+              borderRadius: "10px",
+              boxShadow: "0 8px 22px rgba(0, 0, 0, 0.12)",
+              minWidth: "140px",
+              zIndex: 20
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setShowMenu(false);
+                signOut();
+              }}
+              style={{
+                width: "100%",
+                border: "none",
+                background: "#fef2f2",
+                padding: "0.7rem 0.9rem",
+                textAlign: "left",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                color: "#dc2626",
+                fontWeight: 700,
+                borderRadius: "10px"
+              }}
+            >
+              Cerrar Sesión
+            </button>
           </div>
         )}
       </div>

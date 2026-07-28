@@ -29,3 +29,4 @@ class PlateAnalysisResponse(BaseModel):
     mensaje: Optional[str] = None
     plate_bbox: Optional[list[float]] = None
     raw_bboxes: Optional[list[list[float]]] = None
+    solicitud_id: Optional[UUID] = None

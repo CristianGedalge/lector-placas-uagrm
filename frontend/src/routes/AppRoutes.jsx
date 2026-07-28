@@ -12,6 +12,7 @@ import UserDashboard from "../pages/user/UserDashboard";
 import UserAccessLogs from "../pages/user/UserAccessLogs";
 import Devices from "../pages/admin/Devices";
 import AccessLogs from "../pages/operator/AccessLogs";
+import VehicleRegistrationRequests from "../pages/VehicleRegistrationRequests";
 import Loader from "../components/Loader";
 import { useAuth } from "../hooks/useAuth";
 
@@ -117,6 +118,7 @@ function AppRoutes() {
         <Route path="/dispositivos" element={<AdminRoute><Devices /></AdminRoute>} />
         <Route path="/vehiculos" element={<VehiclesRoute />} />
         <Route path="/accesos" element={<AccessLogsRoute />} />
+        <Route path="/solicitudes-vehiculos" element={<VehicleRegistrationRequests />} />
       </Route>
     </Routes>
   );

@@ -68,6 +68,19 @@ export async function getPlateScans() {
   return data;
 }
 
+export async function getVehicleRegistrationRequests() {
+  const { data } = await apiClient.get("/v1/vehicle-registration-requests");
+  return data;
+}
+export async function approveVehicleRegistrationRequest(id, payload) {
+  const { data } = await apiClient.post(`/v1/vehicle-registration-requests/${id}/approve`, payload);
+  return data;
+}
+export async function rejectVehicleRegistrationRequest(id, payload = {}) {
+  const { data } = await apiClient.post(`/v1/vehicle-registration-requests/${id}/reject`, payload);
+  return data;
+}
+
 export async function getAccessLogs() {
   const { data } = await apiClient.get("/v1/access-logs/");
   return data;

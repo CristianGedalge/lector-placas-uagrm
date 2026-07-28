@@ -189,7 +189,7 @@ function Vehicles() {
       color: "",
       marca_id: brands[0]?.id || "",
       tipo_vehiculo_id: types[0]?.id || "",
-      propietario_usuario_id: users[0]?.id || "",
+      propietario_usuario_id: isStaff ? (users[0]?.id || "") : user?.id,
       photoFile: null
     });
     setError("");
@@ -216,6 +216,7 @@ function Vehicles() {
       onConfirm: async () => {
         try {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
           const newVehicle = await createVehicle({
             placa: plateVal,
             color: creatingVehicle.color,
@@ -252,10 +253,11 @@ function Vehicles() {
       marca_id: v.marca_id,
       tipo_vehiculo_id: v.tipo_vehiculo_id,
       propietario_usuario_id: v.propietario_usuario_id,
-      foto_id: v.foto_id,
+      foto_id: v.foto_id || null,
       photoFile: null
     });
     setEditingVehiclePhotoUrl("");
+    setViewingVehicle(null);
     setError("");
     setSuccess("");
 
@@ -902,33 +904,39 @@ function Vehicles() {
                     </div>
                   )}
                 </label>
-                <label className="field-group">
-                  <span>Propietario Asociado</span>
-                  {users.length > 0 ? (
-                     <select
-                      value={creatingVehicle.propietario_usuario_id}
-                      onChange={(event) =>
-                        setCreatingVehicle((current) => ({
-                          ...current,
-                          propietario_usuario_id: event.target.value
-                        }))
-                      }
-                      required
-                    >
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.nombre} {u.apellido_paterno} ({u.carnet})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", color: "#e11d48", background: "#fef2f2", border: "1px solid #fee2e2", padding: "0.5rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "5px" }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                      <span>No hay usuarios registrados en el sistema.</span>
-                    </div>
-                  )}
-                </label>
-
+                {isStaff ? (
+                  <label className="field-group">
+                    <span>Propietario Asociado</span>
+                    {users.length > 0 ? (
+                       <select
+                        value={creatingVehicle.propietario_usuario_id}
+                        onChange={(event) =>
+                          setCreatingVehicle((current) => ({
+                            ...current,
+                            propietario_usuario_id: event.target.value
+                          }))
+                        }
+                        required
+                      >
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.nombre} {u.apellido_paterno} ({u.carnet})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start", color: "#e11d48", background: "#fef2f2", border: "1px solid #fee2e2", padding: "0.5rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem", marginTop: "5px" }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: "2px" }}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <span>No hay usuarios registrados en el sistema.</span>
+                      </div>
+                    )}
+                  </label>
+                ) : (
+                  <div style={{ gridColumn: "1 / -1", display: "flex", gap: "0.5rem", alignItems: "center", background: "#f0f9ff", border: "1px solid #e0f2fe", padding: "0.6rem 1rem", borderRadius: "8px", fontSize: "0.85rem", color: "#0369a1" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    <span>El vehículo se registrará bajo tu propio nombre: <strong>{user?.nombre} {user?.apellido_paterno}</strong>.</span>
+                  </div>
+                )}
                 <label className="field-group">
                   <span>Foto privada del vehículo (Opcional)</span>
                   <input
@@ -941,6 +949,7 @@ function Vehicles() {
                       }))
                     }
                   />
+                  <small className="muted-text">Opcional. Se guarda de forma privada junto al registro.</small>
                 </label>
               </div>
             </div>
@@ -1149,25 +1158,27 @@ function Vehicles() {
                   </select>
                 </label>
 
-                <label className="field-group">
-                  <span>Propietario Asociado</span>
-                  <select
-                    value={editingVehicle.propietario_usuario_id}
-                    onChange={(event) =>
-                      setEditingVehicle((current) => ({
-                        ...current,
-                        propietario_usuario_id: event.target.value
-                      }))
-                    }
-                    required
-                  >
-                    {users.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.nombre} {u.apellido_paterno} ({u.carnet})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {isStaff && (
+                  <label className="field-group">
+                    <span>Propietario Asociado</span>
+                    <select
+                      value={editingVehicle.propietario_usuario_id}
+                      onChange={(event) =>
+                        setEditingVehicle((current) => ({
+                          ...current,
+                          propietario_usuario_id: event.target.value
+                        }))
+                      }
+                      required
+                    >
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.nombre} {u.apellido_paterno} ({u.carnet})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
 
                 <div className="field-group" style={{ gridColumn: "1 / -1" }}>
                   <span>Foto privada del vehículo</span>
