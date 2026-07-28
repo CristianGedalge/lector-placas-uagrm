@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
     try:
         return await get_current_user(request, db=db)
-    except Exception:
-        return None
+    except HTTPException:
+        return None  # Solo ignoramos errores de autenticación, no de conexión/BD
 
 
 router = APIRouter()
@@ -154,14 +154,18 @@ async def analyze_plate_endpoint(
         
         if vehicle:
             # Check if there is a recent access for this vehicle to prevent duplicates (cooldown)
-            # TOCTOU-001: FOR UPDATE lock para evitar race conditions entre SELECT e INSERT
+            # TOCTOU-001: FOR UPDATE sobre Acceso para serializar el cooldown.
+            # Solo lockea filas de Acceso (OF Acceso), no Escaneado.
+            # Si dos requests llegan simultáneamente, el segundo espera el lock
+            # hasta que el primero haga commit. La ventana de lock es breve:
+            # solo el SELECT + check de cooldown, antes del I/O de imágenes.
             last_acceso_query = (
                 select(Acceso)
                 .join(Escaneado)
                 .where(Escaneado.vehiculo_id == vehicle.id)
                 .order_by(Acceso.creado_el.desc())
                 .limit(1)
-                .with_for_update()
+                .with_for_update(of=Acceso)
             )
             last_acceso_res = await db.execute(last_acceso_query)
             last_acceso = last_acceso_res.scalar_one_or_none()

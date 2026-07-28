@@ -71,7 +71,7 @@ function VehicleTablePhoto({ fotoId }) {
         cursor: "pointer",
         display: "block"
       }} 
-      onClick={() => window.open(url, "_blank")}
+      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
       title="Ver foto en tamaño completo"
     />
   );

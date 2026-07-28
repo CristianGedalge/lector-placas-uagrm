@@ -235,6 +235,7 @@ function UploadPlate() {
             direction: tipoAcceso === "ENTRADA" ? "ENTRY" : "EXIT",
             zone: "Portería Principal",
             timestamp: new Date().toISOString(),
+            vehiculo_id: analysisResult.vehiculo_id,
           });
           setActiveModal("access_confirmed");
           setTimeout(() => {
@@ -499,7 +500,7 @@ function UploadPlate() {
     } catch (e) {
       if (e.name !== "AbortError" && e.code !== "ERR_CANCELED") {
         console.error("Error en detectFrame:", e);
-        setScanError(e.response?.data?.detail || e.mensaje || String(e));
+        setScanError(e.response?.data?.detail || e.mensaje || "Error al procesar la imagen.");
         setTrackingBoxes([]);
       }
     } finally {
