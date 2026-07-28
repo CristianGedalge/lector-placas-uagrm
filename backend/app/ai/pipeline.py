@@ -32,8 +32,9 @@ OCR_ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
 MIN_CANDIDATE_LENGTH = 4
 MAX_CANDIDATE_LENGTH = 10
 TARGET_PLATE_LENGTH = 7
-MAX_REALTIME_DIM = 640  # Resolución suficiente para leer caracteres de placa con precisión
+MAX_REALTIME_DIM = 480  # OPT-A: 480px suficiente para leer placa, ~44% menos píxeles que 640px
 MAX_STATIC_DIM = 1280   # EFI-002: Resolución límite para pipeline estático (1-2 MP)
+OCR_UPSCALE_THRESHOLD = 600  # OPT-C: Solo aplicar upscale si lado más largo < este valor
 
 box_annotator = sv.BoxAnnotator(thickness=2, color_lookup=sv.ColorLookup.INDEX)
 label_annotator = sv.LabelAnnotator(
@@ -131,7 +132,9 @@ def _preprocess_image(image: np.ndarray) -> tuple[np.ndarray, float]:
 
     scale = 1.0
     factor = float(settings.OCR_UPSCALE_FACTOR)
-    if factor > 1.0 and max(processed.shape[:2]) < 1200:
+    # OPT-C: Solo escalar si la imagen es pequeña; imágenes >= OCR_UPSCALE_THRESHOLD
+    # ya tienen suficiente resolución — escalar cuadriplica el área sin ganancia real.
+    if factor > 1.0 and max(processed.shape[:2]) < OCR_UPSCALE_THRESHOLD:
         processed = cv2.resize(
             processed,
             None,
@@ -405,44 +408,49 @@ def _generate_preprocessing_variants(
 
     def _upscale(img: np.ndarray, factor: float) -> tuple[np.ndarray, float]:
         h, w = img.shape[:2]
-        if factor > 1.0 and max(h, w) < 1200:
+        # OPT-C: Respetar umbral — no escalar imágenes ya grandes
+        if factor > 1.0 and max(h, w) < OCR_UPSCALE_THRESHOLD:
             img = cv2.resize(img, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
             return img, factor
         return img, 1.0
 
     factor = float(settings.OCR_UPSCALE_FACTOR)
 
-    # Variante 1: imagen original sin modificar (upscale si es pequeña)
-    v1, s1 = _upscale(image.copy(), factor)
-    variants.append(("original", v1, s1))
-
-    # Variante 2: escala de grises + CLAHE (preprocesamiento actual)
+    # Calcular gris una sola vez — reutilizado por múltiples variantes
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # OPT-B: Ordenadas de más rápida a más lenta para maximizar el early-exit.
+    # bilateral_sharp tarda ~50ms solo en preproceso, se reserva como último recurso.
+
+    # Variante 1: escala de grises + CLAHE — la más efectiva y rápida para placas bien iluminadas
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray_clahe = clahe.apply(gray)
-    v2, s2 = _upscale(gray_clahe, factor)
-    variants.append(("gray_clahe", v2, s2))
+    v1, s1 = _upscale(gray_clahe, factor)
+    variants.append(("gray_clahe", v1, s1))
 
-    # Variante 3: bilateral filter (preserva bordes) + sharpening
+    # Variante 2: threshold adaptativo — buena para placas con luz desigual (~8ms preproceso)
+    v2_base = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5
+    )
+    v2, s2 = _upscale(v2_base, factor)
+    variants.append(("adaptive_thresh", v2, s2))
+
+    # Variante 3: erosión leve — une trazos rotos (ej. 'D' en placa), ~6ms preproceso
+    kernel_erode = np.ones((2, 2), np.uint8)
+    eroded = cv2.erode(gray, kernel_erode, iterations=1)
+    v3, s3 = _upscale(eroded, factor)
+    variants.append(("morph_erode", v3, s3))
+
+    # Variante 4: imagen original sin modificar (upscale si es pequeña)
+    v4, s4 = _upscale(image.copy(), factor)
+    variants.append(("original", v4, s4))
+
+    # Variante 5: bilateral filter + sharpening — último recurso (~50ms preproceso)
     bilateral = cv2.bilateralFilter(image, d=9, sigmaColor=75, sigmaSpace=75)
     kernel_sharp = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
     sharpened = cv2.filter2D(bilateral, -1, kernel_sharp)
-    v3, s3 = _upscale(sharpened, factor)
-    variants.append(("bilateral_sharp", v3, s3))
-
-    # Variante 4: escala de grises + threshold adaptativo (bueno para placas con luz desigual)
-    gray2 = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    v4_base = cv2.adaptiveThreshold(
-        gray2, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5
-    )
-    v4, s4 = _upscale(v4_base, factor)
-    variants.append(("adaptive_thresh", v4, s4))
-
-    # Variante 5: erosión leve (engrosa caracteres oscuros sobre fondo claro, une trazos rotos de la 'D')
-    kernel_erode = np.ones((2, 2), np.uint8)
-    eroded = cv2.erode(gray, kernel_erode, iterations=1)
-    v5, s5 = _upscale(eroded, factor)
-    variants.append(("morph_erode", v5, s5))
+    v5, s5 = _upscale(sharpened, factor)
+    variants.append(("bilateral_sharp", v5, s5))
 
     return variants
 
@@ -493,9 +501,13 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
             raw_bboxes_rt.extend(det.xyxy.tolist())
             candidates_rt.extend(_build_candidates(det, image.shape))
 
-        # ---- Variante fallback: threshold adaptativo (solo si la principal no encontró candidatos válidos) ----
+        # ---- Variante fallback: threshold adaptativo ----
+        # OPT-A: Solo lanzar si la variante principal detectó texto (results > 0)
+        # pero no produjo un candidato con formato boliviano válido.
+        # Si la imagen está vacía (0 resultados), no gastar otra llamada OCR.
         has_valid = any(c.valid_format and c.confidence >= settings.OCR_CONFIDENCE_THRESHOLD for c in candidates_rt)
-        if not has_valid:
+        primary_found_text = bool(results)
+        if not has_valid and primary_found_text:
             try:
                 processed_fb = cv2.adaptiveThreshold(
                     gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 5

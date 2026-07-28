@@ -22,6 +22,7 @@ import { listUsers } from "../../api/auth";
 import { useAuth } from "../../hooks/useAuth";
 import { formatPlate, validatePlateForm } from "../../utils/formatters";
 import Pagination from "../../components/Pagination";
+import SearchBar from "../../components/SearchBar";
 
 function VehicleTablePhoto({ fotoId }) {
   const [url, setUrl] = useState("");
@@ -98,6 +99,7 @@ function Vehicles() {
 
   const [filterType, setFilterType] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const [vehiclesSearchQuery, setVehiclesSearchQuery] = useState("");
   const itemsPerPage = 10;
 
   const [creatingVehicle, setCreatingVehicle] = useState(null);
@@ -468,10 +470,14 @@ function Vehicles() {
 
   // Filtrado de vehículos en frontend
   const filteredVehicles = vehicles.filter((v) => {
-    if (filterType === "MY") {
-      return v.propietario_usuario_id === user?.id;
+    if (filterType === "MY" && v.propietario_usuario_id !== user?.id) {
+      return false;
     }
-    return true;
+    const query = vehiclesSearchQuery.toLowerCase();
+    const plate = v.placa?.toLowerCase() || "";
+    const brand = v.marca?.nombre?.toLowerCase() || "";
+    const ownerName = v.propietario ? `${v.propietario.nombre} ${v.propietario.apellido_paterno}`.toLowerCase() : "";
+    return plate.includes(query) || brand.includes(query) || ownerName.includes(query);
   });
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -552,14 +558,21 @@ function Vehicles() {
               <h3>{isStaff ? "Todos los vehículos del sistema" : "Vehículos registrados bajo mi cuenta"}</h3>
             </div>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button type="button" className="ghost-button" onClick={loadData} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem" }} title="Refrescar tabla">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
-              </button>
               <button type="button" onClick={handleOpenCreateVehicle} style={{ padding: "0.6rem 1.2rem" }}>
                 Registrar Vehículo
               </button>
             </div>
           </div>
+
+          <SearchBar
+            searchQuery={vehiclesSearchQuery}
+            setSearchQuery={(val) => { setVehiclesSearchQuery(val); setCurrentPage(1); }}
+            placeholder="Buscar vehículos por placa, marca o propietario..."
+            onRefresh={loadData}
+            isRefreshing={loading}
+            refreshTitle="Refrescar"
+          />
+
           {!filteredVehicles.length && (
             <div className="card">
               <p className="muted-text text-center">No se encontraron vehículos registrados bajo esta selección.</p>

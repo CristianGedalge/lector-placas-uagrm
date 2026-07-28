@@ -70,6 +70,12 @@ class PlatesAPITests(unittest.TestCase):
             "mensaje": None,
             "plate_bbox": None,
             "raw_bboxes": None,
+            "solicitud_id": None,
+            "vehiculo_id": None,
+            "acceso_id": None,
+            "tipo_acceso": None,
+            "es_registrado": False,
+            "propietario_nombre": None,
         }
         image = np.zeros((20, 40, 3), dtype=np.uint8)
         ok, encoded = cv2.imencode(".jpg", image)

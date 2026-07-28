@@ -16,6 +16,11 @@ apiClient.interceptors.request.use((config) => {
   if (config.url?.includes("/plates/analyze")) {
     config.timeout = OCR_TIMEOUT;
   }
+  // Añadir token de autorización si existe
+  const session = readSession();
+  if (session?.token) {
+    config.headers.Authorization = `Bearer ${session.token}`;
+  }
   return config;
 });
 

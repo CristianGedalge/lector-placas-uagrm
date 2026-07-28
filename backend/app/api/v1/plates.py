@@ -1,11 +1,13 @@
 import uuid
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
 from app.schemas.plate import PlateAnalysisResponse, EscaneadoResponse
 from app.ai.pipeline import analyze_plate, get_pipeline_status
 from app.core.limiter import limiter
@@ -22,6 +24,8 @@ from app.services.storage import StorageError
 from app.api.v1.auth import get_current_user
 from app.services.media_tasks import process_media_record, spool_directory
 from app.config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
     try:
@@ -96,12 +100,21 @@ async def analyze_plate_endpoint(
         )
     
     status_val = result_dict.get("status")
+    vehicle = None
+    acceso_id = None
+    tipo_acceso_registrado = None
+    solicitud_id = None
     if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
         normalized = result_dict.get("normalized_plate")
         
         vehicle = None
         if normalized:
-            v_res = await db.execute(select(Vehiculo).where(Vehiculo.placa == normalized))
+            normalized = normalized.replace("-", "").replace(" ", "").upper().strip()
+            v_res = await db.execute(
+                select(Vehiculo)
+                .options(selectinload(Vehiculo.propietario))
+                .where(Vehiculo.placa == normalized)
+            )
             vehicle = v_res.scalars().first()
 
         estado_enum = EstadoEscaneoEnum.DETECTADO if status_val == "DETECTED" else EstadoEscaneoEnum.BAJA_CONFIANZA
@@ -139,87 +152,114 @@ async def analyze_plate_endpoint(
         )
         db.add(scan)
         
-        solicitud_id = None
         if vehicle:
-            # 1. Determinar el tipo de acceso (ENTRADA o SALIDA)
-            tipo_acceso = None
-            if dispositivo:
-                name_lower = dispositivo.nombre.lower()
-                if "entrada" in name_lower or "ingreso" in name_lower:
-                    tipo_acceso = TipoAccesoEnum.ENTRADA
-                elif "salida" in name_lower or "egreso" in name_lower:
-                    tipo_acceso = TipoAccesoEnum.SALIDA
-            
-            if tipo_acceso is None:
-                # Consultar el último estado en el campus del vehículo
+            # Check if there is a recent access for this vehicle to prevent duplicates (cooldown)
+            last_acceso_query = (
+                select(Acceso)
+                .join(Escaneado)
+                .where(Escaneado.vehiculo_id == vehicle.id)
+                .order_by(Acceso.creado_el.desc())
+                .limit(1)
+            )
+            last_acceso_res = await db.execute(last_acceso_query)
+            last_acceso = last_acceso_res.scalar_one_or_none()
+
+            cooldown = timedelta(seconds=settings.CAMERA_DUPLICATE_COOLDOWN_SECONDS)
+            now_utc = datetime.now(timezone.utc)
+            is_duplicate = False
+            if last_acceso:
+                last_time = last_acceso.creado_el
+                if last_time.tzinfo is None:
+                    last_time = last_time.replace(tzinfo=timezone.utc)
+                if now_utc - last_time < cooldown:
+                    is_duplicate = True
+                    logger.info("Acceso duplicado para vehiculo %s omitido en el backend (cooldown)", vehicle.placa)
+
+            if not is_duplicate:
+                # 1. Determinar el tipo de acceso (ENTRADA o SALIDA)
+                tipo_acceso = None
+                if dispositivo:
+                    name_lower = dispositivo.nombre.lower()
+                    if "entrada" in name_lower or "ingreso" in name_lower:
+                        tipo_acceso = TipoAccesoEnum.ENTRADA
+                    elif "salida" in name_lower or "egreso" in name_lower:
+                        tipo_acceso = TipoAccesoEnum.SALIDA
+                
+                if tipo_acceso is None:
+                    # Consultar el último estado en el campus del vehículo
+                    estado_res = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehicle.id))
+                    estado_campus = estado_res.scalars().first()
+                    if estado_campus and estado_campus.estado == UbicacionVehiculoEnum.DENTRO:
+                        tipo_acceso = TipoAccesoEnum.SALIDA
+                    else:
+                        tipo_acceso = TipoAccesoEnum.ENTRADA
+
+                # 2. Registrar el acceso
+                ubicacion_acceso = dispositivo.ubicacion if dispositivo else "Portería Principal"
+                log = Acceso(
+                    tipo_acceso=tipo_acceso,
+                    ubicacion=ubicacion_acceso,
+                    escaneado=scan,
+                    operador_usuario_id=None
+                )
+                db.add(log)
+
+                # 3. Guardar imagen de evidencia
+                media_type = (
+                    MediaTypeEnum.ACCESS_ENTRY
+                    if tipo_acceso == TipoAccesoEnum.ENTRADA
+                    else MediaTypeEnum.ACCESS_EXIT
+                )
+                
+                # Generar el UUID manualmente para evitar la necesidad de flush
+                media_uuid = uuid.uuid4()
+                media = ArchivoMultimedia(
+                    id=media_uuid,
+                    proveedor=MediaProviderEnum.CLOUDINARY,
+                    tipo=media_type,
+                    estado=MediaStatusEnum.PENDING,
+                    resource_type="image",
+                    delivery_type=settings.CLOUDINARY_DELIVERY_TYPE,
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=settings.MEDIA_ACCESS_RETENTION_DAYS),
+                )
+                db.add(media)
+
+                # Spool local de la imagen usando el UUID generado
+                spool_path = spool_directory() / f"{media_uuid}.upload"
+                await asyncio.to_thread(spool_path.write_bytes, image_bytes)
+                media.spool_path = str(spool_path)
+                log.imagen = media
+
+                # 4. Actualizar EstadoCampus
                 estado_res = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehicle.id))
                 estado_campus = estado_res.scalars().first()
-                if estado_campus and estado_campus.estado == UbicacionVehiculoEnum.DENTRO:
-                    tipo_acceso = TipoAccesoEnum.SALIDA
+                nuevo_estado = UbicacionVehiculoEnum.DENTRO if tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
+                if estado_campus:
+                    estado_campus.estado = nuevo_estado
+                    estado_campus.ultimo_acceso = log
                 else:
-                    tipo_acceso = TipoAccesoEnum.ENTRADA
+                    estado_campus = EstadoCampus(
+                        vehiculo_id=vehicle.id,
+                        estado=nuevo_estado,
+                        ultimo_acceso=log
+                    )
+                    db.add(estado_campus)
 
-            # 2. Registrar el acceso
-            ubicacion_acceso = dispositivo.ubicacion if dispositivo else "Portería Principal"
-            log = Acceso(
-                tipo_acceso=tipo_acceso,
-                ubicacion=ubicacion_acceso,
-                escaneado=scan,
-                operador_usuario_id=None
-            )
-            db.add(log)
+                # 5. Encolar tarea de subida a Cloudinary
+                background_tasks.add_task(process_media_record, media_uuid)
 
-            # 3. Guardar imagen de evidencia
-            media_type = (
-                MediaTypeEnum.ACCESS_ENTRY
-                if tipo_acceso == TipoAccesoEnum.ENTRADA
-                else MediaTypeEnum.ACCESS_EXIT
-            )
-            
-            # Generar el UUID manualmente para evitar la necesidad de flush
-            media_uuid = uuid.uuid4()
-            media = ArchivoMultimedia(
-                id=media_uuid,
-                proveedor=MediaProviderEnum.CLOUDINARY,
-                tipo=media_type,
-                estado=MediaStatusEnum.PENDING,
-                resource_type="image",
-                delivery_type=settings.CLOUDINARY_DELIVERY_TYPE,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=settings.MEDIA_ACCESS_RETENTION_DAYS),
-            )
-            db.add(media)
+                # Registrar para la respuesta
+                await db.flush()
+                acceso_id = log.id
+                tipo_acceso_registrado = tipo_acceso.value
 
-            # Spool local de la imagen usando el UUID generado
-            spool_path = spool_directory() / f"{media_uuid}.upload"
-            await asyncio.to_thread(spool_path.write_bytes, image_bytes)
-            media.spool_path = str(spool_path)
-            log.imagen = media
-
-            # 4. Actualizar EstadoCampus
-            estado_res = await db.execute(select(EstadoCampus).where(EstadoCampus.vehiculo_id == vehicle.id))
-            estado_campus = estado_res.scalars().first()
-            nuevo_estado = UbicacionVehiculoEnum.DENTRO if tipo_acceso == TipoAccesoEnum.ENTRADA else UbicacionVehiculoEnum.FUERA
-            if estado_campus:
-                estado_campus.estado = nuevo_estado
-                estado_campus.ultimo_acceso = log
-            else:
-                estado_campus = EstadoCampus(
-                    vehiculo_id=vehicle.id,
-                    estado=nuevo_estado,
-                    ultimo_acceso=log
-                )
-                db.add(estado_campus)
-
-            # 5. Encolar tarea de subida a Cloudinary
-            background_tasks.add_task(process_media_record, media_uuid)
-
-            # 6. Disparar webhook de barrera si el dispositivo tiene URL configurada
-            if dispositivo and dispositivo.webhook_url:
-                background_tasks.add_task(
-                    _trigger_barrier_webhook,
-                    dispositivo.webhook_url,
-                    tipo_acceso.value
-                )
+                # 6. Disparar webhook de barrera si el dispositivo tiene URL configurada
+                if dispositivo and dispositivo.webhook_url:
+                    background_tasks.add_task(
+                        _trigger_barrier_webhook,
+                        dispositivo.webhook_url,
+                        tipo_acceso.value
+                    )
  
         try:
             await db.flush()
@@ -256,8 +296,16 @@ async def analyze_plate_endpoint(
         confianza=result_dict.get("combined_confidence"),
         ruta_imagen=result_dict.get("annotated_image") or result_dict.get("plate_crop"),
         plate_bbox=result_dict.get("plate_bbox"),
-        raw_bboxes=result_dict.get("raw_bboxes")
-        ,solicitud_id=solicitud_id,
+        raw_bboxes=result_dict.get("raw_bboxes"),
+        solicitud_id=solicitud_id,
+        vehiculo_id=vehicle.id if vehicle else None,
+        acceso_id=acceso_id,
+        tipo_acceso=tipo_acceso_registrado,
+        es_registrado=vehicle is not None,
+        propietario_nombre=(
+            f"{vehicle.propietario.nombre} {vehicle.propietario.apellido_paterno}".strip()
+            if (vehicle and vehicle.propietario) else None
+        ),
         mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )
 

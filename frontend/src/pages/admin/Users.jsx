@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, memo } from "react";
 import Loader from "../../components/Loader";
 import ConfirmModal from "../../components/ConfirmModal";
+import SearchBar from "../../components/SearchBar";
 import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser, getMediaUrl } from "../../api/auth";
 
 const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit, userPhotoUrl, onZoomImage }) => (
@@ -105,6 +106,8 @@ function Users() {
 
   // Edición usuario
   const [editingUser, setEditingUser] = useState(null);
+  const [usersSearchQuery, setUsersSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [editForm, setEditForm] = useState({
     nombre: "",
     apellido_paterno: "",
@@ -123,9 +126,10 @@ function Users() {
     onConfirm: null
   });
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setIsRefreshing(true);
+      else setLoading(true);
       const data = await listUsers();
       setUsers(data || []);
     } catch (err) {
@@ -133,6 +137,7 @@ function Users() {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -353,7 +358,7 @@ function Users() {
         </p>
       </div>
 
-      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1rem" }}>
         <div>
           <p className="eyebrow">Cuentas del sistema</p>
           <h3>Lista de Usuarios Registrados</h3>
@@ -362,6 +367,15 @@ function Users() {
           Registrar Nuevo Usuario
         </button>
       </div>
+
+      <SearchBar
+        searchQuery={usersSearchQuery}
+        setSearchQuery={setUsersSearchQuery}
+        placeholder="Buscar usuarios por nombre, carnet o rol..."
+        onRefresh={fetchUsers}
+        isRefreshing={isRefreshing}
+        refreshTitle="Refrescar"
+      />
 
       {success && <p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.8rem", borderRadius: "8px", border: "1px solid green" }}>{success}</p>}
       {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
@@ -378,22 +392,36 @@ function Users() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <UserRow
-                key={u.id}
-                user={u}
-                userPhotoUrl={userPhotoUrls[u.foto_id] || ""}
-                handleRoleToggle={handleRoleToggle}
-                handleStatusToggle={handleStatusToggle}
-                handleDelete={handleDelete}
-                handleEdit={handleEdit}
-                onZoomImage={setZoomedImage}
-              />
-            ))}
-            {!users.length && (
+            {users
+              .filter(user => {
+                const query = usersSearchQuery.toLowerCase();
+                const fullName = `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno || ""}`.toLowerCase();
+                const carnet = user.carnet?.toLowerCase() || "";
+                const rol = user.rol?.toLowerCase() || "";
+                return fullName.includes(query) || carnet.includes(query) || rol.includes(query);
+              })
+              .map((u) => (
+                <UserRow
+                  key={u.id}
+                  user={u}
+                  userPhotoUrl={userPhotoUrls[u.foto_id] || ""}
+                  handleRoleToggle={handleRoleToggle}
+                  handleStatusToggle={handleStatusToggle}
+                  handleDelete={handleDelete}
+                  handleEdit={handleEdit}
+                  onZoomImage={setZoomedImage}
+                />
+              ))}
+            {!users.filter(user => {
+                const query = usersSearchQuery.toLowerCase();
+                const fullName = `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno || ""}`.toLowerCase();
+                const carnet = user.carnet?.toLowerCase() || "";
+                const rol = user.rol?.toLowerCase() || "";
+                return fullName.includes(query) || carnet.includes(query) || rol.includes(query);
+              }).length && (
               <tr>
                 <td colSpan="5" style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
-                  No hay usuarios registrados en el sistema.
+                  No se encontraron usuarios con ese filtro.
                 </td>
               </tr>
             )}

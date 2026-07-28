@@ -1,23 +1,29 @@
 # HEARTBEAT
 
-## Estado vigente - 2026-07-27
+## Estado vigente - 2026-07-28
 
-- **Foco**: Integración del celular como dispositivo de cámara por WiFi local, simulador visual de barrera de acceso y control de flujo de vehículos desconocidos.
-- **Validado**: 44 pruebas unitarias, build Vite, migración Alembic aplicada, HTTPS en Vite con certificado auto-firmado.
-- **Completado en esta sesión**:
-  - `BACKEND_HOST=0.0.0.0` y CORS ajustado para IP LAN (`192.168.0.14`).
-  - Vite con `host: true` y `https: true` mediante `@vitejs/plugin-basic-ssl`.
-  - Columna `webhook_url` en `Dispositivo` (BD migrada).
-  - `_trigger_barrier_webhook` en `plates.py` (background, silencioso).
-  - Auto-resolución del `Dispositivo` por nombre del usuario `DISPOSITIVO` logueado.
-  - Nuevo router `barrier.py`: `POST /trigger`, `GET /events` (SSE), `GET /simulator` (HTML animado).
-  - Campo `webhook_url` en modales crear/editar de `Devices.jsx`.
-  - `Permissions-Policy: camera=(*)` habilitado para cámara en red local.
-- **Fase 1 placas desconocidas**:
-  - El análisis no-realtime de una placa válida no registrada guarda una única imagen WebP authenticated en Cloudinary, crea solicitud PENDING y expone bandeja staff con aprobación/rechazo transaccional.
-  - Neon e historial de base de datos migrado correctamente.
-- **Estado de red**:
-  - Celular accede vía `https://192.168.0.14:5173` (acepta certificado auto-firmado la 1ª vez).
-  - Simulador de barrera: `http://localhost:8000/api/v1/barrier/simulator`.
-- **Convención de vinculación Dispositivo ↔ Usuario**: El nombre del `Dispositivo` registrado en el panel de admin debe coincidir exactamente con el `nombre` del `Usuario` de rol `DISPOSITIVO`. El backend los empareja automáticamente en `plates.py`.
-- **Próximo paso**: Probar el flujo completo celular → OCR → solicitud de registro de placa desconocida / apertura de barrera simulada.
+- **Foco**: Optimizacion de velocidad del pipeline OCR de placas (EasyOCR + Supervision + OpenCV).
+- **Validado**: 44 pruebas unitarias, build Vite, migracion Alembic aplicada, HTTPS en Vite con certificado auto-firmado.
+- **Completado en esta sesion**:
+  - OPT-E: OCR_QUANTIZE=true en .env — cuantizacion INT8 del modelo EasyOCR en CPU (-20-35% inferencia).
+  - OPT-G: Correcciones OCR ampliadas en validators.py: D->0, Q->0 (zona numerica), 4->A, 3->E (zona alfabetica).
+  - OPT-A: MAX_REALTIME_DIM reducido 640->480px en pipeline.py; fallback adaptativo realtime solo si principal detecto texto pero no formato valido.
+  - OPT-C: Upscale 2x solo si lado largo < 600px (antes < 1200px) — evita cuadriplicar area en imagenes de celular.
+  - OPT-B: Variantes preprocesado reordenadas cheapest-first: gray_clahe -> adaptive_thresh -> morph_erode -> original -> bilateral_sharp.
+  - OPT-D: VOTES_NEEDED 3->2 y throttle activo 600->500ms en UploadPlate.jsx.
+  - OPT-F: Canvas convertido a escala de grises antes de toBlob() para frames realtime — JPEG 3x mas pequeno.
+  - Canvas frontend alineado con backend: MAX_DETECTION_DIM = 480.
+- **Completado en esta sesion (Performance Backend)**:
+  - PERF-A: Refactorización completa del dashboard (`/api/v1/dashboard/summary`) reemplazando iteración de listas enteras en Python con agregación SQL nativa (`func.count`, `func.avg`), bajando la carga de memoria a casi cero.
+  - PERF-B: Aplicación de una capa de `TTLCache` (30s) en `auth.py` (`get_current_user`) para evitar el costoso `SELECT` a la BD con cada petición HTTP autenticada.
+  - PERF-C: Añadidos índices a la base de datos (PostgreSQL/Neon) vía Alembic (`models.py`) en las foreign keys y fechas (`propietario_usuario_id`, `esta_activo`, `creado_el`, `escaneado_id`) resolviendo table-scans en listados grandes.
+  - PERF-D: Eliminación de N+1 queries redundantes en `access_logs.py` al consolidar `selectinload` duplicados, bajando dramáticamente la cantidad de queries por listado.
+  - PERF-E: En `vehicles.py`, las validaciones de `create_vehicle` pasaron de 3 queries seriales a `asyncio.gather` (1 roundtrip a la BD en paralelo).
+  - PERF-F: Configuración específica en `session.py` para Neon con `pool_size=5` y `max_overflow=5` previendo error de límite de conexiones agotadas.
+- **Impacto total esperado (CPU, sin GPU)**:
+  - Realtime: de ~600-800ms/frame -> ~300-450ms/frame
+  - Static: de ~2-5s -> ~0.5-1.5s cuando imagen es buena
+  - Usuario (camara): confirmacion de placa de ~2-4s -> ~1-1.5s
+- **ACCION REQUERIDA**: Reiniciar el backend para que tome OCR_QUANTIZE=true.
+- **Proximo paso**: Probar flujo completo celular -> OCR -> consulta placa. Considerar configurar ROI si la camara es fija (mayor ganancia adicional).
+- **Convension Dispositivo y Usuario**: El nombre del Dispositivo debe coincidir exactamente con el nombre del Usuario de rol DISPOSITIVO.

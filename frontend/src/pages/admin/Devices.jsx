@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Loader from "../../components/Loader";
 import ConfirmModal from "../../components/ConfirmModal";
+import SearchBar from "../../components/SearchBar";
 import {
   getDevices,
   createDevice,
@@ -22,6 +23,8 @@ function Devices() {
   // Datos
   const [devices, setDevices] = useState([]);
   const [types, setTypes] = useState([]);
+  const [devicesSearchQuery, setDevicesSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,9 +46,10 @@ function Devices() {
     onConfirm: null
   });
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setIsRefreshing(true);
+      else setLoading(true);
       setError("");
       setSuccess("");
 
@@ -61,6 +65,7 @@ function Devices() {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -296,13 +301,34 @@ function Devices() {
             )}
           </div>
 
-          {!devices.length && (
+          <SearchBar
+            searchQuery={devicesSearchQuery}
+            setSearchQuery={setDevicesSearchQuery}
+            placeholder="Buscar dispositivos por nombre, ubicación o tipo..."
+            onRefresh={loadData}
+            isRefreshing={isRefreshing}
+            refreshTitle="Refrescar"
+          />
+
+          {!devices.filter(d => {
+            const query = devicesSearchQuery.toLowerCase();
+            const name = d.nombre?.toLowerCase() || "";
+            const location = d.ubicacion?.toLowerCase() || "";
+            const typeName = d.tipo?.nombre?.toLowerCase() || "";
+            return name.includes(query) || location.includes(query) || typeName.includes(query);
+          }).length && (
             <div className="card">
-              <p className="muted-text text-center">No hay dispositivos registrados en el sistema.</p>
+              <p className="muted-text text-center">No se encontraron dispositivos con ese filtro.</p>
             </div>
           )}
 
-          {devices.length > 0 && (
+          {devices.filter(d => {
+            const query = devicesSearchQuery.toLowerCase();
+            const name = d.nombre?.toLowerCase() || "";
+            const location = d.ubicacion?.toLowerCase() || "";
+            const typeName = d.tipo?.nombre?.toLowerCase() || "";
+            return name.includes(query) || location.includes(query) || typeName.includes(query);
+          }).length > 0 && (
             <div className="card" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
@@ -315,14 +341,22 @@ function Devices() {
                   </tr>
                 </thead>
                 <tbody>
-                  {devices.map((d) => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
-                      <td style={{ padding: "1rem", fontWeight: "bold" }}>
-                        {d.nombre}
-                      </td>
-                      <td style={{ padding: "1rem" }}>
-                        {d.ubicacion}
-                      </td>
+                  {devices
+                    .filter(d => {
+                      const query = devicesSearchQuery.toLowerCase();
+                      const name = d.nombre?.toLowerCase() || "";
+                      const location = d.ubicacion?.toLowerCase() || "";
+                      const typeName = d.tipo?.nombre?.toLowerCase() || "";
+                      return name.includes(query) || location.includes(query) || typeName.includes(query);
+                    })
+                    .map((d) => (
+                      <tr key={d.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                        <td style={{ padding: "1rem", fontWeight: "bold" }}>
+                          {d.nombre}
+                        </td>
+                        <td style={{ padding: "1rem" }}>
+                          {d.ubicacion}
+                        </td>
                       <td style={{ padding: "1rem" }}>
                         {d.tipo?.nombre || "N/A"}
                       </td>

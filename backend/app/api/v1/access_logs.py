@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, contains_eager
 
 from app.db.models import (
     Acceso, ArchivoMultimedia, Escaneado, MediaProviderEnum, MediaStatusEnum,
@@ -78,10 +78,10 @@ async def create_access_log(
             selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.propietario),
-            selectinload(Acceso.escaneado)
-            .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.marca)
+            .options(
+                selectinload(Vehiculo.propietario),
+                selectinload(Vehiculo.marca),
+            ),
         )
         .where(Acceso.id == log.id)
     )
@@ -221,10 +221,10 @@ async def _create_auto_access_log(payload, db, current_user, evidence: bytes | N
             selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.propietario),
-            selectinload(Acceso.escaneado)
-            .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.marca)
+            .options(
+                selectinload(Vehiculo.propietario),
+                selectinload(Vehiculo.marca),
+            ),
         )
         .where(Acceso.id == log.id)
     )
@@ -278,10 +278,10 @@ async def list_access_logs(
             selectinload(Acceso.imagen),
             selectinload(Acceso.escaneado)
             .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.propietario),
-            selectinload(Acceso.escaneado)
-            .selectinload(Escaneado.vehiculo)
-            .selectinload(Vehiculo.marca)
+            .options(
+                selectinload(Vehiculo.propietario),
+                selectinload(Vehiculo.marca),
+            ),
         )
         .order_by(Acceso.creado_el.desc())
         .offset(skip)
@@ -299,10 +299,10 @@ async def list_access_logs(
                 selectinload(Acceso.imagen),
                 selectinload(Acceso.escaneado)
                 .selectinload(Escaneado.vehiculo)
-                .selectinload(Vehiculo.propietario),
-                selectinload(Acceso.escaneado)
-                .selectinload(Escaneado.vehiculo)
-                .selectinload(Vehiculo.marca)
+                .options(
+                    selectinload(Vehiculo.propietario),
+                    selectinload(Vehiculo.marca),
+                ),
             )
             .order_by(Acceso.creado_el.desc())
             .offset(skip)

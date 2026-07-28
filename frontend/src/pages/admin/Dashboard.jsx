@@ -492,7 +492,7 @@ function Dashboard() {
                     )}
                   </td>
                   <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
-                    {new Date(s.creado_el).toLocaleString()}
+                    {new Date(s.creado_el).toLocaleString("es-BO", { hour12: false })}
                   </td>
                   <td style={{ padding: "0.8rem", fontFamily: "monospace", fontWeight: "bold" }}>
                     {s.placa_detectada || "N/A"}

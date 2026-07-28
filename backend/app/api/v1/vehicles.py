@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from typing import List
@@ -226,9 +227,13 @@ async def get_vehicle_detail(vehicle_id: uuid.UUID, db: AsyncSession = Depends(g
 @router.post("/", response_model=VehiculoResponse, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(vehicle_in: VehiculoCreate, db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     
-    # Validar propietario
-    owner_result = await db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id))
-    owner = owner_result.scalars().first()
+    # Validar propietario, marca y tipo en paralelo (3 round-trips -> 1)
+    owner_res, marca_res, tipo_res = await asyncio.gather(
+        db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id)),
+        db.execute(select(Marca).where(Marca.id == vehicle_in.marca_id)),
+        db.execute(select(TipoVehiculo).where(TipoVehiculo.id == vehicle_in.tipo_vehiculo_id)),
+    )
+    owner = owner_res.scalars().first()
     if not owner or not owner.esta_activo:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -254,14 +259,10 @@ async def create_vehicle(vehicle_in: VehiculoCreate, db: AsyncSession = Depends(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Solo puedes registrar vehículos a tu propio nombre.",
             )
-        
-    # Validar marca y tipo
-    marca_result = await db.execute(select(Marca).where(Marca.id == vehicle_in.marca_id))
-    if not marca_result.scalars().first():
+
+    if not marca_res.scalars().first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Marca inválida.")
-        
-    tipo_result = await db.execute(select(TipoVehiculo).where(TipoVehiculo.id == vehicle_in.tipo_vehiculo_id))
-    if not tipo_result.scalars().first():
+    if not tipo_res.scalars().first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tipo de vehículo inválido.")
 
     new_vehicle = Vehiculo(

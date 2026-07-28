@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import func, select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta, timezone
 
-from app.db.models import Vehiculo, Usuario, Escaneado, EstadoCampus, UbicacionVehiculoEnum, RoleEnum
+from app.db.models import (
+    Vehiculo, Usuario, Escaneado, Acceso, EstadoCampus,
+    UbicacionVehiculoEnum, RoleEnum, EstadoEscaneoEnum
+)
 from app.db.session import get_db
 from app.api.v1.auth import get_current_user
 
@@ -16,67 +18,88 @@ async def get_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user),
 ):
-    # Vehículos
-    query = select(Vehiculo).options(selectinload(Vehiculo.propietario)).order_by(Vehiculo.creado_el.desc())
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]:
-        query = query.where(Vehiculo.propietario_usuario_id == current_user.id)
+    is_admin_or_device = current_user.rol in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]
 
-    result = await db.execute(query)
-    vehicles = list(result.scalars().all())
+    # ── Total de vehículos (conteo SQL puro) ──────────────────────────────
+    total_q = select(func.count(Vehiculo.id))
+    active_q = select(func.count(Vehiculo.id)).where(Vehiculo.esta_activo == True)
+    if not is_admin_or_device:
+        total_q = total_q.where(Vehiculo.propietario_usuario_id == current_user.id)
+        active_q = active_q.where(Vehiculo.propietario_usuario_id == current_user.id)
 
-    total_query = select(func.count(Vehiculo.id))
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]:
-        total_query = total_query.where(Vehiculo.propietario_usuario_id == current_user.id)
-    total_result = await db.execute(total_query)
-    total_vehicles = total_result.scalar() or 0
+    total_vehicles, active_vehicles = (
+        await db.execute(total_q),
+        await db.execute(active_q),
+    )
+    total_vehicles = total_vehicles.scalar() or 0
+    active_vehicles = active_vehicles.scalar() or 0
 
-    active_vehicles = len([v for v in vehicles if v.esta_activo])
-
-    # Usuarios del sistema (solo cuenta si es admin, sino 0 para no exponer datos innecesarios)
+    # ── Total de usuarios (solo admin) ────────────────────────────────────
     total_users = 0
     if current_user.rol == RoleEnum.ADMINISTRADOR:
-        users_result = await db.execute(select(func.count(Usuario.id)))
-        total_users = users_result.scalar() or 0
+        u_res = await db.execute(select(func.count(Usuario.id)))
+        total_users = u_res.scalar() or 0
 
-    # Vehículos dentro del campus (EstadoCampus == DENTRO)
-    campus_result = await db.execute(select(func.count(EstadoCampus.id)).where(EstadoCampus.estado == UbicacionVehiculoEnum.DENTRO))
-    vehicles_inside = campus_result.scalar() or 0
+    # ── Vehículos dentro del campus ───────────────────────────────────────
+    campus_res = await db.execute(
+        select(func.count(EstadoCampus.id)).where(
+            EstadoCampus.estado == UbicacionVehiculoEnum.DENTRO
+        )
+    )
+    vehicles_inside = campus_res.scalar() or 0
 
-    # Escaneos de placas (Telemetría)
-    scans_query = (
-        select(Escaneado)
-        .options(selectinload(Escaneado.vehiculo))
+    # ── Estadísticas de escaneos (SQL puro, sin cargar filas) ─────────────
+    total_scans_res = await db.execute(select(func.count(Escaneado.id)))
+    total_scans = total_scans_res.scalar() or 0
+
+    one_day_ago = datetime.now(timezone.utc) - timedelta(days=1)
+    today_res = await db.execute(
+        select(func.count(Escaneado.id)).where(Escaneado.creado_el >= one_day_ago)
+    )
+    today_scans = today_res.scalar() or 0
+
+    avg_res = await db.execute(
+        select(func.avg(Escaneado.confianza)).where(Escaneado.confianza.is_not(None))
+    )
+    avg_confidence = float(avg_res.scalar() or 0.0)
+
+    # ── Últimas 5 lecturas (solo campos escalares, sin vehiculo selectinload) ──
+    recent_res = await db.execute(
+        select(
+            Escaneado.id,
+            Escaneado.placa_detectada,
+            Escaneado.placa_normalizada,
+            Escaneado.confianza,
+            Escaneado.estado,
+            Escaneado.creado_el,
+            Escaneado.vehiculo_id,
+            Vehiculo.foto_id,
+        )
+        .outerjoin(Vehiculo, Vehiculo.id == Escaneado.vehiculo_id)
         .order_by(Escaneado.creado_el.desc())
+        .limit(5)
     )
-    scans_result = await db.execute(scans_query)
-    scans = list(scans_result.scalars().all())
-    total_scans = len(scans)
+    recent_scans = [
+        {
+            "id": str(row.id),
+            "placa_detectada": row.placa_detectada,
+            "placa_normalizada": row.placa_normalizada,
+            "confianza": row.confianza,
+            "estado": row.estado.value if hasattr(row.estado, "value") else str(row.estado),
+            "creado_el": row.creado_el.isoformat(),
+            "has_vehicle": row.vehiculo_id is not None,
+            "vehicle_photo_id": str(row.foto_id) if row.foto_id else None,
+        }
+        for row in recent_res
+    ]
 
-    # Escaneos hoy (últimas 24h)
-    one_day_ago = datetime.utcnow() - timedelta(days=1)
-    today_scans = len([s for s in scans if s.creado_el >= one_day_ago])
-
-    # Confianza promedio de lecturas exitosas
-    successful_scans = [s for s in scans if s.confianza is not None]
-    avg_confidence = (
-        sum(s.confianza for s in successful_scans) / len(successful_scans)
-        if successful_scans
-        else 0.0
-    )
-
-    # Últimas 5 lecturas de placas para el feed del dashboard
-    recent_scans = []
-    for s in scans[:5]:
-        recent_scans.append({
-            "id": str(s.id),
-            "placa_detectada": s.placa_detectada,
-            "placa_normalizada": s.placa_normalizada,
-            "confianza": s.confianza,
-            "estado": s.estado.value if hasattr(s.estado, "value") else str(s.estado),
-            "creado_el": s.creado_el.isoformat(),
-            "has_vehicle": s.vehiculo_id is not None,
-            "vehicle_photo_id": str(s.vehiculo.foto_id) if s.vehiculo and s.vehiculo.foto_id else None,
-        })
+    # ── IDs de vehículos del usuario (solo para el frontend personalizado) ─
+    my_vehicles: list[str] = []
+    if not is_admin_or_device:
+        mv_res = await db.execute(
+            select(Vehiculo.id).where(Vehiculo.propietario_usuario_id == current_user.id)
+        )
+        my_vehicles = [str(r) for r in mv_res.scalars().all()]
 
     return {
         "total_vehicles": total_vehicles,
@@ -87,5 +110,5 @@ async def get_dashboard_summary(
         "today_scans": today_scans,
         "avg_confidence": avg_confidence,
         "recent_scans": recent_scans,
-        "my_vehicles": [v.id for v in vehicles],
+        "my_vehicles": my_vehicles,
     }
