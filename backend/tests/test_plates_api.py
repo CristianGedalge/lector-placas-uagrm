@@ -13,7 +13,8 @@ from app.schemas.plate import PlateAnalysisResponse
 class PlatesAPITests(unittest.TestCase):
     def setUp(self):
         app = FastAPI()
-        app.state.ocr_reader = object()
+        app.state.fast_alpr_engine = object()
+        app.state.ocr_engine_name = "fast_alpr"
         self.db = MagicMock()
         query_result = MagicMock()
         query_result.scalars.return_value.first.return_value = None
@@ -38,9 +39,11 @@ class PlatesAPITests(unittest.TestCase):
                 "status": "ok",
                 "message": "API de ALPR lista para inferencia.",
                 "ocr_available": True,
+                "active_ocr_engine": "fast_alpr",
+                "fast_alpr_available": True,
                 "supervision_available": True,
                 "camera_capture_supported": True,
-                "pipeline_mode": "OCR_SUPERVISION",
+                "pipeline_mode": "FAST_ALPR_FAST_PLATE_OCR",
             },
         )
 
@@ -50,7 +53,7 @@ class PlatesAPITests(unittest.TestCase):
             "detected_plate": "1234-ABC",
             "normalized_plate": "1234ABC",
             "is_valid_bolivian_format": True,
-            "detection_backend": "OCR_SUPERVISION",
+            "detection_backend": "FAST_ALPR_FAST_PLATE_OCR",
             "detection_confidence": 0.91,
             "ocr_confidence": 0.90,
             "combined_confidence": 0.91,
@@ -88,6 +91,8 @@ class PlatesAPITests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected_response)
+        self.db.flush.assert_not_awaited()
+        self.db.commit.assert_not_awaited()
 
     def test_schema_accepts_ocr_supervision_backend(self):
         response = PlateAnalysisResponse(

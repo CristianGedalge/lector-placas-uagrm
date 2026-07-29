@@ -80,7 +80,7 @@ Servidor:
 
 ```powershell
 cd backend
-uvicorn app.main:app --reload
+python run.py
 ```
 
 ## Verificacion desde la raiz del repo
@@ -93,8 +93,9 @@ powershell -ExecutionPolicy Bypass -File .agents/scripts/smoke-local.ps1
 ## Estado conocido
 
 - El backend arranca en local.
-- El pipeline usa OpenCV, EasyOCR y Supervision sin servicios externos.
-- El health reporta `degraded` solo cuando EasyOCR no puede inicializarse.
+- FastALPR detecta la placa y FastPlateOCR reconoce el recorte con ONNX local.
+- FastALPR + FastPlateOCR es el unico motor de reconocimiento.
+- El health reporta la disponibilidad del motor ONNX.
 - Una ROI opcional reduce falsos positivos en camaras fijas.
 - La validacion completa con base de datos sigue bloqueada hasta disponer de una `DATABASE_URL` valida.
 

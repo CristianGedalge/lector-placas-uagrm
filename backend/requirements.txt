@@ -5,7 +5,8 @@ python-dotenv==1.1.*
 pydantic==2.*
 pydantic-settings==2.*
 supervision==0.29.1
-easyocr>=1.7
+fast-alpr[onnx]==0.4.0
+fast-plate-ocr[onnx]==1.1.0
 opencv-python-headless==4.10.0.84
 Pillow>=11.0,<12.0
 cloudinary==1.44.1
@@ -19,3 +20,4 @@ PyJWT>=2.9.0
 email-validator>=2.2.0
 slowapi>=0.1.9
 cachetools>=5.5.0,<7.0.0
+pytest>=8.0.0,<9.0.0

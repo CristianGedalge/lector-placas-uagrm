@@ -359,10 +359,10 @@ function UploadPlate() {
     requestRef.current = "processing";
     const canvas = canvasRef.current;
 
-    // OPT-A/D: Resolución del canvas alineada con MAX_REALTIME_DIM del backend (480px)
-    const MAX_DETECTION_DIM = 480;
-    let videoW = videoRef.current.videoWidth || 480;
-    let videoH = videoRef.current.videoHeight || 360;
+    // Conserva caracteres de placas lejanas sin enviar el fotograma 1080p completo.
+    const MAX_DETECTION_DIM = 960;
+    let videoW = videoRef.current.videoWidth || 960;
+    let videoH = videoRef.current.videoHeight || 540;
 
     if (videoW === 0) {
       requestRef.current = null;
@@ -394,32 +394,9 @@ function UploadPlate() {
     let nextInterval = 250;
 
     try {
-<<<<<<< HEAD:frontend/src/pages/UploadPlate.jsx
-<<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
-      // JPEG 80%: balance entre tamaño de archivo y calidad para OCR
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.80));
-=======
       // El backend convierte a gris. Evitar getImageData/putImageData aquí
       // reduce el tiempo entre la captura física y el envío del fotograma.
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.90));
->>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
-=======
-      // OPT-F: Convertir a escala de grises en el canvas antes de enviar.
-      // El JPEG en gris es ~3x más pequeño que en color y el backend igual hace
-      // cvtColor internamente — enviarlo en gris ahorra bytes de red + un cvtColor.
-      const grayCtx = canvas.getContext("2d");
-      const imageData = grayCtx.getImageData(0, 0, canvas.width, canvas.height);
-      const d = imageData.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        d[i] = d[i + 1] = d[i + 2] = luma;
-      }
-      grayCtx.putImageData(imageData, 0, 0);
-      // JPEG 80%: balance entre tamaño de archivo y calidad para OCR
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.80));
-      // Restaurar contexto en color para el siguiente frame (solo afecta el canvas off-screen)
-      context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
->>>>>>> origin/main:frontend/src/pages/device/UploadPlate.jsx
       if (blob) {
         const formData = new FormData();
         formData.append("file", blob, "frame.jpg");

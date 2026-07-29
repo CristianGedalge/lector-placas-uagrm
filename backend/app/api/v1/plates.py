@@ -69,8 +69,8 @@ async def analyze_plate_endpoint(
             detail="El archivo es demasiado grande. El límite máximo es de 5MB."
         )
     
-    ocr_reader = getattr(request.app.state, "ocr_reader", None)
-    if ocr_reader is None:
+    plate_engine = getattr(request.app.state, "fast_alpr_engine", None)
+    if plate_engine is None:
         raise HTTPException(
             status_code=503,
             detail="El motor OCR no está disponible en este momento."
@@ -79,8 +79,8 @@ async def analyze_plate_endpoint(
     result_dict = await run_in_threadpool(
         analyze_plate,
         image_bytes,
-        ocr_reader,
         realtime,
+        plate_engine,
     )
 
     if result_dict.get("status") == "ERROR":
@@ -97,7 +97,9 @@ async def analyze_plate_endpoint(
     acceso_id = None
     tipo_acceso_registrado = None
     solicitud_id = None
-    if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
+    # El análisis anónimo devuelve solo el resultado OCR. Consultas de vehículos,
+    # escaneos, accesos y evidencias requieren una identidad autenticada.
+    if status_val in ["DETECTED", "LOW_CONFIDENCE"] and current_user is not None:
         normalized = result_dict.get("normalized_plate")
         
         vehicle = None
@@ -285,16 +287,6 @@ async def analyze_plate_endpoint(
             raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
         except Exception as exc:
             await db.rollback()
-<<<<<<< HEAD
-            logger.exception("No se pudo persistir el resultado del escaneo")
-            if (not realtime and status_val == "DETECTED" and normalized and
-                    result_dict.get("is_valid_bolivian_format", False) and
-                    vehicle is None and current_user is not None):
-                raise HTTPException(
-                    status_code=500,
-                    detail="No se pudo crear la solicitud de revisión",
-                ) from exc
-=======
             logger.error("Error inesperado al persistir escaneo/solicitud: %s", exc, exc_info=True)
             return JSONResponse(
                 status_code=500,
@@ -303,7 +295,6 @@ async def analyze_plate_endpoint(
                     mensaje="Error interno al guardar el registro del escaneo.",
                 ).model_dump(),
             )
->>>>>>> origin/main
 
     # Mapeo de la respuesta
     return PlateAnalysisResponse(
@@ -347,7 +338,13 @@ async def list_plate_scans(
 
 @router.get("/health")
 async def health_check(request: Request):
-    ocr_available = getattr(request.app.state, "ocr_reader", None) is not None
+    fast_alpr_available = getattr(request.app.state, "fast_alpr_engine", None) is not None
+    ocr_available = fast_alpr_available
+    active_engine = getattr(
+        request.app.state,
+        "ocr_engine_name",
+        "fast_alpr" if fast_alpr_available else "unavailable",
+    )
     pipeline = get_pipeline_status()
     ready = bool(ocr_available and pipeline["supervision_available"])
     return {
@@ -355,8 +352,10 @@ async def health_check(request: Request):
         "message": (
             "API de ALPR lista para inferencia."
             if ready
-            else "API disponible, pero EasyOCR no esta inicializado."
+            else "API disponible, pero ningun motor OCR esta inicializado."
         ),
         "ocr_available": ocr_available,
+        "active_ocr_engine": active_engine,
+        "fast_alpr_available": fast_alpr_available,
         **pipeline,
     }

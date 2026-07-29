@@ -15,7 +15,7 @@ Repositorio con acceso directo por raiz.
 - Los historiales heredados se preservaron como `backend/.git-legacy-backend` y `frontend/.git-legacy-frontend` para evitar repositorios anidados.
 - Los scripts `.agents/scripts/verify-project.ps1` y `.agents/scripts/smoke-local.ps1` ya apuntan al layout directo.
 - La raiz tiene un repositorio Git nuevo para versionar backend y frontend juntos.
-- El reconocimiento usa OpenCV, EasyOCR y Supervision sin dataset, entrenamiento ni servicios cloud.
+- El reconocimiento usa exclusivamente FastALPR + FastPlateOCR con ONNX local.
 
 ## Comandos utiles
 
@@ -24,7 +24,7 @@ Backend:
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+python run.py
 ```
 
 Frontend:

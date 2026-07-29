@@ -13,8 +13,6 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 # Directorio de runtime (nunca rastrear en git)
 RUNTIME_DIR: Path = PROJECT_ROOT / ".runtime"
 
-# Directorio para los modelos de EasyOCR
-EASYOCR_DIR: Path = RUNTIME_DIR / "easyocr"
 
 # Directorio de caché de Matplotlib (evita escrituras en HOME)
 MPLCONFIG_DIR: Path = RUNTIME_DIR / "matplotlib"
@@ -23,5 +21,5 @@ MPLCONFIG_DIR: Path = RUNTIME_DIR / "matplotlib"
 UPLOADS_DIR: Path = PROJECT_ROOT / "uploads"
 
 # Asegurarse de que existan al importar este módulo
-for _dir in (RUNTIME_DIR, EASYOCR_DIR, MPLCONFIG_DIR, UPLOADS_DIR):
+for _dir in (RUNTIME_DIR, MPLCONFIG_DIR, UPLOADS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)

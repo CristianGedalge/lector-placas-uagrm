@@ -1,6 +1,6 @@
 import axios from "axios";
 
-// Timeout generoso para endpoints de análisis OCR (EasyOCR en CPU puede tardar 30-60s)
+// Timeout generoso para endpoints de análisis OCR en CPU.
 const OCR_TIMEOUT = 120_000; // 2 minutos
 const DEFAULT_TIMEOUT = 30_000; // 30 segundos para el resto de peticiones
 

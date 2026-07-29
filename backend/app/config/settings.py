@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     # Local OCR pipeline configuration
-    OCR_LANGUAGES: str = "es,en"
-    OCR_GPU: bool = False
-    OCR_QUANTIZE: bool = False
+    FAST_ALPR_DETECTOR_MODEL: str = "yolo-v9-t-384-license-plate-end2end"
+    FAST_PLATE_OCR_MODEL: str = "cct-xs-v2-global-model"
+    FAST_ALPR_DETECTOR_CONFIDENCE: float = 0.40
+    FAST_ALPR_EXECUTION_PROVIDER: str = "CPUExecutionProvider"
     OCR_CONFIDENCE_THRESHOLD: float = 0.55
     OCR_UPSCALE_FACTOR: float = 2.0
     OCR_USE_GRAYSCALE: bool = True
@@ -69,8 +70,6 @@ class Settings(BaseSettings):
 
     @field_validator(
         "DEBUG",
-        "OCR_GPU",
-        "OCR_QUANTIZE",
         "OCR_USE_GRAYSCALE",
         "OCR_USE_CONTRAST",
         "OCR_DENOISE",
