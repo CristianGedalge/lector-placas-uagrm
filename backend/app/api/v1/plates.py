@@ -13,14 +13,15 @@ from app.db.models import ArchivoMultimedia, MediaProviderEnum, MediaStatusEnum,
 from app.services.image_processing import ImageProcessingService, ImageProcessingError
 from app.services.cloudinary_storage import CloudinaryStorage
 from app.services.storage import StorageError
+<<<<<<< Updated upstream
 from app.api.v1.auth import get_current_user
+=======
+from app.api.v1.auth import get_current_user, get_current_user_optional
+from app.services.media_tasks import process_media_record, spool_directory
+from app.config.settings import settings
 
-async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
-    try:
-        return await get_current_user(request, db=db)
-    except Exception:
-        return None
-
+logger = logging.getLogger(__name__)
+>>>>>>> Stashed changes
 
 router = APIRouter()
 
@@ -127,8 +128,16 @@ async def analyze_plate_endpoint(
         except (ImageProcessingError, StorageError):
             await db.rollback()
             raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
-        except Exception:
+        except Exception as exc:
             await db.rollback()
+            logger.exception("No se pudo persistir el resultado del escaneo")
+            if (not realtime and status_val == "DETECTED" and normalized and
+                    result_dict.get("is_valid_bolivian_format", False) and
+                    vehicle is None and current_user is not None):
+                raise HTTPException(
+                    status_code=500,
+                    detail="No se pudo crear la solicitud de revisión",
+                ) from exc
 
     # Mapeo de la respuesta
     return PlateAnalysisResponse(

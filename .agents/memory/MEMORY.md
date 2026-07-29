@@ -1,5 +1,103 @@
 # MEMORY
 
+<<<<<<< Updated upstream
+=======
+## 2026-07-28 - Entrega de solicitudes desconocidas
+
+- `plates.py` usa el resolvedor central compatible con cookie y Bearer.
+- Los fallos al persistir una solicitud ya no se ocultan como análisis exitosos.
+- Se añadió prueba de autenticación Bearer móvil y documentación Issue 017.
+
+## 2026-07-27 - Celular como Dispositivo de Cámara por WiFi + Simulador de Barrera SSE
+
+- **Configuración de red local**: `BACKEND_HOST` cambiado de `127.0.0.1` a `0.0.0.0` para que FastAPI escuche en todas las interfaces WiFi. `ALLOWED_ORIGINS` actualizado con `https://192.168.0.14:5173`. Vite configurado con `host: true` y `https: true` usando `@vitejs/plugin-basic-ssl`.
+- **HTTPS en desarrollo**: Instalado `@vitejs/plugin-basic-ssl` para habilitar HTTPS en el servidor Vite. Esto es **requerido** por Chrome en Android para permitir `getUserMedia()` (acceso a cámara) desde orígenes no-localhost. El celular acepta el certificado auto-firmado una sola vez.
+- **IP LAN confirmada**: `192.168.0.14` (interfaz WiFi del router). El celular abre `https://192.168.0.14:5173` en Chrome mobile.
+- **Campo `webhook_url` en Dispositivo**: Añadida columna nullable `webhook_url: String` al modelo `Dispositivo`. Migración Alembic `3aa735770818_add_webhook_url_to_dispositivo` generada y aplicada contra Neon exitosamente. Schemas `DispositivoBase`, `DispositivoUpdate` y `DispositivoResponse` actualizados.
+- **Trigger de barrera en `plates.py`**: Función `_trigger_barrier_webhook(url, direction)` añadida. Se llama en `background_tasks` después del paso 5 (Cloudinary). Nunca bloquea el flujo principal si la barrera está offline.
+- **Auto-resolución Dispositivo ↔ Usuario DISPOSITIVO**: Si no se envía `dispositivo_id` explícito pero el usuario autenticado tiene rol `DISPOSITIVO`, el backend busca el `Dispositivo` cuyo `nombre` coincida exactamente con `current_user.nombre` y `esta_activo == True`. Así el frontend no necesita conocer el UUID del dispositivo.
+- **Convención de nombre**: El `nombre` del registro `Dispositivo` en la BD **debe coincidir exactamente** con el `nombre` del `Usuario` de rol `DISPOSITIVO`. Esta es la clave de emparejamiento del sistema.
+- **Router `barrier.py`** (nuevo): `POST /api/v1/barrier/trigger` recibe la señal del webhook y la pone en una `asyncio.Queue`. `GET /api/v1/barrier/events` sirve un stream SSE con keepalive cada 25s. `GET /api/v1/barrier/simulator` sirve una página HTML auto-contenida con animación CSS de barrera (rotación 0°→90°) y reconexión automática SSE.
+- **Frontend Devices.jsx**: Campo `webhook_url` añadido a los estados iniciales y a los modales de creación y edición de dispositivos. El placeholder sugiere `http://localhost:8000/api/v1/barrier/trigger` para pruebas locales. Para ESP32 real, cambiar a la IP del microcontrolador.
+- **Política de cámara**: `Permissions-Policy: camera=(*)` en `SecurityHeadersMiddleware` para permitir el acceso a cámara desde la red local.
+- **Firewall Windows**: Las reglas para los puertos 5173 y 8000 requieren ejecución como Administrador. Pendiente que el usuario las ejecute manualmente en CMD/PowerShell elevado.
+- **Verificación**: 44 pruebas unitarias OK, build de producción Vite OK (`102 módulos`).
+
+## 2026-07-26 - Filtro de Accesos por Propietario para Rol USUARIO y Enlace "Inicio" en Sidebar
+
+- **Filtro de accesos USUARIO**: Endpoint `GET /api/v1/access-logs/` ahora filtra automáticamente para el rol `USUARIO`: solo retorna los `Acceso` cuyos `Escaneado → Vehiculo → propietario_usuario_id` coincidan con el `id` del usuario autenticado.
+- **Enlace "Inicio" en Sidebar**: Añadido acceso directo a la vista de bienvenida/dashboard del usuario en el menú lateral de `Sidebar/index.jsx`.
+
+## 2026-07-26 - Auto-registro de Accesos y Evidencia Multimedia en Detecciones Automáticas
+
+
+- **Auto-registro de Acceso**: Se implementó lógica en el endpoint `/api/v1/plates/analyze` para crear un registro en `Acceso` y actualizar el `EstadoCampus` de forma automática al detectar una placa de vehículo registrado en base de datos.
+- **Evidencia Fotográfica Asíncrona**: Cuando se realiza la detección, se crea un registro de `ArchivoMultimedia` vinculando la imagen original del cuadro analizado, la cual se guarda temporalmente en el `spool_directory` local y se sube asíncronamente a Cloudinary mediante `background_tasks.add_task` reutilizando la infraestructura existente.
+- **Deducción de Dirección**: La dirección del acceso (`ENTRADA` o `SALIDA`) se deduce del nombre del dispositivo emisor ("entrada/ingreso" vs "salida/egreso"). Si no hay dispositivo o su nombre es ambiguo, se consulta el estado de ubicación actual en campus (`EstadoCampus`) del vehículo.
+- **Eliminación de db.flush()**: Se reestructuraron las asignaciones a relaciones SQLAlchemy directas (ej. `escaneado=scan`, `imagen=media`, `ultimo_acceso=log`) e ID generado manualmente (`uuid.uuid4()`) para evitar errores en las pruebas unitarias que utilizan sesiones mockeadas.
+- **Visor de Evidencia en Modal**: Se eliminó la apertura de nuevas pestañas del navegador (`window.open`) al consultar la evidencia física en la bitácora de accesos (`UserAccessLogs.jsx` y `AccessLogs.jsx`). En su lugar, se implementó un modal flotante e integrado en la misma interfaz que despliega la foto y permite cerrarla mediante un botón o haciendo clic fuera de ella.
+
+## 2026-07-26 - Corrección de Fondo en Menú Móvil y Ajuste de Navbar
+
+- **Corrección de Backdrop en Móviles**: Se sobrescribió la propiedad de color de fondo del botón `.sidebar-backdrop` en `global.css` para evitar el derrame del color institucional rojo sobre toda la pantalla. Ahora muestra una capa translúcida oscura estándar (`rgba(16, 24, 40, 0.4) !important`).
+- **Ajuste Responsivo**: Se adaptaron los detalles del usuario en el Navbar para ocultarse automáticamente en anchos inferiores a `680px`, dejando únicamente el avatar del usuario y mejorando la visualización del menú.
+
+## 2026-07-26 - Tarjeta Interactiva "+" para Registrar Vehículo y Texto Explicativo en Perfil
+
+- **Remoción de Botón en Cabecera**: Se removió el botón estático de "Registrar Vehículo" de la esquina superior derecha en `UserVehicles.jsx`.
+- **Implementación de Tarjeta "+" en el Grid**: Se insertó una tarjeta responsiva al final de la lista de vehículos (o como único elemento en listas vacías). Esta tarjeta posee bordes punteados (`dashed`), un icono de suma central en círculo y efectos hover fluidos, funcionando como disparador para el modal de registro de vehículos.
+- **Texto Explicativo en Perfil**: Se actualizó el campo del identificador de registro en `Profile.jsx` cambiando la etiqueta por "Registro Universitario / Carnet de Identidad" e incorporando un texto de ayuda inferior que aclara su uso para la validación de identidad y la autorización de accesos de vehículos por las cámaras.
+
+## 2026-07-26 - Ajustes de Perfil, Navegación y Avatar de Usuario
+
+- **Restricción de Desactivación**: Ocultado el botón "Desactivar Cuenta" en `Profile.jsx` para todos los usuarios que no posean el rol de `ADMINISTRADOR`.
+- **Cerrar Sesión en Sidebar**: Integrado el botón "Cerrar Sesión" al final del menú lateral (`Sidebar/index.jsx`), mejorando la accesibilidad del usuario.
+- **Avatar Superior en Navbar**: Rediseñado el chip de usuario en `Navbar/index.jsx` para incluir la foto de perfil en miniatura circular al lado de su nombre, carnet de registro y un badge con el color de su rol.
+
+## 2026-07-26 - Línea de Tiempo de Accesos y Perfil de Usuario Rediseñado
+
+- **Línea de Tiempo de Accesos (`UserAccessLogs.jsx`)**:
+  - Diseñada una bitácora de accesos basada en una línea de tiempo vertical para el rol de usuario regular (`USUARIO`).
+  - Muestra detalles premium por evento: badges con iconos para ingresos/salidas, placa física 3D simulada, portería/zona, marcas de tiempo relativas/absolutas y visualización directa de evidencia fotográfica.
+  - El enrutador `AppRoutes.jsx` redirige a esta vista de manera transparente mediante el wrapper dinámico `AccessLogsRoute`.
+- **Perfil de Usuario Premium (`Profile.jsx`)**:
+  - Incorporó un banner superior con gradiente institucional, avatar circular con overlay interactivo para subida de fotos instantánea, y una división en bloques ("Información Personal" y "Seguridad").
+
+## 2026-07-26 - Rediseño de Vista de Vehículos a Tarjetas Interactivas (UserVehicles)
+
+- **Eliminación de Tablas**: Se removieron todas las tablas en la vista `UserVehicles.jsx`.
+- **Implementación de Cuadrícula de Tarjetas (`VehicleCard`)**:
+  - Foto del vehículo asíncrona cargada desde Cloudinary.
+  - Simulación 3D de placa física boliviana (encabezado azul "BOLIVIA", borde metálico/azul y tipografía gruesa monoespaciada).
+  - Detalles ordenados (Marca, Tipo, Color) en un formato altamente legible y estético.
+  - Efectos visuales de elevación (`hover` y transiciones en 3D) y botones con iconos amigables.
+- **Paginación**: Se conservó y reajustó la paginación a un límite de 6 tarjetas por página.
+
+## 2026-07-26 - Separación Física de Páginas de Administrador y Operador
+
+- **División de staff/ en admin/ y operator/**:
+  - `pages/admin/`: `Dashboard.jsx`, `Users.jsx` y `Devices.jsx`.
+  - `pages/operator/`: `Vehicles.jsx` y `AccessLogs.jsx` (compartidas con Admin para la gestión física de accesos y vehículos).
+  - Eliminado por completo el directorio genérico `pages/staff/`.
+- **Ajustes en el Enrutador**: Se actualizaron las importaciones en `AppRoutes.jsx` con éxito.
+
+## 2026-07-26 - Organización por Roles y Vistas Especializadas del Usuario Regular
+
+- **Nueva Estructura del Directorio `pages/`**:
+  - `pages/auth/`: `Login.jsx` y `Register.jsx`.
+  - `pages/user/`: `UserVehicles.jsx` y el nuevo `UserDashboard.jsx`.
+  - `pages/device/`: `UploadPlate.jsx`.
+  - `pages/Profile.jsx` (compartida).
+- **Enrutamiento Dinámico**: Se reconfiguró `AppRoutes.jsx` e importaciones en cascada. La ruta raíz `/` ahora despacha de forma transparente `UserDashboard` para el rol de usuario regular (`USUARIO`), y el Dashboard general para los roles administrativos (`ADMINISTRADOR`, `OPERADOR`).
+- **Vista de Dashboard de Usuario (`UserDashboard.jsx`)**: Diseñada con diseño premium, resumiendo la cantidad de vehículos autorizados y las guías de acceso e ingresos del campus de forma interactiva.
+
+## 2026-07-26 - Validación Interactiva y Carga de Fotos de Vehículos
+
+- **Validación del Lado del Cliente (Register.jsx)**: Se implementó validación en tiempo real para Nombre, Apellido Paterno, Carnet y fortaleza de Contraseña (mínimo 8 caracteres, 1 mayúscula, 1 número) en español, inhabilitando el envío de datos incorrectos al backend.
+- **Mapeo de Errores Pydantic (auth.js)**: Se modificó `mapAuthError` para interceptar respuestas Pydantic del backend y traducirlas a mensajes amigables en español.
+- **Carga de Fotos de Vehículos (Vehicles.jsx / Profile.jsx)**: Se implementó la subida opcional de fotos privadas de vehículos al registrarlos o editarlos en el panel de gestión. Se añadió también la sección "Mis Vehículos Registrados" en la vista de perfil (`Profile.jsx`) para que los usuarios visualicen y carguen/eliminen fotos directamente desde allí.
+
+>>>>>>> Stashed changes
 ## 2026-07-25 - Validacion integral local/Docker, Neon, Cloudinary y datos operativos
 
 - PostgreSQL es externo: Compose usa `backend/.env`, no sobrescribe
@@ -245,3 +343,32 @@
   - dataset incompleto para entrenamiento YOLO
   - falta validar inferencia real local por ausencia de modelo
   - dependencias de IA no instaladas en este entorno de ejecucion para correr entrenamiento/ocr real
+# Mejora de deteccion a distancia - 2026-07-28
+
+- La causa principal era el doble límite de 480 px en frontend y backend, que
+  eliminaba detalle de caracteres pequeños antes de EasyOCR.
+- El modo realtime conserva ahora 960 px, solicita captura ideal 1920x1080,
+  codifica JPEG al 90% y usa `mag_ratio=1.25`.
+- El threshold adaptativo se ejecuta también cuando la pasada principal devuelve
+  cero textos, cubriendo placas distantes o con iluminación desigual.
+- Validados 13 tests del pipeline OCR y build Vite. El verificador completo queda
+  condicionado por `pytest` ausente en `backend/.venv`, un problema del entorno.
+
+## Captura de placas en movimiento
+
+- La cámara web solicita 1920x1080 a 24-30 fps y aplica enfoque y exposición
+  continuos si el navegador/dispositivo los publica como capacidades.
+- Se eliminó la conversión RGBA a gris en JavaScript; OpenCV sigue realizando la
+  conversión en backend sin bloquear la captura del siguiente fotograma.
+- El intervalo posterior a OCR se redujo a 100 ms con candidato y 250 ms sin él.
+- Una lectura válida con score combinado >= 0.88 se captura en un fotograma; las
+  lecturas menos fuertes mantienen el consenso de dos votos.
+
+## Cámara USB desde cuentas de staff
+
+- La ruta `/subir-placa` admite ADMINISTRADOR, OPERADOR y DISPOSITIVO.
+- El menú lateral de administrador y operador incluye `Escanear Placas`.
+- `UploadPlate` enumera entradas `videoinput`, reacciona a `devicechange` y usa
+  `deviceId: exact` al seleccionar una webcam USB.
+- Cambiar de cámara detiene tracks, temporizadores y petición OCR anterior antes
+  de abrir el nuevo stream. El selector solo se muestra al personal.

@@ -32,7 +32,11 @@ OCR_ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-"
 MIN_CANDIDATE_LENGTH = 4
 MAX_CANDIDATE_LENGTH = 10
 TARGET_PLATE_LENGTH = 7
+<<<<<<< Updated upstream
 MAX_REALTIME_DIM = 640  # Resolución suficiente para leer caracteres de placa con precisión
+=======
+MAX_REALTIME_DIM = 960  # Conserva detalle suficiente para placas lejanas en video 1080p.
+>>>>>>> Stashed changes
 MAX_STATIC_DIM = 1280   # EFI-002: Resolución límite para pipeline estático (1-2 MP)
 
 box_annotator = sv.BoxAnnotator(thickness=2, color_lookup=sv.ColorLookup.INDEX)
@@ -378,7 +382,9 @@ def _run_ocr(
             message=".*'pin_memory' argument is set as true but no accelerator is found.*",
             category=UserWarning,
         )
-        mag_ratio = 1.0 if realtime else 1.5
+        # Mejora la localización de caracteres pequeños sin asumir el coste
+        # completo del modo estático.
+        mag_ratio = 1.25 if realtime else 1.5
         width_ths = 1.5 if realtime else 2.0
         return ocr_reader.readtext(
             processed,
@@ -493,7 +499,13 @@ def analyze_plate(image_bytes: bytes, ocr_reader=None, realtime: bool = False) -
             raw_bboxes_rt.extend(det.xyxy.tolist())
             candidates_rt.extend(_build_candidates(det, image.shape))
 
+<<<<<<< Updated upstream
         # ---- Variante fallback: threshold adaptativo (solo si la principal no encontró candidatos válidos) ----
+=======
+        # ---- Variante fallback: threshold adaptativo ----
+        # Ejecutar también cuando la primera pasada no localiza texto. Ese es el
+        # caso habitual de una placa distante o con iluminación desigual.
+>>>>>>> Stashed changes
         has_valid = any(c.valid_format and c.confidence >= settings.OCR_CONFIDENCE_THRESHOLD for c in candidates_rt)
         if not has_valid:
             try:
