@@ -1,7 +1,9 @@
 const AUTH_KEY = "lector_placas_session";
 
 export function saveSession(session) {
-  // Solo guardamos el usuario, no el token
+  // Solo guardamos el usuario, NO el token.
+  // El token viaja en cookie httpOnly (más seguro contra XSS).
+  // El backend la setea en /login y la lee automáticamente.
   const safeSession = { user: session.user };
   localStorage.setItem(AUTH_KEY, JSON.stringify(safeSession));
 }

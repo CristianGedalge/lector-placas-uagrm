@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
 import {
   getVehicles,
   createVehicle,
@@ -15,12 +15,67 @@ import {
   updateVehicleType,
   deleteVehicleType,
   uploadVehiclePhoto,
+  deleteVehiclePhoto,
   getMediaUrl
-} from "../api/plates";
-import { listUsers } from "../api/auth";
-import { useAuth } from "../hooks/useAuth";
-import { formatPlate, validatePlateForm } from "../utils/formatters";
-import Pagination from "../components/Pagination";
+} from "../../api/plates";
+import { listUsers } from "../../api/auth";
+import { useAuth } from "../../hooks/useAuth";
+import { formatPlate, validatePlateForm } from "../../utils/formatters";
+import Pagination from "../../components/Pagination";
+import SearchBar from "../../components/SearchBar";
+
+function VehicleTablePhoto({ fotoId }) {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!fotoId) {
+      setUrl("");
+      return;
+    }
+    setLoading(true);
+    getMediaUrl(fotoId)
+      .then((res) => {
+        setUrl(res.url);
+      })
+      .catch((err) => {
+        console.error("Error cargando url de la foto del vehiculo:", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, [fotoId]);
+
+  if (!fotoId) {
+    return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Sin foto</span>;
+  }
+
+  if (loading) {
+    return <span style={{ color: "#94a3b8", fontSize: "0.85rem" }}>Cargando...</span>;
+  }
+
+  if (!url) {
+    return <span style={{ color: "#ef4444", fontSize: "0.85rem" }}>Error</span>;
+  }
+
+  return (
+    <img 
+      src={url} 
+      alt="Vehículo" 
+      style={{ 
+        width: "60px", 
+        height: "40px", 
+        objectFit: "cover", 
+        borderRadius: "4px", 
+        border: "1px solid #cbd5e1",
+        cursor: "pointer",
+        display: "block"
+      }} 
+      onClick={() => window.open(url, "_blank", "noopener,noreferrer")}
+      title="Ver foto en tamaño completo"
+    />
+  );
+}
 
 function Vehicles() {
   const { user } = useAuth();
@@ -40,15 +95,17 @@ function Vehicles() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [zoomedImage, setZoomedImage] = useState(null);
 
-  const [filterType, setFilterType] = useState(isStaff ? "ALL" : "MY");
+  const [filterType, setFilterType] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const [vehiclesSearchQuery, setVehiclesSearchQuery] = useState("");
   const itemsPerPage = 10;
 
-  // Formularios Modales
   const [creatingVehicle, setCreatingVehicle] = useState(null);
   const [editingVehicle, setEditingVehicle] = useState(null);
   const [viewingVehicle, setViewingVehicle] = useState(null);
+  const [editingVehiclePhotoUrl, setEditingVehiclePhotoUrl] = useState("");
 
   const [creatingBrand, setCreatingBrand] = useState(null); // { nombre: "" }
   const [editingBrand, setEditingBrand] = useState(null); // { id, nombre: "" }
@@ -70,39 +127,33 @@ function Vehicles() {
       setError("");
       setSuccess("");
 
-      const filterId = isStaff ? undefined : user?.id;
-      const [vehiclesData, brandsData, typesData] = await Promise.all([
-        getVehicles(filterId),
+      const [vehiclesData, brandsData, typesData, usersData] = await Promise.all([
+        getVehicles(undefined),
         getBrands(),
-        getVehicleTypes()
+        getVehicleTypes(),
+        listUsers()
       ]);
 
       setVehicles(vehiclesData || []);
       setBrands(brandsData || []);
       setTypes(typesData || []);
-
-      if (isStaff) {
-        const usersData = await listUsers();
-        const normalUsers = (usersData || []).filter(u => u.rol === "USUARIO");
-        setUsers(normalUsers);
-      }
+      const normalUsers = (usersData || []).filter(u => u.rol === "USUARIO");
+      setUsers(normalUsers);
     } catch (err) {
       setError("No se pudo cargar la información del sistema.");
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [user, isStaff]);
+  }, []);
+
 
   useEffect(() => {
     if (user?.id) {
       loadData();
-      if (!isStaff) {
-        setFilterType("MY");
-        setActiveTab("vehicles");
-      }
     }
-  }, [user, loadData, isStaff]);
+  }, [user, loadData]);
+
 
   useEffect(() => {
     const photoIds = [...new Set(vehicles.map((vehicle) => vehicle.foto_id).filter(Boolean))];
@@ -134,7 +185,6 @@ function Vehicles() {
     };
   }, [vehicles, vehiclePhotoUrls]);
 
-  // ── ACCIONES: VEHÍCULOS ──────────────────────────────────────────
   const handleOpenCreateVehicle = () => {
     setCreatingVehicle({
       placa: "",
@@ -147,6 +197,8 @@ function Vehicles() {
     setError("");
     setSuccess("");
   };
+
+
 
   const handleCreateVehicleSubmit = (e) => {
     e.preventDefault();
@@ -167,7 +219,7 @@ function Vehicles() {
         try {
           setConfirmConfig(prev => ({ ...prev, isOpen: false }));
           setSaving(true);
-          const createdVehicle = await createVehicle({
+          const newVehicle = await createVehicle({
             placa: plateVal,
             color: creatingVehicle.color,
             marca_id: creatingVehicle.marca_id,
@@ -175,7 +227,7 @@ function Vehicles() {
             propietario_usuario_id: creatingVehicle.propietario_usuario_id
           });
           if (creatingVehicle.photoFile) {
-            await uploadVehiclePhoto(createdVehicle.id, creatingVehicle.photoFile);
+            await uploadVehiclePhoto(newVehicle.id, creatingVehicle.photoFile);
           }
           setSuccess(`Vehículo ${plateVal} registrado con éxito.`);
           setCreatingVehicle(null);
@@ -195,7 +247,7 @@ function Vehicles() {
     setSuccess("");
   };
 
-  const handleOpenEditVehicle = (v) => {
+  const handleOpenEditVehicle = async (v) => {
     setEditingVehicle({
       id: v.id,
       placa: v.placa,
@@ -206,10 +258,46 @@ function Vehicles() {
       foto_id: v.foto_id || null,
       photoFile: null
     });
+    setEditingVehiclePhotoUrl("");
     setViewingVehicle(null);
     setError("");
     setSuccess("");
+
+    if (v.foto_id) {
+      try {
+        const result = await getMediaUrl(v.foto_id);
+        setEditingVehiclePhotoUrl(result.url);
+      } catch (err) {
+        console.error("No se pudo cargar la foto del vehiculo:", err);
+      }
+    }
   };
+
+  const handleDeleteVehiclePhoto = (vehicleId) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: "Eliminar Foto",
+      message: "¿Estás seguro de que deseas eliminar la foto de este vehículo?",
+      confirmColor: "var(--color-danger, #ef4444)",
+      onConfirm: async () => {
+        try {
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+          setSaving(true);
+          await deleteVehiclePhoto(vehicleId);
+          setEditingVehiclePhotoUrl("");
+          setEditingVehicle(current => ({ ...current, foto_id: null }));
+          setSuccess("Foto del vehículo eliminada.");
+          loadData();
+        } catch (err) {
+          setError(err.message || "No se pudo eliminar la foto.");
+        } finally {
+          setSaving(false);
+        }
+      }
+    });
+  };
+
+
 
   const handleEditVehicleSubmit = (e) => {
     e.preventDefault();
@@ -382,10 +470,14 @@ function Vehicles() {
 
   // Filtrado de vehículos en frontend
   const filteredVehicles = vehicles.filter((v) => {
-    if (filterType === "MY") {
-      return v.propietario_usuario_id === user?.id;
+    if (filterType === "MY" && v.propietario_usuario_id !== user?.id) {
+      return false;
     }
-    return true;
+    const query = vehiclesSearchQuery.toLowerCase();
+    const plate = v.placa?.toLowerCase() || "";
+    const brand = v.marca?.nombre?.toLowerCase() || "";
+    const ownerName = v.propietario ? `${v.propietario.nombre} ${v.propietario.apellido_paterno}`.toLowerCase() : "";
+    return plate.includes(query) || brand.includes(query) || ownerName.includes(query);
   });
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -466,14 +558,21 @@ function Vehicles() {
               <h3>{isStaff ? "Todos los vehículos del sistema" : "Vehículos registrados bajo mi cuenta"}</h3>
             </div>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button type="button" className="ghost-button" onClick={loadData} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem" }} title="Refrescar tabla">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
-              </button>
               <button type="button" onClick={handleOpenCreateVehicle} style={{ padding: "0.6rem 1.2rem" }}>
                 Registrar Vehículo
               </button>
             </div>
           </div>
+
+          <SearchBar
+            searchQuery={vehiclesSearchQuery}
+            setSearchQuery={(val) => { setVehiclesSearchQuery(val); setCurrentPage(1); }}
+            placeholder="Buscar vehículos por placa, marca o propietario..."
+            onRefresh={loadData}
+            isRefreshing={loading}
+            refreshTitle="Refrescar"
+          />
+
           {!filteredVehicles.length && (
             <div className="card">
               <p className="muted-text text-center">No se encontraron vehículos registrados bajo esta selección.</p>
@@ -501,7 +600,9 @@ function Vehicles() {
                           <img
                             src={vehiclePhotoUrls[v.foto_id]}
                             alt={`Foto del vehículo ${v.placa}`}
-                            style={{ width: "84px", height: "84px", objectFit: "cover", borderRadius: "10px", border: "1px solid rgba(21, 62, 117, 0.15)" }}
+                            style={{ width: "84px", height: "84px", objectFit: "cover", borderRadius: "10px", border: "1px solid rgba(21, 62, 117, 0.15)", cursor: "pointer" }}
+                            onClick={() => setZoomedImage(vehiclePhotoUrls[v.foto_id])}
+                            title="Ver foto en tamaño completo"
                           />
                         ) : (
                           <span className="muted-text">Sin foto</span>
@@ -816,7 +917,6 @@ function Vehicles() {
                     </div>
                   )}
                 </label>
-
                 {isStaff ? (
                   <label className="field-group">
                     <span>Propietario Asociado</span>
@@ -851,7 +951,7 @@ function Vehicles() {
                   </div>
                 )}
                 <label className="field-group">
-                  <span>Foto privada del vehículo</span>
+                  <span>Foto privada del vehículo (Opcional)</span>
                   <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"
@@ -866,6 +966,7 @@ function Vehicles() {
                 </label>
               </div>
             </div>
+
 
             <div className="modal-actions" style={{ marginTop: "1.5rem" }}>
               <button type="submit" disabled={saving || !brands.length || !types.length}>
@@ -1091,6 +1192,37 @@ function Vehicles() {
                     </select>
                   </label>
                 )}
+
+                <div className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>Foto privada del vehículo</span>
+                  {editingVehiclePhotoUrl && (
+                    <div style={{ marginBottom: "0.5rem" }}>
+                      <img 
+                        src={editingVehiclePhotoUrl} 
+                        alt="Foto del vehículo" 
+                        style={{ maxWidth: "200px", borderRadius: "8px", border: "1px solid #ddd", display: "block", marginBottom: "0.5rem" }} 
+                      />
+                      <button
+                        type="button"
+                        className="danger-button"
+                        onClick={() => handleDeleteVehiclePhoto(editingVehicle.id)}
+                        style={{ padding: "0.3rem 0.6rem", fontSize: "0.8rem" }}
+                      >
+                        Eliminar foto
+                      </button>
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) =>
+                      setEditingVehicle((current) => ({
+                        ...current,
+                        photoFile: event.target.files?.[0] || null
+                      }))
+                    }
+                  />
+                </div>
               </div>
             </div>
 
@@ -1236,6 +1368,67 @@ function Vehicles() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
       />
+
+      {/* Modal de Zoom de Imagen */}
+      {zoomedImage && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setZoomedImage(null)} 
+          style={{ cursor: "zoom-out", zIndex: 1000 }}
+          title="Hacer clic para cerrar"
+        >
+          <div 
+            style={{ 
+              position: "relative",
+              maxWidth: "90%",
+              maxHeight: "90%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={zoomedImage} 
+              alt="Foto ampliada" 
+              style={{ 
+                maxWidth: "100%", 
+                maxHeight: "80vh", 
+                borderRadius: "12px", 
+                boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                border: "4px solid white",
+                objectFit: "contain",
+                display: "block"
+              }} 
+            />
+            <button
+              type="button"
+              onClick={() => setZoomedImage(null)}
+              style={{
+                position: "absolute",
+                top: "-15px",
+                right: "-15px",
+                width: "36px",
+                height: "36px",
+                borderRadius: "50%",
+                background: "#ffffff",
+                color: "#1e293b",
+                border: "none",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                fontSize: "18px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              title="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

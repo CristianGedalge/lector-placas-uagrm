@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
+import SearchBar from "../../components/SearchBar";
 import {
   getDevices,
   createDevice,
@@ -10,8 +11,8 @@ import {
   createDeviceType,
   updateDeviceType,
   deleteDeviceType
-} from "../api/devices";
-import { useAuth } from "../hooks/useAuth";
+} from "../../api/devices";
+import { useAuth } from "../../hooks/useAuth";
 
 function Devices() {
   const { user } = useAuth();
@@ -22,6 +23,8 @@ function Devices() {
   // Datos
   const [devices, setDevices] = useState([]);
   const [types, setTypes] = useState([]);
+  const [devicesSearchQuery, setDevicesSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,9 +46,10 @@ function Devices() {
     onConfirm: null
   });
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setIsRefreshing(true);
+      else setLoading(true);
       setError("");
       setSuccess("");
 
@@ -61,6 +65,7 @@ function Devices() {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -76,7 +81,8 @@ function Devices() {
       nombre: "",
       ubicacion: "",
       tipo_dispositivo_id: types[0]?.id || "",
-      esta_activo: true
+      esta_activo: true,
+      webhook_url: ""
     });
     setError("");
     setSuccess("");
@@ -118,7 +124,8 @@ function Devices() {
       nombre: d.nombre,
       ubicacion: d.ubicacion,
       tipo_dispositivo_id: d.tipo_dispositivo_id,
-      esta_activo: d.esta_activo
+      esta_activo: d.esta_activo,
+      webhook_url: d.webhook_url || ""
     });
     setError("");
     setSuccess("");
@@ -294,13 +301,34 @@ function Devices() {
             )}
           </div>
 
-          {!devices.length && (
+          <SearchBar
+            searchQuery={devicesSearchQuery}
+            setSearchQuery={setDevicesSearchQuery}
+            placeholder="Buscar dispositivos por nombre, ubicación o tipo..."
+            onRefresh={loadData}
+            isRefreshing={isRefreshing}
+            refreshTitle="Refrescar"
+          />
+
+          {!devices.filter(d => {
+            const query = devicesSearchQuery.toLowerCase();
+            const name = d.nombre?.toLowerCase() || "";
+            const location = d.ubicacion?.toLowerCase() || "";
+            const typeName = d.tipo?.nombre?.toLowerCase() || "";
+            return name.includes(query) || location.includes(query) || typeName.includes(query);
+          }).length && (
             <div className="card">
-              <p className="muted-text text-center">No hay dispositivos registrados en el sistema.</p>
+              <p className="muted-text text-center">No se encontraron dispositivos con ese filtro.</p>
             </div>
           )}
 
-          {devices.length > 0 && (
+          {devices.filter(d => {
+            const query = devicesSearchQuery.toLowerCase();
+            const name = d.nombre?.toLowerCase() || "";
+            const location = d.ubicacion?.toLowerCase() || "";
+            const typeName = d.tipo?.nombre?.toLowerCase() || "";
+            return name.includes(query) || location.includes(query) || typeName.includes(query);
+          }).length > 0 && (
             <div className="card" style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead>
@@ -313,14 +341,22 @@ function Devices() {
                   </tr>
                 </thead>
                 <tbody>
-                  {devices.map((d) => (
-                    <tr key={d.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
-                      <td style={{ padding: "1rem", fontWeight: "bold" }}>
-                        {d.nombre}
-                      </td>
-                      <td style={{ padding: "1rem" }}>
-                        {d.ubicacion}
-                      </td>
+                  {devices
+                    .filter(d => {
+                      const query = devicesSearchQuery.toLowerCase();
+                      const name = d.nombre?.toLowerCase() || "";
+                      const location = d.ubicacion?.toLowerCase() || "";
+                      const typeName = d.tipo?.nombre?.toLowerCase() || "";
+                      return name.includes(query) || location.includes(query) || typeName.includes(query);
+                    })
+                    .map((d) => (
+                      <tr key={d.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
+                        <td style={{ padding: "1rem", fontWeight: "bold" }}>
+                          {d.nombre}
+                        </td>
+                        <td style={{ padding: "1rem" }}>
+                          {d.ubicacion}
+                        </td>
                       <td style={{ padding: "1rem" }}>
                         {d.tipo?.nombre || "N/A"}
                       </td>
@@ -503,6 +539,19 @@ function Devices() {
                   />
                   <span>Dispositivo habilitado y transmitiendo</span>
                 </label>
+
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>🔔 URL de Webhook — Barrera / Actuador</span>
+                  <input
+                    type="url"
+                    placeholder="http://localhost:8000/api/v1/barrier/trigger"
+                    value={creatingDevice.webhook_url || ""}
+                    onChange={(e) => setCreatingDevice(prev => ({ ...prev, webhook_url: e.target.value }))}
+                  />
+                  <small style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
+                    Opcional. Cuando se autorice un vehículo, el sistema enviará una señal POST a esta URL para abrir la barrera o actuador. Usa <strong>http://localhost:8000/api/v1/barrier/trigger</strong> para el simulador local.
+                  </small>
+                </label>
               </div>
             </div>
 
@@ -574,6 +623,19 @@ function Devices() {
                     style={{ width: "auto" }}
                   />
                   <span>Dispositivo habilitado y transmitiendo</span>
+                </label>
+
+                <label className="field-group" style={{ gridColumn: "1 / -1" }}>
+                  <span>🔔 URL de Webhook — Barrera / Actuador</span>
+                  <input
+                    type="url"
+                    placeholder="http://localhost:8000/api/v1/barrier/trigger"
+                    value={editingDevice.webhook_url || ""}
+                    onChange={(e) => setEditingDevice(prev => ({ ...prev, webhook_url: e.target.value }))}
+                  />
+                  <small style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "0.25rem", display: "block" }}>
+                    Opcional. Señal automática al autorizar un vehículo. Usa <strong>http://localhost:8000/api/v1/barrier/trigger</strong> para el simulador local.
+                  </small>
                 </label>
               </div>
             </div>

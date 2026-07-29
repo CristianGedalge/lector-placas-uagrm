@@ -30,8 +30,12 @@ def database_target(url: str = DATABASE_URL) -> dict[str, str]:
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,
-    pool_recycle=300,
+    # ── Pool calibrado para Neon (límite de conexiones en tier gratuito) ──
+    pool_size=5,           # conexiones permanentes en el pool
+    max_overflow=5,        # conexiones adicionales bajo carga pico (total máx: 10)
+    pool_timeout=30,       # segundos antes de lanzar TimeoutError si el pool está lleno
+    pool_recycle=300,      # reciclar conexiones cada 5 min para evitar drops de Neon
+    pool_pre_ping=True,    # verificar conexión viva antes de usar (detecta cold-start Neon)
 )
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

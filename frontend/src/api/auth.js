@@ -7,7 +7,35 @@ function mapAuthError(error, fallbackMessage) {
     if (typeof detail === "string") {
       throw new Error(detail);
     } else if (Array.isArray(detail)) {
-      const msg = detail.map((d) => `${d.loc?.join(".") || "error"}: ${d.msg || "invalido"}`).join("; ");
+      const msg = detail.map((d) => {
+        let field = d.loc ? d.loc[d.loc.length - 1] : "campo";
+        let message = d.msg || "Valor inválido";
+        
+        // Translate common field names
+        const fieldTranslations = {
+          nombre: "El nombre",
+          apellido_paterno: "El apellido paterno",
+          apellido_materno: "El apellido materno",
+          carnet: "El carnet de identidad (CI)",
+          contrasena: "La contraseña",
+          rol: "El rol"
+        };
+        const friendlyField = fieldTranslations[field] || field;
+
+        // Clean up and translate common Pydantic error messages
+        if (message.startsWith("String should have at least")) {
+          const match = message.match(/\d+/);
+          const num = match ? match[0] : "8";
+          return `${friendlyField} debe tener al menos ${num} caracteres.`;
+        }
+        if (message.startsWith("Value error, ")) {
+          return message.replace("Value error, ", "");
+        }
+        if (message === "Field required") {
+          return `${friendlyField} es obligatorio.`;
+        }
+        return `${friendlyField}: ${message}`;
+      }).join(" ");
       throw new Error(msg);
     } else {
       throw new Error(JSON.stringify(detail));

@@ -36,6 +36,7 @@ from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.access_logs import router as access_logs_router
 from app.api.v1.devices import router as devices_router
 from app.api.v1.media import router as media_router
+from app.api.v1.barrier import router as barrier_router
 from app.api.v1.registration_requests import router as registration_requests_router
 from app.config.settings import settings
 from app.db.session import database_target
@@ -121,6 +122,7 @@ app.include_router(
     prefix="/api/v1/access-logs",
     tags=["Access Logs"],
 )
+app.include_router(barrier_router, prefix="/api/v1/barrier", tags=["Barrier Simulator"])
 
 # SEC-010: Cabeceras de seguridad HTTP en todas las respuestas
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -134,7 +136,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        # Permitir camara para el dispositivo movil en red local
+        response.headers["Permissions-Policy"] = "camera=(*), microphone=(), geolocation=()"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)

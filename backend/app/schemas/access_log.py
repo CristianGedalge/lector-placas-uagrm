@@ -67,16 +67,19 @@ class AccesoResponse(BaseModel):
                     } if (hasattr(veh, "propietario") and veh.propietario) else None
                 }
 
+            from datetime import timezone
+            creado_el_utc = data.creado_el.replace(tzinfo=timezone.utc) if data.creado_el and data.creado_el.tzinfo is None else data.creado_el
+
             return {
                 "id": data.id,
                 "tipo_acceso": data.tipo_acceso,
                 "ubicacion": data.ubicacion,
                 "escaneado_id": data.escaneado_id,
                 "operador_usuario_id": data.operador_usuario_id,
-                "creado_el": data.creado_el,
+                "creado_el": creado_el_utc,
                 "direction": direction_val,
                 "zone": data.ubicacion,
-                "timestamp": data.creado_el,
+                "timestamp": creado_el_utc,
                 "vehicle": vehicle_dict,
                 "image_id": data.imagen_id,
                 "image_status": data.imagen.estado if getattr(data, "imagen", None) else None,

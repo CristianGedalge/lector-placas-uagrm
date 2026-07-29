@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import UploadImage from "../components/UploadImage";
+import UploadImage from "../../components/UploadImage";
 import {
   createVehicle,
   lookupVehicleByPlate,
@@ -9,11 +9,11 @@ import {
   createAutoAccessWithEvidence,
   getBrands,
   getVehicleTypes
-} from "../api/plates";
-import { useAuth } from "../hooks/useAuth";
-import { formatPlate } from "../utils/formatters";
-import VehicleFoundModal from "../components/UploadPlate/VehicleFoundModal";
-import PlateNotFoundModal from "../components/UploadPlate/PlateNotFoundModal";
+} from "../../api/plates";
+import { useAuth } from "../../hooks/useAuth";
+import { formatPlate } from "../../utils/formatters";
+import VehicleFoundModal from "../../components/UploadPlate/VehicleFoundModal";
+import PlateNotFoundModal from "../../components/UploadPlate/PlateNotFoundModal";
 
 const ownerInitialState = {
   code: "",
@@ -49,7 +49,7 @@ function UploadPlate() {
   const detectionTimerRef = useRef(null);
   // Mapa de votos: texto_normalizado -> { count, bbox, score, text, lastFrameTs }
   const voteMapRef = useRef(new Map());
-  const VOTES_NEEDED = 3; // Frames consecutivos con el mismo texto para confirmar
+  const VOTES_NEEDED = 2; // OPT-D: 2 frames consecutivos — balance entre velocidad y anti-falsos-positivos
 
   const [modelLoading, setModelLoading] = useState(false);
   const [trackingBoxes, setTrackingBoxes] = useState([]);
@@ -80,10 +80,9 @@ function UploadPlate() {
   const [scanError, setScanError] = useState("");
   const [activeTab, setActiveTab] = useState(user?.rol === "DISPOSITIVO" ? "camera" : null); // null | "image" | "camera"
   const [activeModal, setActiveModal] = useState(null); // null | "file" | "snapshot"
+  const activeModalRef = useRef(null);
 
   useEffect(() => {
-<<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
-=======
     activeModalRef.current = activeModal;
   }, [activeModal]);
 
@@ -96,7 +95,6 @@ function UploadPlate() {
 
   useEffect(() => {
     // La cámara siempre encendida mientras estemos en la pestaña de cámara
->>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
     if (activeTab === "camera") {
       startCamera(true);
     } else if (activeModal === "snapshot") {
@@ -105,6 +103,7 @@ function UploadPlate() {
       stopCamera();
     }
     return () => {
+      // Siempre detener el stream al re-ejecutar el efecto para evitar acumulación de streams
       stopCamera();
     };
   }, [activeTab, activeModal]);
@@ -141,51 +140,126 @@ function UploadPlate() {
     resetLookupState();
     setLookupLoading(true);
 
+    // Si el backend ya registró el acceso durante el análisis, no necesitamos
+    // crear otro acceso — solo buscar los datos del vehículo para la UI.
+    const backendAlreadyRegistered = Boolean(analysisResult?.acceso_id);
+
     try {
-      const result = await lookupVehicleByPlate(plateValue);
+      let result = null;
+      if (analysisResult) {
+        if (!analysisResult.es_registrado) {
+          // Si no está registrado en el backend, lanzar error ficticio 404 para entrar al bloque catch
+          const err = new Error("Vehículo no registrado");
+          err.response = { status: 404 };
+          throw err;
+        }
+        // Sintetizar el resultado del vehículo sin hacer la petición protegida
+        result = {
+          id: analysisResult.vehiculo_id,
+          license_plate: analysisResult.placa_normalizada || plateValue,
+          propietario: {
+            nombre: analysisResult.propietario_nombre || "Propietario",
+            apellido_paterno: ""
+          }
+        };
+      } else {
+        result = await lookupVehicleByPlate(plateValue);
+      }
       setLookupResult(result);
       
-      // Placa encontrada → Registrar acceso automáticamente (Ingreso/Salida inferido)
-      try {
-        const autoResult = evidence
-          ? await createAutoAccessWithEvidence({
-              vehicle_id: result.id,
-              zone: accessZone,
-              notes: ""
-            }, evidence)
-          : await createAutoAccessLog({
-          vehicle_id: result.id,
-          zone: accessZone,
-          notes: ""
+      if (analysisResult) {
+        // En flujo de cámara en vivo (análisis automático), el backend ya gestiona el acceso
+        // y el cooldown. Siempre mostramos confirmación visual de forma automática y transparente.
+        const tipoAcceso = analysisResult.tipo_acceso || "ENTRADA";
+        setAutoAccessLog({
+          id: analysisResult.acceso_id || "cooldown-suppressed",
+          direction: tipoAcceso === "ENTRADA" ? "ENTRY" : "EXIT",
+          zone: "Portería Principal",
+          timestamp: new Date().toISOString(),
+          vehiculo_id: analysisResult.vehiculo_id,
         });
-        const autoLog = autoResult.access || autoResult;
-        if (autoResult.image_status) autoLog.image_status = autoResult.image_status;
-        setAutoAccessLog(autoLog);
         setActiveModal("access_confirmed");
-        
-        // Mantener visible por 5 segundos y luego continuar
         setTimeout(() => {
           setActiveModal(null);
           setLookupResult(null);
           setAutoAccessLog(null);
           setManualPlate("");
-          // Si estábamos en modo cámara, la reiniciamos para seguir escaneando
-          if (activeTab === "camera") {
-            startCamera(true);
-          }
         }, 5000);
-        
-      } catch (autoErr) {
-        setAccessError(
-          autoErr?.response?.data?.detail || autoErr.mensaje || "No se pudo auto-registrar el acceso."
-        );
-        // Fallback: si falla el registro automático, mostrar el modal manual
-        setActiveModal("ingreso_egreso");
+      } else if (backendAlreadyRegistered) {
+        // Fallback de seguridad
+        const tipoAcceso = analysisResult.tipo_acceso || "ENTRADA";
+        setAutoAccessLog({
+          id: analysisResult.acceso_id,
+          direction: tipoAcceso === "ENTRADA" ? "ENTRY" : "EXIT",
+          zone: "Portería Principal",
+          timestamp: new Date().toISOString(),
+          vehiculo_id: analysisResult.vehiculo_id,
+        });
+        setActiveModal("access_confirmed");
+        setTimeout(() => {
+          setActiveModal(null);
+          setLookupResult(null);
+          setAutoAccessLog(null);
+          setManualPlate("");
+        }, 5000);
+      } else {
+        // Flujo manual o de imagen estática → registrar acceso ahora
+        try {
+          const autoResult = evidence
+            ? await createAutoAccessWithEvidence({
+                vehicle_id: result.id,
+                zone: accessZone,
+                notes: ""
+              }, evidence)
+            : await createAutoAccessLog({
+            vehicle_id: result.id,
+            zone: accessZone,
+            notes: ""
+          });
+          const autoLog = autoResult.access || autoResult;
+          if (autoResult.image_status) autoLog.image_status = autoResult.image_status;
+          setAutoAccessLog(autoLog);
+          setActiveModal("access_confirmed");
+          
+          setTimeout(() => {
+            setActiveModal(null);
+            setLookupResult(null);
+            setAutoAccessLog(null);
+            setManualPlate("");
+          }, 5000);
+          
+        } catch (autoErr) {
+          setAccessError(
+            autoErr?.response?.data?.detail || autoErr.mensaje || "No se pudo auto-registrar el acceso."
+          );
+          setActiveModal("ingreso_egreso");
+        }
       }
       
     } catch (error) {
       const status = error?.response?.status;
-      if (status === 404) {
+      if (status === 401) {
+        // Token expirado: si el backend ya registró el acceso, aún mostramos confirmación
+        if (backendAlreadyRegistered) {
+          const tipoAcceso = analysisResult.tipo_acceso || "ENTRADA";
+          setAutoAccessLog({
+            id: analysisResult.acceso_id,
+            direction: tipoAcceso === "ENTRADA" ? "ENTRY" : "EXIT",
+            zone: "Portería Principal",
+            timestamp: new Date().toISOString(),
+            vehiculo_id: analysisResult.vehiculo_id,
+          });
+          setActiveModal("access_confirmed");
+          setTimeout(() => {
+            setActiveModal(null);
+            setLookupResult(null);
+            setAutoAccessLog(null);
+            setManualPlate("");
+          }, 5000);
+        } else {
+          setLookupError("Sesión expirada. Por favor inicia sesión de nuevo.");
+        }
+      } else if (status === 404) {
         if (evidence && !analysisResult?.solicitud_id) {
           try {
             const form = new FormData();
@@ -204,9 +278,6 @@ function UploadPlate() {
         // Placa no registrada → informar al usuario
         setManualPlate(plateValue);
         setActiveModal("plate_not_found");
-        
-        // El modal "plate_not_found" requiere que el usuario presione "Entendido"
-        // para reanudar el escaneo.
       } else {
         setLookupError(
           error?.response?.data?.detail || "Error al consultar la placa. Intenta de nuevo."
@@ -274,9 +345,7 @@ function UploadPlate() {
 
   const detectFrame = async () => {
     if (!videoRef.current || !canvasRef.current || !streamRef.current) return;
-<<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
-=======
-    
+
     // Si hay un modal activo en pantalla, pausar el análisis OCR para no saturar la CPU,
     // pero mantener la cámara encendida.
     if (activeModalRef.current !== null) {
@@ -285,24 +354,15 @@ function UploadPlate() {
       return;
     }
 
->>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
     if (requestRef.current === "processing") return;
 
     requestRef.current = "processing";
     const canvas = canvasRef.current;
 
-<<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
-    // Resolución equilibrada: 640px, suficiente para leer texto de placa con precisión
-    const MAX_DETECTION_DIM = 640;
-    let videoW = videoRef.current.videoWidth || 640;
-    let videoH = videoRef.current.videoHeight || 480;
-=======
-    // 960 px conserva caracteres de placas lejanas sin enviar el fotograma
-    // 1080p completo. Debe coincidir con MAX_REALTIME_DIM del backend.
-    const MAX_DETECTION_DIM = 960;
-    let videoW = videoRef.current.videoWidth || 960;
-    let videoH = videoRef.current.videoHeight || 540;
->>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
+    // OPT-A/D: Resolución del canvas alineada con MAX_REALTIME_DIM del backend (480px)
+    const MAX_DETECTION_DIM = 480;
+    let videoW = videoRef.current.videoWidth || 480;
+    let videoH = videoRef.current.videoHeight || 360;
 
     if (videoW === 0) {
       requestRef.current = null;
@@ -322,7 +382,7 @@ function UploadPlate() {
 
     canvas.width = videoW;
     canvas.height = videoH;
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
     const controller = new AbortController();
@@ -334,6 +394,7 @@ function UploadPlate() {
     let nextInterval = 250;
 
     try {
+<<<<<<< HEAD:frontend/src/pages/UploadPlate.jsx
 <<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
       // JPEG 80%: balance entre tamaño de archivo y calidad para OCR
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.80));
@@ -342,14 +403,33 @@ function UploadPlate() {
       // reduce el tiempo entre la captura física y el envío del fotograma.
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.90));
 >>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
+=======
+      // OPT-F: Convertir a escala de grises en el canvas antes de enviar.
+      // El JPEG en gris es ~3x más pequeño que en color y el backend igual hace
+      // cvtColor internamente — enviarlo en gris ahorra bytes de red + un cvtColor.
+      const grayCtx = canvas.getContext("2d");
+      const imageData = grayCtx.getImageData(0, 0, canvas.width, canvas.height);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        d[i] = d[i + 1] = d[i + 2] = luma;
+      }
+      grayCtx.putImageData(imageData, 0, 0);
+      // JPEG 80%: balance entre tamaño de archivo y calidad para OCR
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.80));
+      // Restaurar contexto en color para el siguiente frame (solo afecta el canvas off-screen)
+      context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+>>>>>>> origin/main:frontend/src/pages/device/UploadPlate.jsx
       if (blob) {
         const formData = new FormData();
         formData.append("file", blob, "frame.jpg");
         const analysis = await uploadPlateImage(formData, true, controller.signal);
 
-        const normalizedText = analysis.placa_detectada
-          ? analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase()
-          : null;
+        const normalizedText = analysis.placa_normalizada
+          ? analysis.placa_normalizada
+          : (analysis.placa_detectada
+              ? analysis.placa_detectada.replace(/[^A-Z0-9]/gi, "").toUpperCase()
+              : null);
 
         // --- Sistema de votación por consenso ---
         // Un texto solo se confirma cuando aparece N veces seguidas
@@ -405,7 +485,7 @@ function UploadPlate() {
               evidenceCanvas.toBlob(resolve, "image/jpeg", 0.92)
             );
             voteMap.clear();
-            stopCamera();
+            setTrackingBoxes([]);
             setAnalysisPreview(analysis);
             setManualPlate(normalizedText);
             handleLookupPlate(normalizedText, evidenceBlob || blob, analysis);
@@ -426,7 +506,7 @@ function UploadPlate() {
             newBoxes.push({
               bbox: [x1, y1, x2 - x1, y2 - y1],
               score: analysis.confianza,
-              text: analysis.placa_detectada,
+              text: analysis.placa_normalizada || analysis.placa_detectada,
               votes: entry ? entry.count : 1,
               votesNeeded: VOTES_NEEDED,
               type: 'plate-voting',
@@ -435,12 +515,8 @@ function UploadPlate() {
           setScanError("");
           setTrackingBoxes(newBoxes);
 
-<<<<<<< Updated upstream:frontend/src/pages/UploadPlate.jsx
-          // Throttle adaptativo: si hay texto parcial, analizar más seguido
-          nextInterval = 600;
-=======
-          nextInterval = 100;
->>>>>>> Stashed changes:frontend/src/pages/device/UploadPlate.jsx
+          // OPT-D: Throttle 500ms (antes 600ms) — más frames sin afectar OCR CPU
+          nextInterval = 500;
 
         } else {
           // Sin texto válido: limpiar votos viejos y reducir frecuencia
@@ -455,7 +531,7 @@ function UploadPlate() {
     } catch (e) {
       if (e.name !== "AbortError" && e.code !== "ERR_CANCELED") {
         console.error("Error en detectFrame:", e);
-        setScanError(e.response?.data?.detail || e.mensaje || String(e));
+        setScanError(e.response?.data?.detail || e.mensaje || "Error al procesar la imagen.");
         setTrackingBoxes([]);
       }
     } finally {
@@ -478,6 +554,10 @@ function UploadPlate() {
   };
 
   const startCamera = async (isLive = false, cameraId = selectedCameraId) => {
+    // Si ya hay un stream activo, detenerlo antes de pedir uno nuevo
+    if (streamRef.current) {
+      stopCamera();
+    }
     try {
       setCameraError("");
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -615,7 +695,7 @@ function UploadPlate() {
     try {
       setRegisteringAccess(true);
       setAccessError("");
-      const log = await createAccessLog({
+      const log = await createAutoAccessLog({
         vehicle_id: lookupResult.id,
         direction: direction,
         zone: accessZone,

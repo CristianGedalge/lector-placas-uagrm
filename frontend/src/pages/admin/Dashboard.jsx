@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
-import Loader from "../components/Loader";
-import { getDashboardSummary, getPlateScans, getAccessLogs, getMediaUrl } from "../api/plates";
-import { useAuth } from "../hooks/useAuth";
-import parseApiError from "../utils/errors";
+import Loader from "../../components/Loader";
+import { getDashboardSummary, getPlateScans, getAccessLogs, getMediaUrl } from "../../api/plates";
+import { useAuth } from "../../hooks/useAuth";
+import parseApiError from "../../utils/errors";
 
 // ── Iconos SVG Profesionales ──────────────────────────────────────────────────
 const Icons = {
@@ -492,7 +492,7 @@ function Dashboard() {
                     )}
                   </td>
                   <td style={{ padding: "0.8rem", fontSize: "0.9rem" }}>
-                    {new Date(s.creado_el).toLocaleString()}
+                    {new Date(s.creado_el).toLocaleString("es-BO", { hour12: false })}
                   </td>
                   <td style={{ padding: "0.8rem", fontFamily: "monospace", fontWeight: "bold" }}>
                     {s.placa_detectada || "N/A"}

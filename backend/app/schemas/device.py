@@ -21,6 +21,7 @@ class DispositivoBase(BaseModel):
     ubicacion: str = Field(min_length=1, max_length=200)
     tipo_dispositivo_id: UUID
     esta_activo: Optional[bool] = True
+    webhook_url: Optional[str] = None  # URL del actuador de barrera o simulador
 
 class DispositivoCreate(DispositivoBase):
     pass
@@ -30,6 +31,7 @@ class DispositivoUpdate(BaseModel):
     ubicacion: Optional[str] = Field(None, min_length=1, max_length=200)
     tipo_dispositivo_id: Optional[UUID] = None
     esta_activo: Optional[bool] = None
+    webhook_url: Optional[str] = None  # Permite actualizar o limpiar el webhook
 
 class DispositivoResponse(DispositivoBase):
     id: UUID

@@ -1,12 +1,10 @@
 # MEMORY
 
-<<<<<<< Updated upstream
-=======
-## 2026-07-28 - Entrega de solicitudes desconocidas
+## 2026-07-28 - Integración de cambios de main y Beto
 
-- `plates.py` usa el resolvedor central compatible con cookie y Bearer.
-- Los fallos al persistir una solicitud ya no se ocultan como análisis exitosos.
-- Se añadió prueba de autenticación Bearer móvil y documentación Issue 017.
+- Se integraron las mejoras de seguridad, robustez y documentación de main con el flujo de Beto.
+- Se conservó el flujo de análisis de placas y la lógica de autenticación opcional para el endpoint de análisis.
+- Se mantuvo la trazabilidad de los cambios de la rama Beto para el flujo USB y cámara.
 
 ## 2026-07-27 - Celular como Dispositivo de Cámara por WiFi + Simulador de Barrera SSE
 
@@ -97,7 +95,10 @@
 - **Mapeo de Errores Pydantic (auth.js)**: Se modificó `mapAuthError` para interceptar respuestas Pydantic del backend y traducirlas a mensajes amigables en español.
 - **Carga de Fotos de Vehículos (Vehicles.jsx / Profile.jsx)**: Se implementó la subida opcional de fotos privadas de vehículos al registrarlos o editarlos en el panel de gestión. Se añadió también la sección "Mis Vehículos Registrados" en la vista de perfil (`Profile.jsx`) para que los usuarios visualicen y carguen/eliminen fotos directamente desde allí.
 
+<<<<<<< HEAD
 >>>>>>> Stashed changes
+=======
+>>>>>>> origin/main
 ## 2026-07-25 - Validacion integral local/Docker, Neon, Cloudinary y datos operativos
 
 - PostgreSQL es externo: Compose usa `backend/.env`, no sobrescribe

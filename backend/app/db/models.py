@@ -72,8 +72,8 @@ class Usuario(Base):
     apellido_materno = Column(String, nullable=True)
     carnet = Column(String, unique=True, index=True, nullable=False)
     contrasena_hash = Column(String, nullable=False)
-    rol = Column(Enum(RoleEnum), default=RoleEnum.USUARIO, nullable=False)
-    esta_activo = Column(Boolean, default=True, nullable=False)
+    rol = Column(Enum(RoleEnum), default=RoleEnum.USUARIO, nullable=False, index=True)
+    esta_activo = Column(Boolean, default=True, nullable=False, index=True)
     foto_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -105,12 +105,12 @@ class Vehiculo(Base):
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     placa = Column(String, unique=True, index=True, nullable=False)
     color = Column(String, nullable=False)
-    marca_id = Column(Uuid, ForeignKey("marcas.id"), nullable=False)
-    tipo_vehiculo_id = Column(Uuid, ForeignKey("tipos_vehiculo.id"), nullable=False)
-    propietario_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False)
-    esta_activo = Column(Boolean, default=True, nullable=False)
+    marca_id = Column(Uuid, ForeignKey("marcas.id"), nullable=False, index=True)
+    tipo_vehiculo_id = Column(Uuid, ForeignKey("tipos_vehiculo.id"), nullable=False, index=True)
+    propietario_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False, index=True)
+    esta_activo = Column(Boolean, default=True, nullable=False, index=True)
     foto_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
-    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     marca = relationship("Marca")
@@ -125,7 +125,7 @@ class EstadoCampus(Base):
     __tablename__ = "estado_campus"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), unique=True, nullable=False)
+    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), unique=True, nullable=False, index=True)
     estado = Column(Enum(UbicacionVehiculoEnum), nullable=False)
     ultimo_acceso_id = Column(Uuid, ForeignKey("accesos.id"), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
@@ -150,6 +150,7 @@ class Dispositivo(Base):
     ubicacion = Column(String, nullable=False)
     tipo_dispositivo_id = Column(Uuid, ForeignKey("tipos_dispositivo.id"), nullable=False)
     esta_activo = Column(Boolean, default=True, nullable=False)
+    webhook_url = Column(String, nullable=True)  # URL del actuador de barrera (simulador o ESP32)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
@@ -166,8 +167,8 @@ class Escaneado(Base):
     placa_normalizada = Column(String, index=True, nullable=True)
     confianza = Column(Float, nullable=True)
     estado = Column(Enum(EstadoEscaneoEnum), nullable=False, default=EstadoEscaneoEnum.DETECTADO)
-    dispositivo_id = Column(Uuid, ForeignKey("dispositivos.id"), nullable=True)
-    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), nullable=True)
+    dispositivo_id = Column(Uuid, ForeignKey("dispositivos.id"), nullable=True, index=True)
+    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), nullable=True, index=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
 
     dispositivo = relationship("Dispositivo", back_populates="escaneos")
@@ -193,10 +194,10 @@ class Acceso(Base):
     __tablename__ = "accesos"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    tipo_acceso = Column(Enum(TipoAccesoEnum), nullable=False)
+    tipo_acceso = Column(Enum(TipoAccesoEnum), nullable=False, index=True)
     ubicacion = Column(String, nullable=False)
-    escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False)
-    operador_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True)
+    escaneado_id = Column(Uuid, ForeignKey("escaneados.id"), nullable=False, index=True)
+    operador_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True, index=True)
     imagen_id = Column(Uuid, ForeignKey("archivos_multimedia.id"), nullable=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)
 

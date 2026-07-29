@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, memo } from "react";
-import Loader from "../components/Loader";
-import ConfirmModal from "../components/ConfirmModal";
-import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser } from "../api/auth";
-import { getMediaUrl } from "../api/plates";
+import Loader from "../../components/Loader";
+import ConfirmModal from "../../components/ConfirmModal";
+import SearchBar from "../../components/SearchBar";
+import { listUsers, updateUserByAdmin, deleteUserByAdmin, registerUser, getMediaUrl } from "../../api/auth";
 
-const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit, userPhotoUrl }) => (
+const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete, handleEdit, userPhotoUrl, onZoomImage }) => (
   <tr style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
     <td style={{ padding: "1rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -12,7 +12,9 @@ const UserRow = memo(({ user, handleRoleToggle, handleStatusToggle, handleDelete
           <img
             src={userPhotoUrl}
             alt={`Foto de perfil de ${user.nombre}`}
-            style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "50%", border: "1px solid rgba(21, 62, 117, 0.15)" }}
+            style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "50%", border: "1px solid rgba(21, 62, 117, 0.15)", cursor: "pointer" }}
+            onClick={() => onZoomImage(userPhotoUrl)}
+            title="Ver foto en tamaño completo"
           />
         ) : (
           <div style={{ width: "44px", height: "44px", borderRadius: "50%", background: "#e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b", fontSize: "0.8rem" }}>
@@ -87,6 +89,7 @@ function Users() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [zoomedImage, setZoomedImage] = useState(null);
 
   // Registro nuevo usuario
   const [showRegisterModal, setShowRegisterModal] = useState(false);
@@ -103,6 +106,8 @@ function Users() {
 
   // Edición usuario
   const [editingUser, setEditingUser] = useState(null);
+  const [usersSearchQuery, setUsersSearchQuery] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [editForm, setEditForm] = useState({
     nombre: "",
     apellido_paterno: "",
@@ -121,9 +126,10 @@ function Users() {
     onConfirm: null
   });
 
-  const fetchUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async (isManual = false) => {
     try {
-      setLoading(true);
+      if (isManual) setIsRefreshing(true);
+      else setLoading(true);
       const data = await listUsers();
       setUsers(data || []);
     } catch (err) {
@@ -131,6 +137,7 @@ function Users() {
       console.error(err);
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
@@ -166,7 +173,7 @@ function Users() {
     return () => {
       isMounted = false;
     };
-  }, [users, userPhotoUrls]);
+  }, [users]);
 
   const handleRoleToggle = useCallback((user) => {
     const nextRole = user.rol === "ADMINISTRADOR" ? "OPERADOR" : "ADMINISTRADOR";
@@ -351,7 +358,7 @@ function Users() {
         </p>
       </div>
 
-      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+      <div className="section-heading" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "1rem" }}>
         <div>
           <p className="eyebrow">Cuentas del sistema</p>
           <h3>Lista de Usuarios Registrados</h3>
@@ -360,6 +367,15 @@ function Users() {
           Registrar Nuevo Usuario
         </button>
       </div>
+
+      <SearchBar
+        searchQuery={usersSearchQuery}
+        setSearchQuery={setUsersSearchQuery}
+        placeholder="Buscar usuarios por nombre, carnet o rol..."
+        onRefresh={fetchUsers}
+        isRefreshing={isRefreshing}
+        refreshTitle="Refrescar"
+      />
 
       {success && <p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.8rem", borderRadius: "8px", border: "1px solid green" }}>{success}</p>}
       {error && <p className="error-text" style={{ background: "#ffe6e6", padding: "0.8rem", borderRadius: "8px", border: "1px solid red" }}>{error}</p>}
@@ -376,21 +392,36 @@ function Users() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
-              <UserRow
-                key={u.id}
-                user={u}
-                userPhotoUrl={userPhotoUrls[u.foto_id] || ""}
-                handleRoleToggle={handleRoleToggle}
-                handleStatusToggle={handleStatusToggle}
-                handleDelete={handleDelete}
-                handleEdit={handleEdit}
-              />
-            ))}
-            {!users.length && (
+            {users
+              .filter(user => {
+                const query = usersSearchQuery.toLowerCase();
+                const fullName = `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno || ""}`.toLowerCase();
+                const carnet = user.carnet?.toLowerCase() || "";
+                const rol = user.rol?.toLowerCase() || "";
+                return fullName.includes(query) || carnet.includes(query) || rol.includes(query);
+              })
+              .map((u) => (
+                <UserRow
+                  key={u.id}
+                  user={u}
+                  userPhotoUrl={userPhotoUrls[u.foto_id] || ""}
+                  handleRoleToggle={handleRoleToggle}
+                  handleStatusToggle={handleStatusToggle}
+                  handleDelete={handleDelete}
+                  handleEdit={handleEdit}
+                  onZoomImage={setZoomedImage}
+                />
+              ))}
+            {!users.filter(user => {
+                const query = usersSearchQuery.toLowerCase();
+                const fullName = `${user.nombre} ${user.apellido_paterno} ${user.apellido_materno || ""}`.toLowerCase();
+                const carnet = user.carnet?.toLowerCase() || "";
+                const rol = user.rol?.toLowerCase() || "";
+                return fullName.includes(query) || carnet.includes(query) || rol.includes(query);
+              }).length && (
               <tr>
                 <td colSpan="5" style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
-                  No hay usuarios registrados en el sistema.
+                  No se encontraron usuarios con ese filtro.
                 </td>
               </tr>
             )}
@@ -601,6 +632,67 @@ function Users() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
       />
+
+      {/* Modal de Zoom de Imagen */}
+      {zoomedImage && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setZoomedImage(null)} 
+          style={{ cursor: "zoom-out", zIndex: 1000 }}
+          title="Hacer clic para cerrar"
+        >
+          <div 
+            style={{ 
+              position: "relative",
+              maxWidth: "90%",
+              maxHeight: "90%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={zoomedImage} 
+              alt="Foto ampliada" 
+              style={{ 
+                maxWidth: "100%", 
+                maxHeight: "80vh", 
+                borderRadius: "12px", 
+                boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                border: "4px solid white",
+                objectFit: "contain",
+                display: "block"
+              }} 
+            />
+            <button
+              type="button"
+              onClick={() => setZoomedImage(null)}
+              style={{
+                position: "absolute",
+                top: "-15px",
+                right: "-15px",
+                width: "36px",
+                height: "36px",
+                borderRadius: "50%",
+                background: "#ffffff",
+                color: "#1e293b",
+                border: "none",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                fontSize: "18px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+              title="Cerrar"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

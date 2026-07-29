@@ -33,8 +33,7 @@ def is_blocklisted(text: str) -> bool:
 # ---------------------------------------------------------------------------
 # Zona NUMÉRICA (posiciones 0-3): letras que EasyOCR confunde con dígitos.
 # IMPORTANTE: solo incluir confusiones donde el carácter visualmente
-# se parece al dígito de forma casi universal (O↔0, I↔1, S↔5, Z↔2, G↔6, B↔8).
-# Excluir A, L, D, U, Q — esas conversiones producen falsos positivos graves.
+# se parece al dígito de forma casi universal (O↔0, I↔1, S↔5, Z↔2, G↔6, B↔8, D↔0, Q↔0).
 _NUM_ZONE_FIXES: dict[int, str] = {
     ord("O"): "0",  # O → 0  (idénticos en muchas fuentes)
     ord("I"): "1",  # I → 1
@@ -42,6 +41,8 @@ _NUM_ZONE_FIXES: dict[int, str] = {
     ord("Z"): "2",  # Z → 2
     ord("G"): "6",  # G → 6
     ord("B"): "8",  # B → 8
+    ord("D"): "0",  # D → 0  (DIN 1451: D con serifa se confunde con 0)
+    ord("Q"): "0",  # Q → 0  (Q sin cola puede leerse como 0)
 }
 
 # Zona ALFABÉTICA (posiciones 4-6): dígitos que EasyOCR confunde con letras.
@@ -52,6 +53,8 @@ _LET_ZONE_FIXES: dict[int, str] = {
     ord("2"): "Z",  # 2 → Z
     ord("6"): "G",  # 6 → G
     ord("8"): "B",  # 8 → B
+    ord("4"): "A",  # 4 → A  (en fuente de placa boliviana se confunden)
+    ord("3"): "E",  # 3 → E  (3 invertido visual similar a E)
 }
 
 
@@ -68,10 +71,13 @@ def correct_ocr_confusions(normalized: str) -> str:
         return normalized
     
     length = len(normalized)
-    if length == 6 or length == 7:
-        num_len = length - 3
-        zona_num = normalized[:num_len].translate(_NUM_ZONE_FIXES)
-        zona_let = normalized[num_len:].translate(_LET_ZONE_FIXES)
+    if length == 7:
+        zona_num = normalized[:4].translate(_NUM_ZONE_FIXES)
+        zona_let = normalized[4:].translate(_LET_ZONE_FIXES)
+        return zona_num + zona_let
+    elif length == 6:
+        zona_num = normalized[:3].translate(_NUM_ZONE_FIXES)
+        zona_let = normalized[3:].translate(_LET_ZONE_FIXES)
         return zona_num + zona_let
         
     return normalized

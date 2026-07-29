@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from cachetools import TTLCache
 
 from app.config.settings import settings
 from app.core.security import ALGORITHM, create_access_token, hash_password, verify_password
@@ -24,6 +25,24 @@ from app.core.limiter import limiter
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
+# Cache de usuarios autenticados: evita 1 SELECT por request (TTL 30s)
+# ⚠️ Limitación conocida: TTLCache es in-process, no distribuido.
+#   Si otro worker/admin modifica el usuario (ej. desactiva), este cache
+#   puede estar stale hasta 30s. get_current_user verifica esta_activo al
+#   salir del cache, pero solo cubre el worker local.
+#   Estrategias futuras: (1) Redis centralizado con pub/sub, (2) TTL más corto
+#   (ej. 5s), (3) Cache por request en vez de跨-request.
+user_cache = TTLCache(maxsize=512, ttl=30)
+
+async def _get_cached_user(user_uuid: UUID, db: AsyncSession) -> Usuario | None:
+    if user_uuid in user_cache:
+        return user_cache[user_uuid]
+    result = await db.execute(select(Usuario).where(Usuario.id == user_uuid))
+    user = result.scalars().first()
+    if user:
+        db.expunge(user)
+        user_cache[user_uuid] = user
+    return user
 
 async def get_current_user(
     request: Request,
@@ -62,8 +81,7 @@ async def get_current_user(
             detail="Token invalido.",
         )
 
-    result = await db.execute(select(Usuario).where(Usuario.id == user_uuid))
-    user = result.scalars().first()
+    user = await _get_cached_user(user_uuid, db)
     if not user or not user.esta_activo:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -92,8 +110,7 @@ async def get_current_user_optional(
         if not user_id:
             return None
         user_uuid = UUID(user_id)
-        result = await db.execute(select(Usuario).where(Usuario.id == user_uuid))
-        user = result.scalars().first()
+        user = await _get_cached_user(user_uuid, db)
         if user and user.esta_activo:
             return user
     except Exception:
@@ -236,6 +253,7 @@ async def update_my_profile(
             detail="Ese carnet ya esta siendo usado por otra cuenta.",
         )
 
+    current_user = await db.merge(current_user)
     current_user.nombre = profile_in.nombre.strip()
     current_user.apellido_paterno = profile_in.apellido_paterno.strip()
     current_user.apellido_materno = profile_in.apellido_materno.strip() if profile_in.apellido_materno else None
@@ -247,6 +265,8 @@ async def update_my_profile(
     try:
         await db.commit()
         await db.refresh(current_user)
+        # Invalidar cache
+        user_cache.pop(current_user.id, None)
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -262,8 +282,10 @@ async def delete_my_profile(
     current_user: Usuario = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    current_user = await db.merge(current_user)
     current_user.esta_activo = False
     await db.commit()
+    user_cache.pop(current_user.id, None)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -316,6 +338,7 @@ async def update_user_by_admin(
 
     await db.commit()
     await db.refresh(user)
+    user_cache.pop(user.id, None)
     return UsuarioResponse.model_validate(user)
 
 
@@ -338,4 +361,5 @@ async def delete_user_by_admin(
 
     await db.delete(user)
     await db.commit()
+    user_cache.pop(user.id, None)
     return

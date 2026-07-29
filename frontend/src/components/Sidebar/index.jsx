@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../hooks/useAuth";
+import ConfirmModal from "../ConfirmModal";
 
 function Sidebar({ isOpen, onClose }) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   const links = [];
 
@@ -29,6 +32,7 @@ function Sidebar({ isOpen, onClose }) {
     );
   } else {
     links.push(
+      { to: "/", label: "Inicio" },
       { to: "/vehiculos", label: "Mis Vehiculos" },
       { to: "/accesos", label: "Control de Accesos" }
     );
@@ -56,6 +60,27 @@ function Sidebar({ isOpen, onClose }) {
               <span className="nav-text">{link.label}</span>
             </NavLink>
           ))}
+          {user?.rol !== "DISPOSITIVO" && (
+            <button
+              type="button"
+              onClick={() => setIsLogoutConfirmOpen(true)}
+              className="nav-link nav-link-icon"
+              style={{
+                background: "rgba(220, 38, 38, 0.15)",
+                border: "1px solid rgba(220, 38, 38, 0.3)",
+                borderRadius: "8px",
+                textAlign: "left",
+                width: "calc(100% - 1.5rem)",
+                cursor: "pointer",
+                marginTop: "2rem",
+                color: "#f87171",
+                padding: "0.75rem 1rem",
+                margin: "2rem 0.75rem 0.75rem 0.75rem"
+              }}
+            >
+              <span className="nav-text" style={{ fontWeight: "700" }}>Cerrar Sesión</span>
+            </button>
+          )}
         </nav>
       </aside>
       {isOpen && (
@@ -66,6 +91,18 @@ function Sidebar({ isOpen, onClose }) {
           aria-label="Cerrar menu"
         />
       )}
+      <ConfirmModal
+        isOpen={isLogoutConfirmOpen}
+        title="Cerrar Sesión"
+        message="¿Estás seguro de que deseas cerrar tu sesión en el sistema?"
+        confirmColor="var(--color-danger, #ef4444)"
+        onConfirm={() => {
+          setIsLogoutConfirmOpen(false);
+          signOut();
+          onClose();
+        }}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
     </>
   );
 }

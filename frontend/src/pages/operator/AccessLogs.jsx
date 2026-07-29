@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import Loader from "../components/Loader";
-import { getAccessLogs, createAutoAccessLog, getMediaUrl, getMyVehicles } from "../api/plates";
-import { useAuth } from "../hooks/useAuth";
-import Pagination from "../components/Pagination";
-import ConfirmModal from "../components/ConfirmModal";
+import Loader from "../../components/Loader";
+import { getAccessLogs, createAutoAccessLog, getMediaUrl, getMyVehicles } from "../../api/plates";
+import { useAuth } from "../../hooks/useAuth";
+import Pagination from "../../components/Pagination";
+import ConfirmModal from "../../components/ConfirmModal";
+import SearchBar from "../../components/SearchBar";
 
 function AccessLogs() {
   const { user } = useAuth();
@@ -12,16 +13,22 @@ function AccessLogs() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [logsSearchQuery, setLogsSearchQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [selectedEvidenceUrl, setSelectedEvidenceUrl] = useState(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
 
   const viewEvidence = async (mediaId) => {
     try {
+      setEvidenceLoading(true);
       const result = await getMediaUrl(mediaId);
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      setSelectedEvidenceUrl(result.url);
     } catch (err) {
       setError(err?.response?.data?.detail || "La evidencia no esta disponible.");
+    } finally {
+      setEvidenceLoading(false);
     }
   };
 
@@ -117,9 +124,19 @@ function AccessLogs() {
     return <Loader label="Cargando historial de accesos..." />;
   }
 
+  const filteredLogs = logs.filter(log => {
+    const query = logsSearchQuery.toLowerCase();
+    const plate = log.vehicle?.license_plate?.toLowerCase() || "";
+    const direction = (log.direction === "ENTRY" ? "ingreso" : "salida").toLowerCase();
+    const zone = log.zone?.toLowerCase() || "";
+    const ownerName = log.vehicle?.owner?.full_name?.toLowerCase() || "";
+    const vehicleName = `${log.vehicle?.brand || ""} ${log.vehicle?.model || ""}`.toLowerCase();
+    return plate.includes(query) || direction.includes(query) || zone.includes(query) || ownerName.includes(query) || vehicleName.includes(query);
+  });
+
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentLogs = logs.slice(indexOfFirstItem, indexOfLastItem);
+  const currentLogs = filteredLogs.slice(indexOfFirstItem, indexOfLastItem);
 
   return (
     <section className="page-stack">
@@ -128,21 +145,23 @@ function AccessLogs() {
           <p className="eyebrow">Telemetría</p>
           <h3>Registros de Entrada y Salida</h3>
         </div>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button type="button" className="ghost-button" onClick={() => fetchData(true)} disabled={isRefreshing} style={{ padding: "0.6rem", display: "flex", alignItems: "center", gap: "0.5rem", opacity: isRefreshing ? 0.6 : 1 }} title="Refrescar tabla">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.21l5.67-5.67"/></svg>
-            {isRefreshing ? 'Actualizando…' : ''}
+        {isStaff && (
+          <button type="button" onClick={handleOpenModal} style={{ padding: "0.6rem 1.2rem" }}>
+            Registrar Acceso Manual
           </button>
-          {isStaff && (
-            <button type="button" onClick={handleOpenModal} style={{ padding: "0.6rem 1.2rem" }}>
-              Registrar Acceso Manual
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {success && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p style={{ color: "green", fontWeight: "bold", background: "#e6ffe6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid green", display: "inline-block", margin: 0 }}>{success}</p></div>}
       {error && <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}><p className="error-text" style={{ background: "#ffe6e6", padding: "0.5rem 1rem", borderRadius: "8px", border: "1px solid red", display: "inline-block", margin: 0 }}>{error}</p></div>}
+
+      <SearchBar
+        searchQuery={logsSearchQuery}
+        setSearchQuery={(val) => { setLogsSearchQuery(val); setCurrentPage(1); }}
+        placeholder="Buscar accesos por placa, dirección, zona o propietario..."
+        onRefresh={fetchData}
+        isRefreshing={isRefreshing}
+      />
 
       <div className="card" style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
@@ -162,7 +181,7 @@ function AccessLogs() {
             {currentLogs.map((log) => (
               <tr key={log.id} style={{ borderBottom: "1px solid rgba(21, 62, 117, 0.05)" }}>
                 <td style={{ padding: "1rem", fontWeight: "bold" }}>
-                  {new Date(log.timestamp).toLocaleString()}
+                  {new Date(log.timestamp).toLocaleString("es-BO", { hour12: false })}
                 </td>
                 <td style={{ padding: "1rem", fontFamily: "monospace", fontSize: "1.1rem", fontWeight: "bold", color: "#153e75" }}>
                   {log.vehicle?.license_plate}
@@ -196,10 +215,10 @@ function AccessLogs() {
                 </td>
               </tr>
             ))}
-            {!logs.length && (
+             {!filteredLogs.length && (
               <tr>
                 <td colSpan="8" style={{ padding: "2rem", textAlign: "center", color: "#666" }}>
-                  No se registran movimientos en la bitácora.
+                  No se encontraron movimientos con ese filtro.
                 </td>
               </tr>
             )}
@@ -207,10 +226,10 @@ function AccessLogs() {
         </table>
       </div>
 
-      {!loading && logs.length > 0 && (
+      {!loading && filteredLogs.length > 0 && (
         <Pagination
           currentPage={currentPage}
-          totalItems={logs.length}
+          totalItems={filteredLogs.length}
           itemsPerPage={itemsPerPage}
           onPageChange={setCurrentPage}
         />
@@ -319,6 +338,59 @@ function AccessLogs() {
         onConfirm={confirmConfig.onConfirm}
         onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
       />
+      {/* Modal para visualizar la evidencia */}
+      {(selectedEvidenceUrl || evidenceLoading) && (
+        <div 
+          className="modal-backdrop" 
+          onClick={() => setSelectedEvidenceUrl(null)}
+          style={{ zIndex: 100 }}
+        >
+          <div 
+            className="modal-card" 
+            onClick={(e) => e.stopPropagation()}
+            style={{ 
+              maxWidth: "700px", 
+              width: "90%", 
+              padding: "1.5rem", 
+              borderRadius: "16px",
+              background: "#ffffff"
+            }}
+          >
+            <div className="modal-header" style={{ marginBottom: "1rem" }}>
+              <div>
+                <p className="eyebrow" style={{ textTransform: "uppercase" }}>Bitácora de Acceso</p>
+                <h2 style={{ fontSize: "1.45rem", color: "#1e3a8a" }}>Evidencia de Detección</h2>
+              </div>
+              <button 
+                type="button" 
+                className="ghost-button" 
+                onClick={() => setSelectedEvidenceUrl(null)}
+                style={{ padding: "0.5rem 1rem" }}
+              >
+                Cerrar
+              </button>
+            </div>
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%", background: "#f1f5f9", borderRadius: "12px", overflow: "hidden", minHeight: "350px", maxHeight: "70vh", position: "relative" }}>
+              {evidenceLoading ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", alignItems: "center" }}>
+                  <span style={{ fontSize: "1.2rem", fontWeight: "bold", color: "#1e3a8a" }}>Cargando evidencia...</span>
+                </div>
+              ) : (
+                <img 
+                  src={selectedEvidenceUrl} 
+                  alt="Evidencia del Acceso" 
+                  style={{ 
+                    maxWidth: "100%", 
+                    maxHeight: "70vh", 
+                    objectFit: "contain",
+                    display: "block" 
+                  }} 
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
