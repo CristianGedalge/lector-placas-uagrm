@@ -51,9 +51,78 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
+
+def run_db_migrations() -> None:
+    """Ejecuta de forma programática las migraciones de Alembic al iniciar."""
+    from alembic.config import Config
+    from alembic import command
+    try:
+        logger.info("Iniciando ejecución automática de migraciones de Alembic...")
+        alembic_cfg = Config(PROJECT_ROOT / "alembic.ini")
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Migraciones de base de datos completadas exitosamente.")
+    except Exception as e:
+        logger.error(f"Error ejecutando migraciones automáticas: {e}")
+
+
+async def bootstrap_production_database() -> None:
+    """Crea el primer administrador y siembra marcas por defecto si la base de datos está vacía."""
+    from sqlalchemy.future import select
+    from app.db.models import Usuario, RoleEnum, Marca
+    from app.core.security import hash_password
+    from app.db.session import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as session:
+        # 1. Crear Administrador Inicial si no hay usuarios en la base de datos
+        try:
+            result = await session.execute(select(Usuario))
+            if not result.scalars().first():
+                logger.info("No se encontraron usuarios en la base de datos. Creando administrador inicial...")
+                bootstrap_carnet = os.getenv("BOOTSTRAP_ADMIN_CARNET", "1111111")
+                bootstrap_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "AdminPassword123")
+                bootstrap_nombre = os.getenv("BOOTSTRAP_ADMIN_NOMBRE", "Administrador")
+                bootstrap_apellido = os.getenv("BOOTSTRAP_ADMIN_APELLIDO", "Sistema")
+
+                admin_user = Usuario(
+                    nombre=bootstrap_nombre,
+                    apellido_paterno=bootstrap_apellido,
+                    carnet=bootstrap_carnet,
+                    contrasena_hash=hash_password(bootstrap_password),
+                    rol=RoleEnum.ADMINISTRADOR,
+                    esta_activo=True
+                )
+                session.add(admin_user)
+                logger.info(f"Administrador creado -> Carnet: {bootstrap_carnet}")
+        except Exception as e:
+            logger.error(f"Error al verificar/crear administrador inicial: {e}")
+
+        # 2. Crear Catálogo Base de Marcas si la tabla marcas está vacía
+        try:
+            brands_result = await session.execute(select(Marca))
+            if not brands_result.scalars().first():
+                logger.info("Catálogo de marcas vacío. Sembrando catálogo inicial de producción...")
+                default_brands = ["Toyota", "Nissan", "Suzuki", "Honda", "Ford", "Chevrolet", "Mitsubishi", "Hyundai", "Kia"]
+                for brand_name in default_brands:
+                    session.add(Marca(nombre=brand_name))
+                logger.info("Catálogo de marcas sembrado con éxito.")
+        except Exception as e:
+            logger.error(f"Error al sembrar marcas: {e}")
+
+        try:
+            await session.commit()
+        except Exception as e:
+            logger.error(f"Error al confirmar el bootstrap en la base de datos: {e}")
+            await session.rollback()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Inicializa FastALPR/FastPlateOCR una sola vez."""
+    # Ejecutar migraciones y bootstrap
+    run_db_migrations()
+    await bootstrap_production_database()
+
     target = database_target()
     logger.info(
         "Base configurada: provider=%s host=%s database=%s",

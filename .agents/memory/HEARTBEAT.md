@@ -2,69 +2,17 @@
 
 ## Estado vigente - 2026-07-30
 
-- Docker actualizado: backend Python 3.12 no-root, frontend Node 22 + Nginx TLS,
-  healthchecks y orden de arranque por salud. El volumen persistente se limita al
-  spool multimedia para no ocultar los modelos incluidos en la imagen.
-- `docker compose config --quiet` y build Vite pasan. La construcción real de
-  imágenes sigue pendiente porque Docker Desktop no tiene el daemon activo.
-
-- Endurecimiento: 82 pruebas correctas, 2 omitidas, cobertura 64%, Ruff/Bandit,
-  build Vite y smoke local correctos; el análisis anónimo devuelve 401.
-- No se modificó Neon ni se aplicaron migraciones. La revocación JWT real queda
-  pendiente porque requiere una tabla/migración coordinada.
-- Rotar SECRET_KEY y credenciales de Neon/Cloudinary antes de producción porque
-  fueron expandidas en una salida local de configuración.
-
-- Auditoría ISO/IEC 25010:2023, OWASP ASVS 5.0 L2, NIST SSDF 1.1 e ISO/IEC
-  25059:2023 documentada en `docs/`.
-- Validación automatizada: 77 pruebas correctas, 2 omitidas, cobertura 63%,
-  Ruff 0, Bandit 0 y pip-audit 0 vulnerabilidades conocidas.
-- Frontend: build Vite correcto con React Router 7.18.2. npm audit conserva un
-  advisory alto duplicado para modo RSC; este SPA no usa RSC/SSR/actions.
-- Alembic: repositorio y Neon alineados en la cabeza `c2d3e4f5a6b7`.
-  `alembic current/check` correctos tras convertir a `timestamptz` los tres
-  timestamps de solicitudes; se conservaron las 16 filas existentes.
-- Decisión de release: NO-GO hasta rotar secretos históricos, aplicar/verificar
-  migración y ejecutar E2E real de servicios, cámara y barrera.
-
-- Foco actual: OCR local y sugerencias conservadoras de color y tipo vehicular
-  para cargas estaticas y solicitudes de registro.
-- OCR vigente: `yolo-v9-t-384-license-plate-end2end` +
-  `cct-xs-v2-global-model`, ambos locales mediante ONNX Runtime en CPU.
-- Color vigente: RF-DETR Nano COCO obtiene la caja real del vehiculo; OpenCV
-  analiza primero y CLIP ViT-B/32 ONNX cuantizado actua como respaldo.
-- Regla de seguridad: sin caja vehicular confiable, iluminacion util o acuerdo
-  suficiente entre candidatos, devolver `DESCONOCIDO`.
-- Persistencia de color: solo `color_sugerido`, `confianza_color` y
-  `metodo_color` (`OPENCV`, `CLIP`, `HIBRIDO` o `DESCONOCIDO`).
-- Carga estatica: `/api/v1/plates/analyze` devuelve los tres campos aunque no
-  cree una solicitud, el vehiculo ya exista o el OCR quede en baja confianza,
-  siempre que exista una caja de placa para asociar el vehiculo.
-- Realtime: no ejecuta detector vehicular + CLIP en cada fotograma; el color se
-  calcula sobre la captura estatica seleccionada.
-- Tipo vigente: la misma inferencia RF-DETR se asocia a la placa por cobertura,
-  distancia, confianza y tamano relativo; solo sugiere Automovil, Motocicleta,
-  Bus o Camion cuando el catalogo activo tiene una coincidencia unica.
-- Persistencia de tipo: `tipo_sugerido_id`, `confianza_tipo` y `metodo_tipo`.
-  El nombre se obtiene por relacion y el selector confirmado queda editable.
-- Frontend: muestra color, confianza y metodo tras subir una imagen; el color
-  permanece editable por el operador en la bandeja de solicitudes.
-- Base de datos: la nueva instancia Neon esta en Alembic `b1c2d3e4f5a6 (head)`;
-  Automovil, Motocicleta, Bus y Camion estan activos y sin UUID hardcodeados.
-- Validacion mas reciente: 77 pruebas correctas, 2 omitidas, build Vite y smoke
-  HTTP correctos; grafo Alembic con una sola cabeza `c2d3e4f5a6b7`.
-- Licencias seleccionadas: OpenCV/RF-DETR Nano Apache-2.0; Supervision,
-  Open Image Models, ONNX Runtime y CLIP MIT. Conservar avisos de terceros.
-- Limitaciones: las capturas reales disponibles son insuficientes para calibrar
-  produccion; faltan pruebas propias de dia/noche, movimiento, reflejos y todos
-  los colores con las camaras finales.
-- Pendientes prioritarios: calibracion fisica OCR/color, prueba celular/USB y
-  barrera completa, reglas de firewall y dataset de evaluacion propio.
+- **Foco**: Preparación y automatización del despliegue en producción.
+- **Validado**: 82/82 pruebas unitarias/integración OK, smoke test HTTP OK, build Vite OK.
+- **Completado en esta sesión**:
+  - Cambiado localmente a la rama `main` y sincronizado con `origin/main` (22 commits nuevos).
+  - Actualizadas las dependencias locales en el entorno virtual (`fast-alpr`, `fast-plate-ocr`, etc.).
+  - app/main.py: implementada la ejecución automática de migraciones de Alembic y bootstrap del administrador inicial (cargado de variables de entorno) y catálogo de marcas por defecto al iniciar en `lifespan`.
+  - netlify.toml: creado en la raíz para habilitar redirecciones de React Router y build automático en Netlify.
+- **ACCIÓN REQUERIDA**: Desplegar la aplicación; ahora realiza migraciones y puesta a punto de forma automática y transparente en el arranque.
 
 ## Convenciones vigentes
 
-- La cuenta `DISPOSITIVO` y el registro fisico `Dispositivo` se asocian por
-  coincidencia exacta de nombre mientras no exista una FK explicita.
-- No guardar contrasenas, secretos, URLs RTSP, imagenes privadas ni URLs firmadas
-  en esta memoria.
+- La cuenta `DISPOSITIVO` y el registro fisico `Dispositivo` se asocian por coincidencia exacta de nombre mientras no exista una FK explicita.
+- No guardar contrasenas, secretos, URLs RTSP, imagenes privadas ni URLs firmadas en esta memoria.
 - No hacer push o merge salvo solicitud explicita.

@@ -1,5 +1,15 @@
 # MEMORY
 
+## 2026-07-30 - Automatización de Migraciones y Bootstrap de Producción
+
+- Se eliminó el script de desarrollo `seed_db.py` que contenía datos de prueba ficticios.
+- Se implementó la ejecución automática de migraciones de Alembic (`alembic upgrade head`) al iniciar el backend.
+- Se implementó la siembra automática del usuario `ADMINISTRADOR` inicial si la base de datos no tiene usuarios registrados.
+- Se implementó la siembra automática del catálogo base de marcas en la tabla `marcas` si está vacía.
+- **Seguridad**: Se evitó registrar valores por defecto quemados de bootstrap en `app/config/settings.py` cargando las credenciales iniciales de forma directa mediante `os.getenv` en `app/main.py`.
+- **Despliegue**: Se creó `netlify.toml` en la raíz para configurar el monorepo en Netlify (React Router redirecciones) y se definió el proceso de despliegue para Railway (Root Directory: `/backend`) y Netlify (Base: `frontend`).
+- Verificado: 82/82 pruebas pasan con éxito, build de Vite OK y smoke test del servidor FastAPI OK.
+
 ## 2026-07-30 - Migracion UTC aplicada en Neon
 
 - Tras integrar `origin/main`, se aplico `c2d3e4f5a6b7` sobre Neon desde
