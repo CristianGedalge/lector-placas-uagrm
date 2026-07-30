@@ -13,16 +13,18 @@
 ## Automatizados
 
 - [x] `compileall`.
-- [x] `pytest` completo y cobertura (63%).
+- [x] `pytest` completo y cobertura (64%; 82 correctas, 2 omitidas).
 - [x] Alembic `heads` (una cabeza: `c2d3e4f5a6b7`).
 - [x] Ruff sin hallazgos.
 - [x] Bandit sin hallazgos en código propio.
 - [x] pip-audit sin vulnerabilidades conocidas.
 - [x] Build Vite.
 - [x] `verify-project.ps1` con entorno local.
-- [x] `smoke-local.ps1`: analyze 200, health `ok`, 34 rutas y puerto liberado.
+- [x] `smoke-local.ps1`: analyze anónimo bloqueado con 401, health `ok`, 34 rutas y puerto liberado.
 - [ ] npm audit sin avisos: quedan 2 entradas por el mismo advisory RSC no aplicable
       al SPA; revaluar al publicarse una versión corregida.
+- [ ] Revocación JWT del lado servidor; requiere migración coordinada.
+- [ ] Construir y probar las imágenes Docker; el daemon local no estaba activo.
 
 ## Decisión
 

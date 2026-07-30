@@ -2,6 +2,19 @@
 
 ## Estado vigente - 2026-07-30
 
+- Docker actualizado: backend Python 3.12 no-root, frontend Node 22 + Nginx TLS,
+  healthchecks y orden de arranque por salud. El volumen persistente se limita al
+  spool multimedia para no ocultar los modelos incluidos en la imagen.
+- `docker compose config --quiet` y build Vite pasan. La construcción real de
+  imágenes sigue pendiente porque Docker Desktop no tiene el daemon activo.
+
+- Endurecimiento: 82 pruebas correctas, 2 omitidas, cobertura 64%, Ruff/Bandit,
+  build Vite y smoke local correctos; el análisis anónimo devuelve 401.
+- No se modificó Neon ni se aplicaron migraciones. La revocación JWT real queda
+  pendiente porque requiere una tabla/migración coordinada.
+- Rotar SECRET_KEY y credenciales de Neon/Cloudinary antes de producción porque
+  fueron expandidas en una salida local de configuración.
+
 - Auditoría ISO/IEC 25010:2023, OWASP ASVS 5.0 L2, NIST SSDF 1.1 e ISO/IEC
   25059:2023 documentada en `docs/`.
 - Validación automatizada: 77 pruebas correctas, 2 omitidas, cobertura 63%,

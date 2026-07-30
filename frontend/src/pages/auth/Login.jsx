@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 
 import Loader from "../../components/Loader";
 import { useAuth } from "../../hooks/useAuth";
@@ -87,9 +87,6 @@ function Login() {
 
         <p className="helper-text">
           ¿No tienes cuenta?{" "}
-          <Link className="text-link" to="/registro">
-            Crear cuenta
-          </Link>
         </p>
       </form>
     </main>

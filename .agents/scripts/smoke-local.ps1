@@ -78,11 +78,11 @@ try:
 except HTTPError as exc:
     status_code = exc.code
     payload = json.loads(exc.read().decode("utf-8"))
-if status_code not in {200, 422, 503}:
+if status_code != 401:
     raise SystemExit(f"analyze devolvio HTTP inesperado: {status_code}")
-if payload.get("estado") not in {"DETECTADO", "BAJA_CONFIANZA", "ERROR", "MANUAL"}:
-    raise SystemExit(f"contrato analyze inesperado: {payload}")
-print(f"analyze_http={status_code}; analyze_status={payload.get('estado')}")
+if payload.get("detail") != "No autorizado.":
+    raise SystemExit(f"proteccion analyze inesperada: {payload}")
+print(f"analyze_http={status_code}; anonymous_access=blocked")
 '@
     $analyzeSmoke | & $Python -
     if ($LASTEXITCODE -ne 0) { throw "smoke del endpoint analyze fallo" }

@@ -1,5 +1,4 @@
 import apiClient from "./axios";
-import { readSession } from "../services/storage";
 
 function mapAuthError(error, fallbackMessage) {
   if (error?.response?.data?.detail) {
@@ -57,23 +56,7 @@ function mapAuthError(error, fallbackMessage) {
   throw new Error(fallbackMessage);
 }
 
-function buildMockSession(credentials) {
-  return {
-    user: {
-      id: "00000000-0000-0000-0000-000000000000",
-      nombre: "Administrador",
-      apellido_paterno: "Local",
-      apellido_materno: "",
-      carnet: credentials?.carnet || "1234567",
-      rol: "ADMINISTRADOR",
-      esta_activo: true,
-      creado_el: new Date().toISOString()
-    },
-    token: "demo-token"
-  };
-}
-
-function normalizeSession(data, credentials) {
+function normalizeSession(data) {
   if (data?.user && data?.token) {
     return {
       token: data.token,
@@ -85,41 +68,24 @@ function normalizeSession(data, credentials) {
 }
 
 export async function loginUser(credentials) {
-  const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-
-  if (useMockAuth) {
-    return Promise.resolve(buildMockSession(credentials));
-  }
-
   try {
     const { data } = await apiClient.post("/auth/login", credentials);
-    return normalizeSession(data, credentials);
+    return normalizeSession(data);
   } catch (error) {
     mapAuthError(error, "No se pudo iniciar sesion.");
   }
 }
 
 export async function registerUser(payload) {
-  const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-
-  if (useMockAuth) {
-    return Promise.resolve(buildMockSession(payload));
-  }
-
   try {
     const { data } = await apiClient.post("/auth/register", payload);
-    return normalizeSession(data, payload);
+    return normalizeSession(data);
   } catch (error) {
     mapAuthError(error, "No se pudo completar el registro.");
   }
 }
 
 export async function getProfile() {
-  const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-  if (useMockAuth) {
-    return readSession()?.user || buildMockSession().user;
-  }
-
   try {
     const { data } = await apiClient.get("/auth/me");
     return data;
@@ -129,14 +95,6 @@ export async function getProfile() {
 }
 
 export async function updateProfile(payload) {
-  const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-  if (useMockAuth) {
-    return {
-      ...(readSession()?.user || buildMockSession().user),
-      ...payload
-    };
-  }
-
   try {
     const { data } = await apiClient.put("/auth/me", payload);
     return data;
@@ -146,11 +104,6 @@ export async function updateProfile(payload) {
 }
 
 export async function deleteProfile() {
-  const useMockAuth = import.meta.env.VITE_USE_MOCK_AUTH === "true";
-  if (useMockAuth) {
-    return true;
-  }
-
   try {
     await apiClient.delete("/auth/me");
     return true;
@@ -177,9 +130,7 @@ export async function getMediaUrl(mediaId) {
 
 export async function logoutUser() {
   try {
-    if (import.meta.env.VITE_USE_MOCK_AUTH !== "true") {
-      await apiClient.post("/auth/logout");
-    }
+    await apiClient.post("/auth/logout");
   } catch (error) {
     console.warn("Error al hacer logout en el backend:", error);
   }

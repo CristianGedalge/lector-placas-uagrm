@@ -1,5 +1,11 @@
 # Informe de limpieza controlada
 
+## Limpieza de seguridad - 2026-07-30
+
+- Eliminado `backend/app/services/token_cleanup.py`. Una búsqueda global confirmó
+  que no tenía importaciones ni llamadas y que su modelo `RevokedToken` no existe
+  en código ni migraciones. No se eliminó ninguna migración ni tabla.
+
 La limpieza se limita a artefactos generados cuya falta de uso se comprobó con
 búsqueda global y estado Git. No se eliminan migraciones, pruebas, licencias,
 scripts agénticos, fallbacks ni componentes de aplicación.

@@ -28,7 +28,7 @@ async def get_vehicle_with_relations(vehicle_id: uuid.UUID, db: AsyncSession):
 
 @router.get("/", response_model=list[VehiculoResponse])
 async def list_vehicles(
-    propietario_usuario_id: str | None = None,
+    propietario_usuario_id: uuid.UUID | None = None,
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
@@ -41,7 +41,7 @@ async def list_vehicles(
     ).order_by(Vehiculo.creado_el.desc())
 
     if propietario_usuario_id:
-        query = query.where(Vehiculo.propietario_usuario_id == uuid.UUID(propietario_usuario_id))
+        query = query.where(Vehiculo.propietario_usuario_id == propietario_usuario_id)
     
     # Solo los usuarios regulares ven únicamente sus propios vehículos
     if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
@@ -71,6 +71,11 @@ async def get_vehicle_by_plate(plate: str, db: AsyncSession = Depends(get_db), c
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vehículo no registrado.",
         )
+    if (
+        current_user.rol not in {RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR}
+        and vehicle.propietario_usuario_id != current_user.id
+    ):
+        raise HTTPException(status_code=403, detail="No autorizado")
     return vehicle
 
 
@@ -215,7 +220,7 @@ async def get_vehicle_detail(vehicle_id: uuid.UUID, db: AsyncSession = Depends(g
             detail="Vehículo no encontrado.",
         )
     if (
-        current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]
+        current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]
         and vehicle.propietario_usuario_id != current_user.id
     ):
         raise HTTPException(
@@ -227,6 +232,8 @@ async def get_vehicle_detail(vehicle_id: uuid.UUID, db: AsyncSession = Depends(g
 
 @router.post("/", response_model=VehiculoResponse, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(vehicle_in: VehiculoCreate, db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
+    if current_user.rol == RoleEnum.DISPOSITIVO:
+        raise HTTPException(status_code=403, detail="No autorizado")
     
     # Validar propietario, marca y tipo (secuencial: AsyncSession no es thread-safe para concurrente)
     owner_res = await db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id))

@@ -5,6 +5,7 @@ import os
 import unittest
 from uuid import UUID, uuid4
 
+from app.core.security import hash_password
 from app.db.models import Usuario
 from app.db.session import AsyncSessionLocal, check_database_connection, engine
 from app.main import app
@@ -28,21 +29,12 @@ class DatabaseIntegrationTests(unittest.TestCase):
         created_user_id: UUID | None = None
 
         try:
+            created_user_id = asyncio.run(
+                self._create_test_user(carnet, password)
+            )
             with TestClient(app) as client:
                 health = client.get("/api/v1/plates/health")
                 self.assertEqual(health.status_code, 200)
-
-                registration = client.post(
-                    "/api/auth/register",
-                    json={
-                        "nombre": "Prueba",
-                        "apellido_paterno": "Integracion",
-                        "carnet": carnet,
-                        "contrasena": password,
-                    },
-                )
-                self.assertEqual(registration.status_code, 201, registration.text)
-                created_user_id = UUID(registration.json()["user"]["id"])
 
                 login = client.post(
                     "/api/auth/login",
@@ -67,6 +59,19 @@ class DatabaseIntegrationTests(unittest.TestCase):
                 await session.commit()
         finally:
             await engine.dispose()
+
+    async def _create_test_user(self, carnet: str, password: str) -> UUID:
+        async with AsyncSessionLocal() as session:
+            user = Usuario(
+                nombre="Prueba",
+                apellido_paterno="Integracion",
+                carnet=carnet,
+                contrasena_hash=hash_password(password),
+                esta_activo=True,
+            )
+            session.add(user)
+            await session.commit()
+            return user.id
 
 
 if __name__ == "__main__":

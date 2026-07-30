@@ -3,7 +3,6 @@ import DashboardLayout from "../layouts/DashboardLayout";
 import Dashboard from "../pages/admin/Dashboard";
 import Login from "../pages/auth/Login";
 import Profile from "../pages/Profile";
-import Register from "../pages/auth/Register";
 import UploadPlate from "../pages/device/UploadPlate";
 import Users from "../pages/admin/Users";
 import Vehicles from "../pages/operator/Vehicles";
@@ -109,7 +108,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/registro" element={<Register />} />
+      <Route path="/registro" element={<Navigate to="/login" replace />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
         <Route path="/dashboard" element={<HomeRoute />} />

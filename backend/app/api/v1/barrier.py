@@ -16,8 +16,11 @@ import asyncio
 import json
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import APIRouter
+from app.api.v1.auth import require_scanner, require_staff
+from app.db.models import Usuario
+from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -28,16 +31,27 @@ _event_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
 
 
 class BarrierTriggerPayload(BaseModel):
-    action: str = "open"
-    direction: str = "ENTRADA"
+    action: Literal["open"] = "open"
+    direction: Literal["ENTRADA", "SALIDA"] = "ENTRADA"
 
 
 @router.post("/trigger", summary="Señal de apertura de barrera")
-async def trigger_barrier(payload: BarrierTriggerPayload):
+async def trigger_barrier(
+    payload: BarrierTriggerPayload,
+    _: Usuario = Depends(require_scanner),
+):
     """Recibe la señal del backend y la propaga al simulador via SSE."""
+    event = await enqueue_barrier_event(payload.direction, payload.action)
+    return {"ok": True, "queued": event}
+
+
+async def enqueue_barrier_event(
+    direction: str,
+    action: str = "open",
+) -> dict[str, str]:
     event = {
-        "direction": payload.direction,
-        "action": payload.action,
+        "direction": direction,
+        "action": action,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
     # No bloquear si la cola está llena (drop silencioso del evento más antiguo)
@@ -47,11 +61,11 @@ async def trigger_barrier(payload: BarrierTriggerPayload):
         except asyncio.QueueEmpty:
             pass
     await _event_queue.put(event)
-    return {"ok": True, "queued": event}
+    return event
 
 
 @router.get("/events", summary="SSE stream del simulador de barrera")
-async def barrier_events():
+async def barrier_events(_: Usuario = Depends(require_staff)):
     """Streaming SSE para que el simulador reciba eventos en tiempo real."""
 
     async def generate() -> AsyncGenerator[str, None]:
@@ -468,6 +482,6 @@ _SIMULATOR_HTML = """<!DOCTYPE html>
 
 
 @router.get("/simulator", response_class=HTMLResponse, summary="Simulador visual de barrera")
-async def barrier_simulator():
+async def barrier_simulator(_: Usuario = Depends(require_staff)):
     """Página HTML del simulador de barrera. Abre en el navegador del PC."""
     return HTMLResponse(content=_SIMULATOR_HTML)

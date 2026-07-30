@@ -151,18 +151,39 @@ app.include_router(barrier_router, prefix="/api/v1/barrier", tags=["Barrier Simu
 # SEC-010: Cabeceras de seguridad HTTP en todas las respuestas
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
+from starlette.responses import JSONResponse as StarletteJSONResponse
 from starlette.responses import Response as StarletteResponse
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):
+        if (
+            request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and request.cookies.get("session_token")
+        ):
+            if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+                return StarletteJSONResponse(
+                    {"detail": "Solicitud de navegador no valida."},
+                    status_code=403,
+                )
+            origin = request.headers.get("Origin")
+            if origin and origin not in settings.ALLOWED_ORIGINS:
+                return StarletteJSONResponse(
+                    {"detail": "Origen no autorizado."},
+                    status_code=403,
+                )
         response: StarletteResponse = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         # Permitir camara para el dispositivo movil en red local
-        response.headers["Permissions-Policy"] = "camera=(*), microphone=(), geolocation=()"
+        response.headers["Permissions-Policy"] = "camera=(self), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+        if request.url.path.startswith(("/api/auth", "/api/v1/media")):
+            response.headers["Cache-Control"] = "no-store"
+        if request.url.scheme == "https" and not settings.DEBUG:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)

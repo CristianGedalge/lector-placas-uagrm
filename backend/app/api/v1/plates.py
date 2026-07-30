@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.ai.pipeline import analyze_plate, get_pipeline_status
-from app.api.v1.auth import get_current_user, get_current_user_optional
+from app.api.v1.auth import require_scanner, require_staff
 from app.config.settings import settings
 from app.core.limiter import limiter
 from app.db.models import (
@@ -63,10 +63,27 @@ ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png"]
 async def _trigger_barrier_webhook(url: str, direction: str) -> None:
     """Dispara el webhook del actuador de barrera en background.
     Nunca lanza excepcion: si la barrera esta offline, el flujo continua normal."""
+    from urllib.parse import urlsplit
+
     import httpx
+
+    parsed = urlsplit(url)
+    if (
+        parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        and parsed.path.rstrip("/") == "/api/v1/barrier/trigger"
+    ):
+        from app.api.v1.barrier import enqueue_barrier_event
+
+        await enqueue_barrier_event(direction=direction)
+        return
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            await client.post(url, json={"action": "open", "direction": direction})
+            response = await client.post(
+                url,
+                json={"action": "open", "direction": direction},
+                follow_redirects=False,
+            )
+            response.raise_for_status()
     except httpx.HTTPError:
         pass  # Barrera offline no es error critico del sistema
 
@@ -80,7 +97,7 @@ async def analyze_plate_endpoint(
     realtime: bool = False,
     dispositivo_id: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario | None = Depends(get_current_user_optional)
+    current_user: Usuario = Depends(require_scanner)
 ):
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
@@ -88,7 +105,7 @@ async def analyze_plate_endpoint(
             detail="Formato de archivo no permitido. Solo se aceptan imágenes JPEG y PNG."
         )
     
-    image_bytes = await file.read()
+    image_bytes = await file.read(MAX_FILE_SIZE + 1)
     
     if len(image_bytes) > MAX_FILE_SIZE:
         raise HTTPException(
@@ -159,7 +176,7 @@ async def analyze_plate_endpoint(
             )
     # El análisis anónimo devuelve solo el resultado OCR. Consultas de vehículos,
     # escaneos, accesos y evidencias requieren una identidad autenticada.
-    if status_val in ["DETECTED", "LOW_CONFIDENCE"] and current_user is not None:
+    if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
         normalized = result_dict.get("normalized_plate")
         
         vehicle = None
@@ -186,7 +203,9 @@ async def analyze_plate_endpoint(
 
         # Si no hay dispositivo_id explícito pero el usuario autenticado es DISPOSITIVO,
         # resolver automáticamente por nombre (según convención del sistema)
-        if dispositivo is None and current_user is not None and current_user.rol.value == "DISPOSITIVO":
+        if current_user.rol == RoleEnum.DISPOSITIVO:
+            dispositivo = None
+            disp_uuid = None
             disp_res = await db.execute(
                 select(Dispositivo).where(
                     Dispositivo.nombre == current_user.nombre,
@@ -327,7 +346,7 @@ async def analyze_plate_endpoint(
             # El polling nunca persiste evidencias ni crea solicitudes.
             if (not realtime and status_val == "DETECTED" and normalized and
                     result_dict.get("is_valid_bolivian_format", False) and
-                    vehicle is None and current_user is not None):
+                    vehicle is None):
                 pending = await db.scalar(select(SolicitudRegistroVehiculo).where(
                     SolicitudRegistroVehiculo.placa_sugerida == normalized,
                     SolicitudRegistroVehiculo.estado == SolicitudRegistroEstadoEnum.PENDING,
@@ -387,7 +406,7 @@ async def analyze_plate_endpoint(
         # SEC-011: Solo exponer datos del propietario a usuarios autenticados
         propietario_nombre=(
             f"{vehicle.propietario.nombre} {vehicle.propietario.apellido_paterno}".strip()
-            if (vehicle and vehicle.propietario and current_user is not None) else None
+            if (vehicle and vehicle.propietario) else None
         ),
         color_sugerido=color_result.color_sugerido if color_result else (
             "DESCONOCIDO" if not realtime else None
@@ -411,7 +430,7 @@ async def list_plate_scans(
     skip: int = 0,
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user),
+    current_user: Usuario = Depends(require_staff),
 ):
     query = select(Escaneado).order_by(Escaneado.creado_el.desc()).offset(skip).limit(limit)
     # Por ahora todos ven todo o solo admins
