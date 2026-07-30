@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-from app.api.v1.auth import get_current_user_optional, user_cache
+from app.api.v1.auth import get_current_user, user_cache
 from app.core.security import create_access_token
 from starlette.requests import Request
 
@@ -27,6 +27,6 @@ async def _assert_optional_auth_accepts_mobile_bearer_token():
         "headers": [(b"authorization", f"Bearer {create_access_token(str(user_id))}".encode())],
     })
 
-    resolved = await get_current_user_optional(request, db)
+    resolved = await get_current_user(request, create_access_token(str(user_id)), db)
 
     assert resolved.id == user_id

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from app.api.v1.auth import get_current_user
+from app.api.v1.auth import get_current_user, require_staff
 from app.config.settings import settings
 from app.db.models import (
     Acceso,
@@ -44,7 +44,7 @@ router = APIRouter()
 async def create_access_log(
     payload: AccesoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_staff),
 ):
     scan_result = await db.execute(select(Escaneado).where(Escaneado.id == payload.escaneado_id))
     escaneado = scan_result.scalar_one_or_none()
@@ -52,13 +52,6 @@ async def create_access_log(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="El escaneo no existe."
-        )
-
-    # Solo admins, operadores o dispositivos pueden registrar accesos
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permisos para registrar accesos.",
         )
 
     log = Acceso(
@@ -112,19 +105,13 @@ async def create_access_log(
 async def create_auto_access_log(
     payload: AccesoAutoCreate,
     db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_staff),
 ):
     access, _ = await _create_auto_access_log(payload, db, current_user)
     return access
 
 
 async def _create_auto_access_log(payload, db, current_user, evidence: bytes | None = None):
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR, RoleEnum.DISPOSITIVO]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permisos para registrar accesos.",
-        )
-
     v_res = await db.execute(select(Vehiculo).where(Vehiculo.id == payload.vehicle_id))
     vehiculo = v_res.scalar_one_or_none()
     if not vehiculo:
@@ -264,7 +251,7 @@ async def create_auto_access_with_evidence(
     direction: str | None = Form(None),
     image: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_staff),
 ):
     evidence = await image.read(settings.MEDIA_MAX_UPLOAD_BYTES + 1)
     if len(evidence) > settings.MEDIA_MAX_UPLOAD_BYTES:
@@ -290,6 +277,8 @@ async def list_access_logs(
     db: AsyncSession = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
+    if current_user.rol == RoleEnum.DISPOSITIVO:
+        raise HTTPException(status_code=403, detail="No autorizado")
     stmt = (
         select(Acceso)
         .options(

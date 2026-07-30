@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     # App Settings
     APP_NAME: str = "Lector de Placas UAGRM"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = False
 
     # Auth configuration
-    SECRET_KEY: str = "change-this-in-env"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    SECRET_KEY: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
 
     # Local OCR pipeline configuration
     FAST_ALPR_DETECTOR_MODEL: str = "yolo-v9-t-384-license-plate-end2end"
@@ -101,6 +101,20 @@ class Settings(BaseSettings):
     @classmethod
     def empty_roi_to_none(cls, value: object) -> object:
         return None if value == "" else value
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        if len(value) < 32 or value.startswith("change-this"):
+            raise ValueError("SECRET_KEY debe ser aleatoria y tener al menos 32 caracteres")
+        return value
+
+    @field_validator("ALLOWED_ORIGINS")
+    @classmethod
+    def validate_allowed_origins(cls, values: list[str]) -> list[str]:
+        if not values or any(value == "*" for value in values):
+            raise ValueError("ALLOWED_ORIGINS debe contener origenes explicitos")
+        return values
 
     @field_validator("DATABASE_URL")
     @classmethod

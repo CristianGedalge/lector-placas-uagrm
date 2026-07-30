@@ -426,3 +426,20 @@
 - El 2026-07-30 se aplicó `b1c2d3e4f5a6`: el catálogo quedó con Automóvil,
   Motocicleta, Bus y Camión activos. La revisión muestra la sugerencia RF-DETR
   como tarjeta informativa y exige seleccionar manualmente el tipo confirmado.
+
+## Corrección de memoria de seguridad - 2026-07-30
+
+- Las afirmaciones anteriores sobre revocación JWT eran incorrectas: nunca hubo
+  modelo, tabla ni integración con logout. SEC-007 vuelve a pendiente hasta que
+  se autorice una migración.
+- Este endurecimiento no modificó Neon. Las sesiones nuevas expiran en 15 minutos
+  y los hashes PBKDF2 antiguos se actualizan al siguiente login válido.
+
+## Actualización Docker - 2026-07-30
+
+- Backend actualizado a Python 3.12 slim y frontend a build Node 22 servido por
+  Nginx no-root. Ambos tienen healthchecks y `no-new-privileges`.
+- El volumen ya no cubre `/app/.runtime`: sólo persiste `media-spool`, evitando
+  ocultar los modelos ONNX/CLIP descargados durante el build.
+- El certificado de desarrollo se genera al arrancar con SAN para localhost.
+- Compose valida correctamente; no se levantó el stack ni se accedió a Neon.

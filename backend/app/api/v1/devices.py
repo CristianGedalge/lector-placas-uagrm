@@ -1,6 +1,6 @@
 import uuid
 
-from app.api.v1.auth import get_current_user, require_admin
+from app.api.v1.auth import require_admin
 from app.db.models import Dispositivo, TipoDispositivo, Usuario
 from app.db.session import get_db
 from app.schemas.device import (
@@ -24,7 +24,7 @@ router = APIRouter()
 @router.get("/types", response_model=list[TipoDispositivoResponse])
 async def list_device_types(
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = Depends(require_admin)
 ):
     result = await db.execute(select(TipoDispositivo).order_by(TipoDispositivo.nombre))
     return list(result.scalars().all())
@@ -88,7 +88,7 @@ async def delete_device_type(
 @router.get("/", response_model=list[DispositivoResponse])
 async def list_devices(
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = Depends(require_admin)
 ):
     result = await db.execute(
         select(Dispositivo)
@@ -113,7 +113,8 @@ async def create_device(
         nombre=device_in.nombre.strip(),
         ubicacion=device_in.ubicacion.strip(),
         tipo_dispositivo_id=device_in.tipo_dispositivo_id,
-        esta_activo=device_in.esta_activo
+        esta_activo=device_in.esta_activo,
+        webhook_url=device_in.webhook_url,
     )
     db.add(new_device)
     try:
@@ -133,7 +134,7 @@ async def create_device(
 async def get_device(
     device_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario = Depends(get_current_user)
+    current_user: Usuario = Depends(require_admin)
 ):
     result = await db.execute(
         select(Dispositivo)
@@ -169,6 +170,8 @@ async def update_device(
         device.tipo_dispositivo_id = device_in.tipo_dispositivo_id
     if device_in.esta_activo is not None:
         device.esta_activo = device_in.esta_activo
+    if "webhook_url" in device_in.model_fields_set:
+        device.webhook_url = device_in.webhook_url
 
     try:
         await db.commit()

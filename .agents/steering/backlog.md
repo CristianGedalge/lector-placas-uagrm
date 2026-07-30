@@ -91,7 +91,7 @@ superseded por los items siguientes. Se conservan debajo solo como historial.
 - `EFI-002` | `done` | Prioridad `alta` | Limitar resolución máxima de imagen subida (MAX_STATIC_DIM = 1280) en backend | Dependencias: ninguna
 - `EFI-003` | `done` | Prioridad `alta` | Índices compuestos en PostgreSQL para búsquedas rápidas en historiales | Dependencias: ninguna
 - `EFI-004` | `done` | Prioridad `media` | Memoizar tablas e interfaces de usuarios mediante React.memo y useCallback | Dependencias: ninguna
-- `SEC-007` | `done` | Prioridad `media` | Script periódico de purga de tokens revocados expirados en BD | Dependencias: ninguna
+- `SEC-007` | `pending` | Prioridad `alta` | Implementar revocación JWT real y purga de tokens mediante migración coordinada | Dependencias: aprobación para modificar la BD
 - `MNT-002` | `done` | Prioridad `alta` | Centralizar carga de datos y refresco en hook usePageData | Dependencias: ninguna
 - `MNT-003` | `done` | Prioridad `alta` | Fragmentar UploadPlate.jsx extrayendo modales a componentes | Dependencias: ninguna
 - `POR-002` | `done` | Prioridad `media` | Makefile unificado para comandos operativos | Dependencias: ninguna

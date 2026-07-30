@@ -5,6 +5,7 @@ from app.ai.validators import normalize_plate_text, validate_bolivian_plate
 from app.api.v1.auth import require_staff
 from app.db.models import (
     Marca,
+    RoleEnum,
     SolicitudRegistroEstadoEnum,
     SolicitudRegistroVehiculo,
     TipoVehiculo,
@@ -42,7 +43,9 @@ async def approve_request(request_id: UUID, payload: SolicitudRegistroApprove, d
     if not validate_bolivian_plate(plate): raise HTTPException(422, "La placa no tiene formato valido")
     if await db.scalar(select(Vehiculo).where(Vehiculo.placa == plate)):
         raise HTTPException(409, "La placa ya esta registrada")
-    if not await db.get(Usuario, payload.propietario_usuario_id): raise HTTPException(422, "Propietario no encontrado")
+    owner = await db.get(Usuario, payload.propietario_usuario_id)
+    if not owner or not owner.esta_activo or owner.rol != RoleEnum.USUARIO:
+        raise HTTPException(422, "El propietario debe ser un usuario regular activo")
     if not await db.get(Marca, payload.marca_id): raise HTTPException(422, "Marca no encontrada")
     if not await db.get(TipoVehiculo, payload.tipo_vehiculo_id): raise HTTPException(422, "Tipo de vehiculo no encontrado")
     vehicle = Vehiculo(placa=plate, color=payload.color.strip(), marca_id=payload.marca_id, tipo_vehiculo_id=payload.tipo_vehiculo_id, propietario_usuario_id=payload.propietario_usuario_id, foto_id=request.imagen_id)
@@ -53,7 +56,11 @@ async def approve_request(request_id: UUID, payload: SolicitudRegistroApprove, d
 
 @router.post("/{request_id}/reject", response_model=SolicitudRegistroResponse)
 async def reject_request(request_id: UUID, payload: SolicitudRegistroReject, db: AsyncSession = Depends(get_db), reviewer: Usuario = Depends(require_staff)):
-    request = await db.get(SolicitudRegistroVehiculo, request_id)
+    request = await db.scalar(
+        select(SolicitudRegistroVehiculo)
+        .where(SolicitudRegistroVehiculo.id == request_id)
+        .with_for_update()
+    )
     if not request: raise HTTPException(404, "Solicitud no encontrada")
     if request.estado != SolicitudRegistroEstadoEnum.PENDING: raise HTTPException(409, "La solicitud ya fue revisada")
     request.estado = SolicitudRegistroEstadoEnum.REJECTED; request.revisado_por_usuario_id = reviewer.id; request.revisado_el = datetime.now(timezone.utc)

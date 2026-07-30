@@ -52,6 +52,13 @@ class UsuarioProfileUpdateRequest(BaseModel):
     carnet: str = Field(min_length=5, max_length=50)
     contrasena: str | None = Field(default=None, min_length=8, max_length=128)
 
+    @field_validator("contrasena")
+    @classmethod
+    def validate_optional_password_strength(cls, value: str | None) -> str | None:
+        if value is not None:
+            UsuarioRegisterRequest.validate_password_strength(value)
+        return value
+
 
 class UsuarioAdminUpdateRequest(BaseModel):
     nombre: str = Field(min_length=2, max_length=120)

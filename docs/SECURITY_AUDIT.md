@@ -44,3 +44,19 @@ sólo para reproducibilidad, procedencia y límites de los componentes IA.
 2. Aplicar la migración pendiente con backup y verificar `alembic current/check`.
 3. Ejecutar E2E de roles, carga privada, retención, cámara y barrera.
 4. Configurar SCA/SAST recurrente y bloquear releases con P0/P1 aplicables.
+
+## Revisión de endurecimiento - 2026-07-30
+
+- Se bloqueó el registro público de roles privilegiados y se protegieron OCR,
+  barrera, dispositivos, dashboard, vehículos y logs por rol o propiedad.
+- Se añadieron defensas CSRF, orígenes explícitos, cabeceras defensivas, límites
+  de carga y validación de webhooks.
+- PBKDF2-SHA256 usa 600.000 iteraciones y actualiza hashes antiguos tras un login
+  válido. Los JWT nuevos expiran por defecto en 15 minutos.
+- Se retiró `token_cleanup.py`: no tenía referencias y dependía del modelo
+  inexistente `RevokedToken`. El logout aún no revoca JWT en servidor; corregirlo
+  exige una migración coordinada y sigue pendiente.
+- Una verificación local expandió credenciales del `.env` en la salida de Docker
+  Compose. Deben considerarse expuestas y rotarse antes de desplegar.
+- Resultado: 82 pruebas pasan, 2 se omiten, cobertura 64%, Ruff/Bandit limpios,
+  pip-audit sin vulnerabilidades conocidas y build Vite correcto.

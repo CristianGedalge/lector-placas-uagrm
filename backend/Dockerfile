@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 # Metadatos de la imagen
 LABEL maintainer="UAGRM" \
@@ -6,7 +6,9 @@ LABEL maintainer="UAGRM" \
 
 # Variables de entorno para Python
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -28,13 +30,21 @@ RUN python -c "from fast_alpr import ALPR; ALPR(detector_model='yolo-v9-t-384-li
 
 # Preinstala tambien el detector vehicular y CLIP para operar sin red al arrancar.
 RUN python -c "from open_image_models.detection.factory import create_detector; create_detector('rf-detr-nano-384-coco', conf_thresh=.45, providers=['CPUExecutionProvider'])" && \
-    python -c "from huggingface_hub import hf_hub_download; files=['onnx/model_quantized.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','preprocessor_config.json','config.json']; [hf_hub_download(repo_id='Xenova/clip-vit-base-patch32', filename=f, local_dir='/app/.runtime/models/clip-vit-b-32') for f in files]"
+    python -c "from huggingface_hub import hf_hub_download; files=['onnx/model_quantized.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','preprocessor_config.json','config.json']; [hf_hub_download(repo_id='Xenova/clip-vit-base-patch32', revision='d15189d7028b43f1d3e65039190477f6af591c2a', filename=f, local_dir='/app/.runtime/models/clip-vit-b-32') for f in files]"
 
 # Copiar el código fuente de la aplicación
 COPY . .
 
+RUN addgroup --system app && adduser --system --ingroup app app && \
+    mkdir -p /app/.runtime && chown -R app:app /app
+
+USER app
+
 # Puerto de la aplicación
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/plates/health', timeout=5)" || exit 1
 
 # Comando de inicio con Uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

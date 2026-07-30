@@ -7,6 +7,7 @@ from app.core.security import (
     ALGORITHM,
     create_access_token,
     hash_password,
+    password_hash_needs_upgrade,
     verify_password,
 )
 from app.db.models import RoleEnum, Usuario
@@ -37,6 +38,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 #   Estrategias futuras: (1) Redis centralizado con pub/sub, (2) TTL más corto
 #   (ej. 5s), (3) Cache por request en vez de跨-request.
 user_cache = TTLCache(maxsize=512, ttl=30)
+_DUMMY_PASSWORD_HASH = hash_password("InvalidPassword1")
 
 async def _get_cached_user(user_uuid: UUID, db: AsyncSession) -> Usuario | None:
     if user_uuid in user_cache:
@@ -95,34 +97,6 @@ async def get_current_user(
     return user
 
 
-async def get_current_user_optional(
-    request: Request,
-    db: AsyncSession = Depends(get_db)
-) -> Usuario | None:
-    cookie_token = request.cookies.get("session_token")
-    auth_header = request.headers.get("Authorization")
-    token = None
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ")[1]
-    active_token = cookie_token or token
-
-    if not active_token:
-        return None
-
-    try:
-        payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            return None
-        user_uuid = UUID(user_id)
-        user = await _get_cached_user(user_uuid, db)
-        if user and user.esta_activo:
-            return user
-    except (jwt.PyJWTError, ValueError):
-        return None
-    return None
-
-
 async def require_admin(current_user: Usuario = Depends(get_current_user)) -> Usuario:
     if current_user.rol != RoleEnum.ADMINISTRADOR:
         raise HTTPException(status_code=403, detail="Se requiere rol administrativo.")
@@ -132,6 +106,16 @@ async def require_admin(current_user: Usuario = Depends(get_current_user)) -> Us
 async def require_staff(current_user: Usuario = Depends(get_current_user)) -> Usuario:
     if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]:
         raise HTTPException(status_code=403, detail="Se requiere rol administrativo o de operador.")
+    return current_user
+
+
+async def require_scanner(current_user: Usuario = Depends(get_current_user)) -> Usuario:
+    if current_user.rol not in {
+        RoleEnum.ADMINISTRADOR,
+        RoleEnum.OPERADOR,
+        RoleEnum.DISPOSITIVO,
+    }:
+        raise HTTPException(status_code=403, detail="No autorizado para escanear placas.")
     return current_user
 
 
@@ -151,7 +135,7 @@ async def register_user(
     request: Request,
     user_in: UsuarioRegisterRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: Usuario | None = Depends(get_current_user_optional)
+    current_user: Usuario = Depends(require_admin)
 ):
     result = await db.execute(
         select(Usuario).where(Usuario.carnet == user_in.carnet.strip())
@@ -201,17 +185,18 @@ async def login_user(
     )
     user = result.scalars().first()
 
-    if not user or not verify_password(credentials.contrasena, user.contrasena_hash):
+    password_hash = user.contrasena_hash if user else _DUMMY_PASSWORD_HASH
+    password_valid = verify_password(credentials.contrasena, password_hash)
+    if not user or not password_valid or not user.esta_activo:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Credenciales invalidas.",
         )
 
-    if not user.esta_activo:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="El usuario se encuentra inactivo.",
-        )
+    if password_hash_needs_upgrade(user.contrasena_hash):
+        user.contrasena_hash = hash_password(credentials.contrasena)
+        await db.commit()
+        user_cache.pop(user.id, None)
 
     access_token = create_access_token(subject=str(user.id))
     

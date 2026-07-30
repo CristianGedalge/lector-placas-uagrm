@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import cv2
 import numpy as np
 from app.api.v1 import plates
+from app.db.models import RoleEnum
 from app.schemas.plate import PlateAnalysisResponse
 from app.services.vehicle_detection import VehicleAssociation
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ class PlatesAPITests(unittest.TestCase):
         query_result = MagicMock()
         query_result.scalars.return_value.first.return_value = None
         self.db.execute = AsyncMock(return_value=query_result)
+        self.db.scalar = AsyncMock(return_value=SimpleNamespace(id=None))
         self.db.commit = AsyncMock()
         self.db.rollback = AsyncMock()
         self.db.flush = AsyncMock()
@@ -27,7 +29,15 @@ class PlatesAPITests(unittest.TestCase):
         async def override_db():
             yield self.db
 
+        async def override_scanner():
+            return SimpleNamespace(
+                id=None,
+                nombre="Operador de prueba",
+                rol=RoleEnum.OPERADOR,
+            )
+
         app.dependency_overrides[plates.get_db] = override_db
+        app.dependency_overrides[plates.require_scanner] = override_scanner
         app.include_router(plates.router, prefix="/api/v1/plates")
         self.client = TestClient(app)
 
@@ -99,8 +109,8 @@ class PlatesAPITests(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected_response)
-        self.db.flush.assert_not_awaited()
-        self.db.commit.assert_not_awaited()
+        self.db.flush.assert_awaited()
+        self.db.commit.assert_awaited_once()
 
     def test_static_upload_returns_color_without_creating_request(self):
         pipeline_output = {
@@ -145,7 +155,7 @@ class PlatesAPITests(unittest.TestCase):
         self.assertEqual(response.json()["confianza_color"], 0.81)
         self.assertEqual(response.json()["metodo_color"], "HIBRIDO")
         analyzer.analyze.assert_called_once()
-        self.db.commit.assert_not_awaited()
+        self.db.commit.assert_awaited_once()
 
     def test_schema_accepts_ocr_supervision_backend(self):
         response = PlateAnalysisResponse(
