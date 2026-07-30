@@ -13,7 +13,7 @@
 ## Automatizados
 
 - [x] `compileall`.
-- [x] `pytest` completo y cobertura (62%).
+- [x] `pytest` completo y cobertura (63%).
 - [x] Alembic `heads` (una cabeza: `c2d3e4f5a6b7`).
 - [x] Ruff sin hallazgos.
 - [x] Bandit sin hallazgos en código propio.

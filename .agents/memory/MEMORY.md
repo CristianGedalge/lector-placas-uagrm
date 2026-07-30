@@ -1,5 +1,20 @@
 # MEMORY
 
+## 2026-07-30 - Auditoría técnica y estabilización
+
+- Se generaron `QUALITY_AUDIT.md`, `SECURITY_AUDIT.md`,
+  `PERFORMANCE_BASELINE.md`, `CLEANUP_REPORT.md` y `RELEASE_CHECKLIST.md`.
+- Se restringió `CAMERA_API_URL` a HTTP(S), se fijó el SHA del modelo CLIP y se
+  corrigió el verificador para preferir `backend/.venv`.
+- La metadata de `EstadoCampus` refleja el constraint/índice aplicado. La nueva
+  migración `c2d3e4f5a6b7` convierte timestamps de solicitudes a timezone UTC;
+  Neon no se modificó y continúa en `b1c2d3e4f5a6`.
+- Resultado: 77 pass, 2 skip, cobertura 63%, Ruff/Bandit limpios, pip-audit 0,
+  build y smoke correctos. npm audit mantiene un aviso RSC no aplicable al SPA.
+- Se eliminaron sólo artefactos regenerables de auditoría en un commit separado.
+- Decisión final: NO-GO para producción por rotación de secretos, migración y
+  E2E externo/físico pendientes. No se hizo push ni merge.
+
 ## 2026-07-29 - FastPlateOCR y sugerencia local de color
 
 - EasyOCR fue retirado. El OCR vigente usa FastALPR 0.4.0 con detector YOLOv9

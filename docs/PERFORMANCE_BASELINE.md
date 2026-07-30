@@ -6,7 +6,7 @@ son de verificación técnica, no un benchmark de capacidad.
 | Métrica | Antes / evidencia previa | Después |
 |---|---:|---:|
 | Suite backend | 76 pass, 2 skip | 77 pass, 2 skip tras prueba de esquema URL |
-| Cobertura total | no consolidada en informe | 62% (2829 sentencias, 1062 sin cubrir) |
+| Cobertura total | no consolidada en informe | 63% (2833 sentencias, 1059 sin cubrir) |
 | Build frontend | 109 módulos | 109 módulos; JS 444.24 kB, gzip 117.63 kB; CSS 12.88 kB, gzip 3.45 kB |
 | Ruff | 13 hallazgos pendientes en reanudación | 0 |
 | Bandit (`app`, `scripts`) | 2 medios | 0 |
