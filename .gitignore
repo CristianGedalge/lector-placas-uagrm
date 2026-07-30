@@ -15,3 +15,16 @@ frontend/.git-legacy-frontend/
 frontend/node_modules/
 frontend/dist/
 backend/.env
+backend/.coverage
+backend/bandit_output.*
+backend/coverage_*output.txt
+backend/coverage_report.txt
+backend/pip_audit*.json
+backend/pip_audit*.txt
+backend/ruff_*.json
+backend/ruff_*.txt
+frontend/audit_*.json
+frontend/audit_*.txt
+frontend_npm_audit.json
+npm_audit_root.json
+/package-lock.json
