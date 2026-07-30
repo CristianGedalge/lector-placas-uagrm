@@ -46,4 +46,8 @@ class PlateAnalysisResponse(BaseModel):
     color_sugerido: Optional[str] = None
     confianza_color: Optional[float] = None
     metodo_color: Optional[str] = None
+    tipo_sugerido_id: Optional[UUID] = None
+    tipo_sugerido: Optional[str] = None
+    confianza_tipo: Optional[float] = None
+    metodo_tipo: Optional[str] = None
 

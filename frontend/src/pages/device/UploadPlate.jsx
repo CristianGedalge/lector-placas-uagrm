@@ -1269,6 +1269,14 @@ function UploadPlate() {
                     {analysisPreview.metodo_color && <> · Método: {analysisPreview.metodo_color}</>}
                   </p>
                 )}
+                {analysisPreview.metodo_tipo && (
+                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>
+                    Tipo sugerido por RF-DETR: <strong>{analysisPreview.tipo_sugerido || "DESCONOCIDO"}</strong>
+                    {analysisPreview.tipo_sugerido && analysisPreview.confianza_tipo != null && (
+                      <> · {Math.round(analysisPreview.confianza_tipo * 100)} %</>
+                    )}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1457,6 +1465,14 @@ function UploadPlate() {
                       <> ({Math.round(analysisPreview.confianza_color * 100)}%)</>
                     )}
                     {analysisPreview.metodo_color && <> · Método: {analysisPreview.metodo_color}</>}
+                  </p>
+                )}
+                {analysisPreview.metodo_tipo && (
+                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>
+                    Tipo sugerido por RF-DETR: <strong>{analysisPreview.tipo_sugerido || "DESCONOCIDO"}</strong>
+                    {analysisPreview.tipo_sugerido && analysisPreview.confianza_tipo != null && (
+                      <> · {Math.round(analysisPreview.confianza_tipo * 100)} %</>
+                    )}
                   </p>
                 )}
               </div>

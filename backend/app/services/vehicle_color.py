@@ -9,6 +9,7 @@ import supervision as sv
 
 from app.config.settings import settings
 from app.services.clip_color import CLIPColorClassifier
+from app.services.vehicle_detection import VehicleAssociation, VehicleAssociationService
 
 
 @dataclass(frozen=True)
@@ -32,23 +33,27 @@ class VehicleColorResult:
 class HybridVehicleColorAnalyzer:
     """Coordina deteccion vehicular, OpenCV y el respaldo local CLIP."""
 
-    VEHICLE_LABELS = {"car", "truck", "bus", "motorcycle"}
-
     def __init__(self, vehicle_detector: Any, clip_classifier: CLIPColorClassifier) -> None:
         self.vehicle_detector = vehicle_detector
         self.clip_classifier = clip_classifier
         self.opencv = VehicleColorAnalyzer()
 
-    def analyze(self, image_bytes: bytes, plate_bbox) -> VehicleColorResult:
+    def analyze(
+        self,
+        image_bytes: bytes,
+        plate_bbox,
+        association: VehicleAssociation | None = None,
+    ) -> VehicleColorResult:
         image = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
         if image is None:
             return VehicleColorResult("DESCONOCIDO", 0.0, "DESCONOCIDO")
 
-        vehicle_bbox = self._find_vehicle_bbox(image, plate_bbox)
-        if vehicle_bbox is None:
+        association = association or VehicleAssociationService(self.vehicle_detector).detect(image, plate_bbox)
+        if association is None:
             # CLIP nunca recibe la escena completa ni una region inferida desde la placa.
             return VehicleColorResult("DESCONOCIDO", 0.0, "DESCONOCIDO")
 
+        vehicle_bbox = association.bbox
         suggestions = self.opencv.analyze(image_bytes, plate_bbox, vehicle_bbox)
         visible = self.opencv.visible_value(suggestions)
         confidence = self.opencv.average_confidence(suggestions)
@@ -72,35 +77,6 @@ class HybridVehicleColorAnalyzer:
             combined = 0.50 * confidence + 0.50 * clip.confianza
             return VehicleColorResult(clip.valor, round(combined, 4), method, vehicle_bbox)
         return VehicleColorResult(clip.valor, round(clip.confianza, 4), method, vehicle_bbox)
-
-    def _find_vehicle_bbox(self, image: np.ndarray, plate_bbox) -> tuple[int, int, int, int] | None:
-        if self.vehicle_detector is None or not plate_bbox or len(plate_bbox) != 4:
-            return None
-        detections = self.vehicle_detector.predict(image)
-        px1, py1, px2, py2 = map(float, plate_bbox)
-        center_x, center_y = (px1 + px2) / 2, (py1 + py2) / 2
-        candidates = []
-        for detection in detections:
-            if str(detection.label).lower() not in self.VEHICLE_LABELS:
-                continue
-            if float(detection.confidence) < settings.VEHICLE_DETECTOR_CONFIDENCE:
-                continue
-            box = detection.bounding_box
-            height, width = image.shape[:2]
-            xyxy = (
-                max(0, int(box.x1)), max(0, int(box.y1)),
-                min(width, int(box.x2)), min(height, int(box.y2)),
-            )
-            vehicle_width = xyxy[2] - xyxy[0]
-            vehicle_height = xyxy[3] - xyxy[1]
-            if vehicle_width < 48 or vehicle_height < 48:
-                continue
-            contains = xyxy[0] <= center_x <= xyxy[2] and xyxy[1] <= center_y <= xyxy[3]
-            plate_ratio = ((px2 - px1) * (py2 - py1)) / max(1.0, vehicle_width * vehicle_height)
-            if contains and 0.0002 <= plate_ratio <= 0.18:
-                area = max(1, (xyxy[2] - xyxy[0]) * (xyxy[3] - xyxy[1]))
-                candidates.append((float(detection.confidence), -area, xyxy))
-        return max(candidates, default=(0.0, 0, None))[2]
 
     @staticmethod
     def _is_ambiguous(suggestions: list[dict[str, str | float]]) -> bool:

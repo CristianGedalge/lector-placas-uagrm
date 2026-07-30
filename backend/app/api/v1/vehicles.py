@@ -149,7 +149,9 @@ async def delete_brand(
 
 @router.get("/types", response_model=List[TipoVehiculoResponse])
 async def list_vehicle_types(db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
-    result = await db.execute(select(TipoVehiculo).order_by(TipoVehiculo.nombre))
+    result = await db.execute(
+        select(TipoVehiculo).where(TipoVehiculo.esta_activo.is_(True)).order_by(TipoVehiculo.nombre)
+    )
     return list(result.scalars().all())
 
 
@@ -201,7 +203,9 @@ async def delete_vehicle_type(
     v_type = result.scalars().first()
     if not v_type:
         raise HTTPException(status_code=404, detail="Tipo de vehículo no encontrado.")
-    await db.delete(v_type)
+    # Se desactiva en lugar de borrar: las sugerencias históricas conservan su
+    # relación, pero el tipo deja de participar en catálogos y nuevos análisis.
+    v_type.esta_activo = False
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

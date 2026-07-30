@@ -96,6 +96,7 @@ class TipoVehiculo(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     nombre = Column(String, unique=True, nullable=False)
+    esta_activo = Column(Boolean, default=True, nullable=False, index=True)
     creado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
@@ -246,6 +247,9 @@ class SolicitudRegistroVehiculo(Base):
     color_sugerido = Column(String, nullable=True)
     confianza_color = Column(Float, nullable=True)
     metodo_color = Column(String, nullable=True)
+    tipo_sugerido_id = Column(Uuid, ForeignKey("tipos_vehiculo.id"), nullable=True)
+    confianza_tipo = Column(Float, nullable=True)
+    metodo_tipo = Column(String, nullable=True)
     estado = Column(Enum(SolicitudRegistroEstadoEnum), nullable=False, default=SolicitudRegistroEstadoEnum.PENDING, index=True)
     creado_por_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=False)
     revisado_por_usuario_id = Column(Uuid, ForeignKey("usuarios.id"), nullable=True)
@@ -259,3 +263,4 @@ class SolicitudRegistroVehiculo(Base):
     creador = relationship("Usuario", foreign_keys=[creado_por_usuario_id])
     revisor = relationship("Usuario", foreign_keys=[revisado_por_usuario_id])
     vehiculo_creado = relationship("Vehiculo", foreign_keys=[vehiculo_creado_id])
+    tipo_sugerido = relationship("TipoVehiculo", foreign_keys=[tipo_sugerido_id])

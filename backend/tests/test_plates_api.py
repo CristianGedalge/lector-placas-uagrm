@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1 import plates
 from app.schemas.plate import PlateAnalysisResponse
+from app.services.vehicle_detection import VehicleAssociation
 
 
 class PlatesAPITests(unittest.TestCase):
@@ -84,6 +85,10 @@ class PlatesAPITests(unittest.TestCase):
             "color_sugerido": "DESCONOCIDO",
             "confianza_color": 0.0,
             "metodo_color": "DESCONOCIDO",
+            "tipo_sugerido_id": None,
+            "tipo_sugerido": None,
+            "confianza_tipo": 0.0,
+            "metodo_tipo": "DESCONOCIDO",
         }
         image = np.zeros((20, 40, 3), dtype=np.uint8)
         ok, encoded = cv2.imencode(".jpg", image)
@@ -121,9 +126,14 @@ class PlatesAPITests(unittest.TestCase):
         image = np.zeros((30, 50, 3), dtype=np.uint8)
         ok, encoded = cv2.imencode(".jpg", image)
         self.assertTrue(ok)
+        association_service = MagicMock()
+        association_service.detect_bytes.return_value = VehicleAssociation(
+            "car", 0.91, (0, 0, 50, 30), 0.88, 0.75
+        )
 
         with (
             patch.object(plates, "analyze_plate", return_value=pipeline_output),
+            patch.object(plates, "VehicleAssociationService", return_value=association_service),
             patch.object(plates, "HybridVehicleColorAnalyzer", return_value=analyzer),
         ):
             response = self.client.post(

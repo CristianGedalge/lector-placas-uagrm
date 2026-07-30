@@ -13,6 +13,11 @@ superseded por los items siguientes. Se conservan debajo solo como historial.
 - `COLOR-UPLOAD-001` | `done` | Prioridad `alta` | Analizar y devolver color en cargas estaticas aunque no se cree solicitud | Dependencias: `COLOR-001`
 - `COLOR-CALIBRATION-001` | `blocked` | Prioridad `alta` | Evaluar precision selectiva con capturas propias de dia, noche, movimiento, reflejos y todos los colores | Dependencias: camaras y vehiculos reales
 - `COLOR-SIGLIP-001` | `pending` | Prioridad `baja` | Comparar CLIP contra SigLIP solo si el conjunto real justifica el costo adicional | Dependencias: `COLOR-CALIBRATION-001`
+- `TYPE-001` | `done` | Prioridad `alta` | Sugerir Automovil/Motocicleta/Bus/Camion reutilizando una unica inferencia RF-DETR y asociacion conservadora | Dependencias: `COLOR-001`
+- `TYPE-DB-001` | `done` | Prioridad `alta` | Persistir ID relacionado, confianza y metodo sin duplicar nombre ni seleccionar automaticamente | Dependencias: `TYPE-001`
+- `TYPE-MIGRATION-001` | `done` | Prioridad `alta` | Aplicar y verificar Alembic `a0b1c2d3e4f5` en la nueva base Neon configurada | Dependencias: ninguna
+- `TYPE-CATALOG-001` | `done` | Prioridad `alta` | Sembrar de forma idempotente Automovil, Motocicleta, Bus y Camion mediante Alembic `b1c2d3e4f5a6` | Dependencias: `TYPE-MIGRATION-001`
+- `TYPE-CALIBRATION-001` | `blocked` | Prioridad `alta` | Medir precision selectiva >=95% y cobertura con capturas reales etiquetadas | Dependencias: conjunto real representativo
 
 - `DB-EXT-001` | `done` | Prioridad `alta` | PostgreSQL externo usando solo DATABASE_URL | Dependencias: ninguna
 - `DOCKER-SEC-001` | `done` | Prioridad `critica` | Excluir secretos y artefactos de contextos Docker | Dependencias: ninguna

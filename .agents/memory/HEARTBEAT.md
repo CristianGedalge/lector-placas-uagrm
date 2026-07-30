@@ -2,8 +2,8 @@
 
 ## Estado vigente - 2026-07-29
 
-- Foco actual: OCR local con FastALPR/FastPlateOCR y sugerencia conservadora de
-  color vehicular para cargas estaticas y solicitudes de registro.
+- Foco actual: OCR local y sugerencias conservadoras de color y tipo vehicular
+  para cargas estaticas y solicitudes de registro.
 - OCR vigente: `yolo-v9-t-384-license-plate-end2end` +
   `cct-xs-v2-global-model`, ambos locales mediante ONNX Runtime en CPU.
 - Color vigente: RF-DETR Nano COCO obtiene la caja real del vehiculo; OpenCV
@@ -17,12 +17,17 @@
   siempre que exista una caja de placa para asociar el vehiculo.
 - Realtime: no ejecuta detector vehicular + CLIP en cada fotograma; el color se
   calcula sobre la captura estatica seleccionada.
+- Tipo vigente: la misma inferencia RF-DETR se asocia a la placa por cobertura,
+  distancia, confianza y tamano relativo; solo sugiere Automovil, Motocicleta,
+  Bus o Camion cuando el catalogo activo tiene una coincidencia unica.
+- Persistencia de tipo: `tipo_sugerido_id`, `confianza_tipo` y `metodo_tipo`.
+  El nombre se obtiene por relacion y el selector confirmado queda editable.
 - Frontend: muestra color, confianza y metodo tras subir una imagen; el color
   permanece editable por el operador en la bandeja de solicitudes.
-- Base de datos: Alembic `f0a1b2c3d4e5 (head)` agrega `metodo_color`; el antiguo
-  array JSON fue retirado.
-- Validacion mas reciente: 66 pruebas correctas, 2 omitidas, build Vite correcto
-  y arranque local con FastALPR, RF-DETR y CLIP disponibles en CPU.
+- Base de datos: la nueva instancia Neon esta en Alembic `b1c2d3e4f5a6 (head)`;
+  Automovil, Motocicleta, Bus y Camion estan activos y sin UUID hardcodeados.
+- Validacion mas reciente: 76 pruebas correctas, 2 omitidas, build Vite correcto
+  y grafo Alembic con una sola cabeza `a0b1c2d3e4f5`.
 - Licencias seleccionadas: OpenCV/RF-DETR Nano Apache-2.0; Supervision,
   Open Image Models, ONNX Runtime y CLIP MIT. Conservar avisos de terceros.
 - Limitaciones: las capturas reales disponibles son insuficientes para calibrar

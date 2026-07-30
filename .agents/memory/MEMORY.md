@@ -392,3 +392,22 @@
   `deviceId: exact` al seleccionar una webcam USB.
 - Cambiar de cámara detiene tracks, temporizadores y petición OCR anterior antes
   de abrir el nuevo stream. El selector solo se muestra al personal.
+
+## Sugerencia de tipo vehicular - 2026-07-29
+
+- Se reutiliza una única inferencia RF-DETR Nano por captura estática para color
+  y tipo; `realtime=true` no ejecuta ni persiste este análisis.
+- La asociación placa-vehículo combina cobertura, distancia entre cajas,
+  confianza RF-DETR, tamaño relativo y una expansión vehicular pequeña. Dos
+  candidatos similares producen `DESCONOCIDO`.
+- Solo se mapean `car`, `motorcycle`, `bus` y `truck` mediante aliases
+  normalizados contra tipos activos. Cero o varias coincidencias no sugieren.
+- Se persisten exclusivamente `tipo_sugerido_id`, `confianza_tipo` y
+  `metodo_tipo`; el tipo confirmado permanece como selección manual editable.
+- Validación: 76 pruebas correctas, 2 omitidas, build Vite correcto y una sola
+  cabeza Alembic `a0b1c2d3e4f5`. El 2026-07-30 se cambió a una nueva instancia
+  Neon, se aplicó la migración y se verificaron sus cuatro columnas. El smoke
+  local procesó una imagen y el backend quedó respondiendo HTTP 200 en 8000.
+- El 2026-07-30 se aplicó `b1c2d3e4f5a6`: el catálogo quedó con Automóvil,
+  Motocicleta, Bus y Camión activos. La revisión muestra la sugerencia RF-DETR
+  como tarjeta informativa y exige seleccionar manualmente el tipo confirmado.

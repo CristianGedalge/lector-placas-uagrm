@@ -16,7 +16,8 @@ from app.db.models import (
     Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum,
     Acceso, ArchivoMultimedia, EstadoCampus, Dispositivo,
     TipoAccesoEnum, UbicacionVehiculoEnum, MediaProviderEnum,
-    MediaTypeEnum, MediaStatusEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo
+    MediaTypeEnum, MediaStatusEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo,
+    TipoVehiculo,
 )
 from app.services.image_processing import ImageProcessingService, ImageProcessingError
 from app.services.cloudinary_storage import CloudinaryStorage
@@ -24,6 +25,8 @@ from app.services.storage import StorageError
 from app.api.v1.auth import get_current_user, get_current_user_optional
 from app.services.media_tasks import process_media_record, spool_directory
 from app.services.vehicle_color import HybridVehicleColorAnalyzer
+from app.services.vehicle_detection import VehicleAssociationService
+from app.services.vehicle_type import VehicleTypeResult, VehicleTypeSuggester
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -99,6 +102,8 @@ async def analyze_plate_endpoint(
     tipo_acceso_registrado = None
     solicitud_id = None
     color_result = None
+    type_result = VehicleTypeResult(None, 0.0, "DESCONOCIDO")
+    suggested_type_name = None
 
     # Una imagen estatica obtiene sugerencia aunque la placa ya este registrada,
     # el OCR requiera revision o no termine creando una solicitud. El modo
@@ -106,11 +111,28 @@ async def analyze_plate_endpoint(
     if not realtime and result_dict.get("plate_bbox"):
         vehicle_detector = getattr(request.app.state, "vehicle_detector", None)
         clip_classifier = getattr(request.app.state, "clip_color_classifier", None)
-        if vehicle_detector is not None and clip_classifier is not None:
+        association = None
+        if vehicle_detector is not None:
+            association = await run_in_threadpool(
+                VehicleAssociationService(vehicle_detector).detect_bytes,
+                image_bytes,
+                result_dict.get("plate_bbox"),
+            )
+            type_catalog = list((await db.execute(
+                select(TipoVehiculo).where(TipoVehiculo.esta_activo.is_(True))
+            )).scalars().all())
+            type_result = VehicleTypeSuggester.resolve(association, type_catalog)
+            if type_result.tipo_sugerido_id is not None:
+                suggested_type_name = next(
+                    (item.nombre for item in type_catalog if item.id == type_result.tipo_sugerido_id),
+                    None,
+                )
+        if association is not None and clip_classifier is not None:
             color_result = await run_in_threadpool(
                 HybridVehicleColorAnalyzer(vehicle_detector, clip_classifier).analyze,
                 image_bytes,
                 result_dict.get("plate_bbox"),
+                association,
             )
     # El análisis anónimo devuelve solo el resultado OCR. Consultas de vehículos,
     # escaneos, accesos y evidencias requieren una identidad autenticada.
@@ -300,6 +322,9 @@ async def analyze_plate_endpoint(
                         color_sugerido=color_result.color_sugerido if color_result else "DESCONOCIDO",
                         confianza_color=color_result.confianza_color if color_result else 0.0,
                         metodo_color=color_result.metodo_color if color_result else "DESCONOCIDO",
+                        tipo_sugerido_id=type_result.tipo_sugerido_id,
+                        confianza_tipo=type_result.confianza_tipo,
+                        metodo_tipo=type_result.metodo_tipo,
                         estado=SolicitudRegistroEstadoEnum.PENDING,
                         creado_por_usuario_id=current_user.id,
                     )
@@ -350,6 +375,10 @@ async def analyze_plate_endpoint(
         metodo_color=color_result.metodo_color if color_result else (
             "DESCONOCIDO" if not realtime else None
         ),
+        tipo_sugerido_id=type_result.tipo_sugerido_id if not realtime else None,
+        tipo_sugerido=suggested_type_name if not realtime else None,
+        confianza_tipo=type_result.confianza_tipo if not realtime else None,
+        metodo_tipo=type_result.metodo_tipo if not realtime else None,
         mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )
 

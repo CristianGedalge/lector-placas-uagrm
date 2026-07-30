@@ -11,6 +11,8 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 - OCR local: FastALPR (detector YOLOv9) + FastPlateOCR sobre ONNX Runtime
 - Color vehicular: RF-DETR Nano para caja real + OpenCV HSV/LAB/K-Means +
   CLIP ViT-B/32 ONNX cuantizado como respaldo conservador
+- Tipo vehicular: reutiliza la misma inferencia RF-DETR Nano y solo mapea las
+  clases COCO `car`, `motorcycle`, `bus` y `truck` al catalogo activo
 - Supervision: representacion, recorte y anotacion de detecciones
 - Captura automatica: agente separado para webcam USB o RTSP
 - Medios privados: Cloudinary autenticado con WebP y URLs temporales firmadas
@@ -94,6 +96,13 @@ Al cerrar una sesion:
   clasificador de color.
 - RF-DETR Nano se usa para obtener una caja real del vehiculo asociada con la
   placa. Sin una caja confiable, el color debe ser `DESCONOCIDO`.
+- RF-DETR se ejecuta una sola vez por imagen estatica; su deteccion y asociacion
+  se reutilizan para color y tipo. Nunca ejecutar esta inferencia en realtime.
+- La sugerencia de tipo solo admite Automovil, Motocicleta, Bus y Camion por
+  aliases normalizados y coincidencia unica con un tipo activo. No inferir SUV,
+  sedan, hatchback, pickup, minibus o furgoneta.
+- Persistir para tipo solo `tipo_sugerido_id`, `confianza_tipo` y `metodo_tipo`.
+  Una sugerencia ambigua no selecciona ni registra automaticamente un vehiculo.
 - OpenCV es la primera evaluacion de color. CLIP local solo actua como respaldo
   en imagenes estaticas ambiguas; el polling realtime no ejecuta CLIP por frame.
 - El catalogo de color es cerrado: BLANCO, NEGRO, GRIS, PLATEADO, ROJO, AZUL,

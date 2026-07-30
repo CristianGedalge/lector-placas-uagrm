@@ -60,7 +60,9 @@ export default function VehicleRegistrationRequests() {
       placa: item.placa_sugerida,
       propietario_usuario_id: users[0]?.id || "",
       marca_id: brands[0]?.id || "",
-      tipo_vehiculo_id: types[0]?.id || "",
+      tipo_vehiculo_id: types.some(type => type.id === item.tipo_sugerido_id)
+        ? item.tipo_sugerido_id
+        : "",
       color: suggestedColor
     });
     setError("");
@@ -192,7 +194,18 @@ export default function VehicleRegistrationRequests() {
                   ))}
                 </select>
               </label>
-              <label>Tipo de vehículo
+              <label>Tipo sugerido por RF-DETR
+                <input
+                  value={selected.tipo_sugerido?.nombre || "DESCONOCIDO"}
+                  readOnly
+                />
+                <small className="muted-text">
+                  Confianza: {selected.confianza_tipo != null
+                    ? `${Math.round(selected.confianza_tipo * 100)}%`
+                    : "No disponible"}
+                </small>
+              </label>
+              <label>Tipo confirmado
                 <select value={form.tipo_vehiculo_id} onChange={e => update("tipo_vehiculo_id", e.target.value)} required>
                   <option value="">Selecciona un tipo</option>
                   {types.map(x => (

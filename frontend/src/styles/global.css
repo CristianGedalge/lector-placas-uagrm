@@ -800,7 +800,7 @@ textarea:focus {
 .camera-frame::after {
   border-color: rgba(220, 38, 38, 0.7); /* subtle red scanning accent */
   clip-path: polygon(0 0, 15% 0, 15% 15%, 0 15%); /* just top left corner as an example, wait actually the before takes care of all corners with clip path */
-  display: none; 
+  display: none;
 }
 
 /* Better corner accents using 4 absolute elements would be cleaner, but let's just do a nice border for now */
@@ -1090,4 +1090,4 @@ textarea:focus {
   .topbar-heading p {
     font-size: 0.65rem !important;
   }
-}
+}
