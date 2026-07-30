@@ -1,4 +1,5 @@
 import axios from "axios";
+import { readSession } from "../services/storage";
 
 // Timeout generoso para endpoints de análisis OCR en CPU.
 const OCR_TIMEOUT = 120_000; // 2 minutos
@@ -17,6 +18,12 @@ apiClient.interceptors.request.use((config) => {
   // Rutas de análisis de imagen necesitan más tiempo
   if (config.url?.includes("/plates/analyze")) {
     config.timeout = OCR_TIMEOUT;
+  }
+  
+  // Añadir token de autorización si existe en la sesión guardada
+  const session = readSession();
+  if (session?.token) {
+    config.headers.Authorization = `Bearer ${session.token}`;
   }
   return config;
 });
