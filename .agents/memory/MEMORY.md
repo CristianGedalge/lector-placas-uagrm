@@ -8,7 +8,7 @@
 - Se implementó la siembra automática del catálogo base de marcas en la tabla `marcas` si está vacía.
 - **Seguridad**: Se evitó registrar valores por defecto quemados de bootstrap en `app/config/settings.py` cargando las credenciales iniciales de forma directa mediante `os.getenv` en `app/main.py`.
 - **Despliegue**: Se creó `netlify.toml` en la raíz para configurar el monorepo en Netlify (React Router redirecciones) y se definió el proceso de despliegue para Railway (Root Directory: `/backend`) y Netlify (Base: `frontend`).
-- **Corrección Docker/Railway**: Se reparó un conflicto de permisos en el `backend/Dockerfile` configurando `ENV HF_HOME=/app/.runtime/huggingface` y ejecutando las descargas de modelos ONNX como el usuario no-root `app`, solucionando el error 503 (motor OCR no disponible) al desplegar en Railway.
+- **Corrección Docker/Railway**: Se reparó un conflicto de permisos en el `backend/Dockerfile` configurando `ENV HF_HOME=/app/.runtime/huggingface` y ejecutando las descargas de modelos ONNX como el usuario no-root `app`. Adicionalmente, se configuró `--home /app` para el usuario `app` para resolver el error `PermissionError: [Errno 13] Permission denied: '/nonexistent'` originado por librerías que intentan crear cachés en `Path.home()`, logrando así compilar y levantar de forma exitosa en Railway.
 - Verificado: 82/82 pruebas pasan con éxito, build de Vite OK y smoke test del servidor FastAPI OK.
 
 ## 2026-07-30 - Migracion UTC aplicada en Neon

@@ -28,7 +28,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copiar el código fuente de la aplicación
 COPY . .
 
-RUN addgroup --system app && adduser --system --ingroup app app && \
+RUN addgroup --system app && adduser --system --ingroup app --home /app app && \
     mkdir -p /app/.runtime && chown -R app:app /app
 
 # Forzar el cache de HuggingFace en la ruta del runtime propiedad del usuario app
