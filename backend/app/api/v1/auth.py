@@ -61,13 +61,14 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token invalido.")
+    except (jwt.PyJWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalido.",
         )
-
-    user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,7 +114,7 @@ async def get_current_user_optional(
         user = await _get_cached_user(user_uuid, db)
         if user and user.esta_activo:
             return user
-    except Exception:
+    except (jwt.PyJWTError, ValueError):
         return None
     return None
 
@@ -221,7 +222,7 @@ async def login_user(
         key="session_token",
         value=access_token,
         httponly=True,
-        secure=False,
+        secure=not settings.DEBUG,
         samesite="lax",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",

@@ -54,6 +54,7 @@ class CloudinaryStorage(StorageService):
             raise StorageError("Tipo multimedia no soportado")
         try:
             import cloudinary.uploader
+            from cloudinary.exceptions import Error as CloudinaryError
 
             result = cloudinary.uploader.upload(
                 io.BytesIO(content),
@@ -76,13 +77,14 @@ class CloudinaryStorage(StorageService):
             )
         except StorageError:
             raise
-        except Exception as exc:
+        except (CloudinaryError, OSError) as exc:
             logger.warning("Fallo el proveedor de almacenamiento durante upload")
             raise StorageError("No se pudo almacenar la imagen") from exc
 
     def delete(self, public_id: str) -> bool:
         try:
             import cloudinary.uploader
+            from cloudinary.exceptions import Error as CloudinaryError
 
             result = cloudinary.uploader.destroy(
                 public_id,
@@ -91,7 +93,7 @@ class CloudinaryStorage(StorageService):
                 invalidate=True,
             )
             return result.get("result") in {"ok", "not found"}
-        except Exception as exc:
+        except (CloudinaryError, OSError) as exc:
             logger.warning("Fallo el proveedor de almacenamiento durante delete")
             raise StorageError("No se pudo eliminar la imagen") from exc
 
@@ -109,7 +111,7 @@ class CloudinaryStorage(StorageService):
     def exists(self, public_id: str) -> bool:
         try:
             import cloudinary.api
-            from cloudinary.exceptions import NotFound
+            from cloudinary.exceptions import Error as CloudinaryError, NotFound
 
             cloudinary.api.resource(
                 public_id,
@@ -119,7 +121,7 @@ class CloudinaryStorage(StorageService):
             return True
         except NotFound:
             return False
-        except Exception as exc:
+        except (CloudinaryError, OSError) as exc:
             if getattr(exc, "http_code", None) == 404:
                 return False
             raise StorageError("No se pudo comprobar la imagen") from exc
@@ -127,6 +129,7 @@ class CloudinaryStorage(StorageService):
     def get_temporary_url(self, public_id: str, fmt: str) -> TemporaryUrl:
         try:
             import cloudinary.utils
+            from cloudinary.exceptions import Error as CloudinaryError
 
             expires_at = datetime.now(timezone.utc) + timedelta(
                 seconds=settings.MEDIA_SIGNED_URL_TTL_SECONDS
@@ -139,5 +142,5 @@ class CloudinaryStorage(StorageService):
                 expires_at=int(expires_at.timestamp()),
             )
             return TemporaryUrl(url=url, expires_at=expires_at)
-        except Exception as exc:
+        except (CloudinaryError, OSError) as exc:
             raise StorageError("No se pudo generar la URL temporal") from exc

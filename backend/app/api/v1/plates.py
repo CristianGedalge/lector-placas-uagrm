@@ -5,8 +5,9 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from app.schemas.plate import PlateAnalysisResponse, EscaneadoResponse
 from app.ai.pipeline import analyze_plate, get_pipeline_status
@@ -44,7 +45,7 @@ async def _trigger_barrier_webhook(url: str, direction: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             await client.post(url, json={"action": "open", "direction": direction})
-    except Exception:
+    except httpx.HTTPError:
         pass  # Barrera offline no es error critico del sistema
 
 
@@ -332,7 +333,7 @@ async def analyze_plate_endpoint(
                 else:
                     solicitud_id = pending.id
             await db.commit()
-        except (ImageProcessingError, StorageError):
+        except (ImageProcessingError, StorageError, SQLAlchemyError) as exc:
             await db.rollback()
             raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
         except Exception as exc:

@@ -11,7 +11,7 @@ from app.config.settings import BACKEND_DIR, settings
 from app.db.models import ArchivoMultimedia, MediaStatusEnum
 from app.db.session import AsyncSessionLocal
 from app.services.cloudinary_storage import CloudinaryStorage
-from app.services.image_processing import ImageProcessingService
+from app.services.image_processing import ImageProcessingError, ImageProcessingService
 from app.services.storage import StorageError
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ async def process_media_record(media_id: UUID) -> None:
             uploaded = await asyncio.to_thread(
                 CloudinaryStorage().upload, processed.content, media_type
             )
-        except Exception as exc:
+        except (OSError, StorageError, ImageProcessingError, ValueError, TypeError) as exc:
             async with AsyncSessionLocal() as session:
                 media = await session.get(ArchivoMultimedia, media_id)
                 if not media:
@@ -57,11 +57,11 @@ async def process_media_record(media_id: UUID) -> None:
                 media.estado = MediaStatusEnum.FAILED
                 media.ultimo_error = (
                     str(exc)
-                    if isinstance(exc, StorageError)
+                    if isinstance(exc, (StorageError, ImageProcessingError))
                     else "No se pudo procesar o almacenar la evidencia"
                 )[:500]
                 await session.commit()
-            logger.warning("Evidencia %s fallo en intento %s", media_id, media.intentos)
+            logger.warning("Evidencia %s fallo en intento %s: %s", media_id, media.intentos, type(exc).__name__)
             continue
 
         async with AsyncSessionLocal() as session:

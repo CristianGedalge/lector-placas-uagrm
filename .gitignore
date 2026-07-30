@@ -14,3 +14,4 @@ backend/.git-legacy-backend/
 frontend/.git-legacy-frontend/
 frontend/node_modules/
 frontend/dist/
+backend/.env
