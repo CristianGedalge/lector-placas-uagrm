@@ -12,18 +12,22 @@ from typing import AsyncGenerator
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_ROOT / ".runtime"
-EASYOCR_DIR = RUNTIME_DIR / "easyocr"
 MPLCONFIG_DIR = RUNTIME_DIR / "matplotlib"
 UPLOADS_DIR = PROJECT_ROOT / "uploads"
 
-for directory in (RUNTIME_DIR, EASYOCR_DIR, MPLCONFIG_DIR, UPLOADS_DIR):
+for directory in (RUNTIME_DIR, MPLCONFIG_DIR, UPLOADS_DIR):
     directory.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("MPLCONFIGDIR", str(MPLCONFIG_DIR))
 
 try:
-    import easyocr
+    from fast_alpr import ALPR
 except ImportError:  # pragma: no cover - depends on the installed environment
-    easyocr = None
+    ALPR = None
+
+try:
+    from open_image_models.detection.factory import create_detector
+except ImportError:  # pragma: no cover
+    create_detector = None
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,6 +44,7 @@ from app.api.v1.barrier import router as barrier_router
 from app.api.v1.registration_requests import router as registration_requests_router
 from app.config.settings import settings
 from app.db.session import database_target
+from app.services.clip_color import CLIPColorClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +52,9 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
-def _ocr_languages() -> list[str]:
-    languages = [item.strip() for item in settings.OCR_LANGUAGES.split(",") if item.strip()]
-    return languages or ["es", "en"]
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Inicializa EasyOCR una vez y libera la referencia al apagar."""
+    """Inicializa FastALPR/FastPlateOCR una sola vez."""
     target = database_target()
     logger.info(
         "Base configurada: provider=%s host=%s database=%s",
@@ -62,32 +62,56 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         target["host"],
         target["database"],
     )
-    if easyocr is None:
-        logger.warning("EasyOCR no esta instalado; el pipeline OCR estara deshabilitado.")
-        app.state.ocr_reader = None
+    app.state.fast_alpr_engine = None
+    app.state.vehicle_detector = None
+    app.state.clip_color_classifier = None
+    if ALPR is None:
+        logger.error("FastALPR/FastPlateOCR no esta instalado.")
     else:
         try:
-            app.state.ocr_reader = easyocr.Reader(
-                _ocr_languages(),
-                gpu=settings.OCR_GPU,
-                quantize=settings.OCR_QUANTIZE,
-                verbose=False,
-                model_storage_directory=str(EASYOCR_DIR),
-                user_network_directory=str(EASYOCR_DIR),
+            providers = [settings.FAST_ALPR_EXECUTION_PROVIDER]
+            app.state.fast_alpr_engine = ALPR(
+                detector_model=settings.FAST_ALPR_DETECTOR_MODEL,
+                detector_conf_thresh=settings.FAST_ALPR_DETECTOR_CONFIDENCE,
+                detector_providers=providers,
+                ocr_model=settings.FAST_PLATE_OCR_MODEL,
+                ocr_device="cpu",
+                ocr_providers=providers,
+            )
+            logger.info(
+                "FastALPR listo: detector=%s ocr=%s provider=%s",
+                settings.FAST_ALPR_DETECTOR_MODEL,
+                settings.FAST_PLATE_OCR_MODEL,
+                settings.FAST_ALPR_EXECUTION_PROVIDER,
             )
         except Exception as exc:
-            logger.warning("EasyOCR no pudo inicializarse durante el arranque: %s", exc)
-            app.state.ocr_reader = None
+            logger.exception("FastALPR/FastPlateOCR no pudo inicializarse: %s", exc)
+
+    try:
+        if create_detector is None:
+            raise RuntimeError("open-image-models no esta instalado")
+        app.state.vehicle_detector = create_detector(
+            settings.VEHICLE_DETECTOR_MODEL,
+            conf_thresh=settings.VEHICLE_DETECTOR_CONFIDENCE,
+            providers=[settings.FAST_ALPR_EXECUTION_PROVIDER],
+        )
+        app.state.clip_color_classifier = CLIPColorClassifier()
+        logger.info("Color vehicular listo: OpenCV + CLIP local, detector=%s", settings.VEHICLE_DETECTOR_MODEL)
+    except Exception as exc:
+        logger.exception("Detector vehicular/CLIP no pudo inicializarse: %s", exc)
+
+    app.state.ocr_engine_name = "fast_alpr" if app.state.fast_alpr_engine is not None else "unavailable"
     yield
-    if hasattr(app.state, "ocr_reader"):
-        del app.state.ocr_reader
+    for state_name in ("fast_alpr_engine", "vehicle_detector", "clip_color_classifier", "ocr_engine_name"):
+        if hasattr(app.state, state_name):
+            delattr(app.state, state_name)
 
 
 app = FastAPI(
     title=settings.APP_NAME,
     description=(
         "API para localizar y leer placas bolivianas localmente con "
-        "OpenCV, EasyOCR y Supervision."
+        "FastALPR, FastPlateOCR y OpenCV."
     ),
     version=settings.APP_VERSION,
     debug=settings.DEBUG,

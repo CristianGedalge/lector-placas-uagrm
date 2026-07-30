@@ -44,7 +44,7 @@ Cloudinary. El frame ganador se adjunta a
 se confirman primero. Una tarea con sesion propia procesa el spool, sube WebP y
 cambia a `READY`; un fallo deja el acceso intacto y marca `FAILED`.
 
-El original alimenta EasyOCR. El panorama WebP es evidencia. El recorte de
+El original alimenta FastPlateOCR. El panorama WebP es evidencia. El recorte de
 placa sigue siendo temporal y nunca crea un registro multimedia.
 
 ## Endpoints

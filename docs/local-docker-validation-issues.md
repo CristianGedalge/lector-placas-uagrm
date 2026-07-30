@@ -68,28 +68,6 @@ compartidos del módulo `cv2`.
 La suite OCR y procesamiento de imágenes pasa usando la variante headless. El
 contenedor debe importar `cv2` sin requerir `libxcb.so.1`.
 
-## ISSUE-003 — PyTorch podía resolverse con una distribución innecesaria para servidor
-
-- Estado: RESUELTO
-- Severidad: alta
-- Componente: Docker / OCR
-
-### Problema
-
-EasyOCR declara PyTorch como dependencia. Sin seleccionar explícitamente el
-índice CPU, el build podía descargar una distribución considerablemente mayor
-que la necesaria para este backend.
-
-### Corrección
-
-El Dockerfile instala primero `torch==2.13.0` y `torchvision==0.28.0` desde el
-índice oficial CPU, antes de instalar el resto de requisitos.
-
-### Validación
-
-La imagen fue construida desde cero con PyTorch CPU. El backend resultante pesa
-aproximadamente 2,22 GB e inicia correctamente con OCR disponible.
-
 ## ISSUE-004 — Contenedor PostgreSQL huérfano contradecía la arquitectura actual
 
 - Estado: RESUELTO

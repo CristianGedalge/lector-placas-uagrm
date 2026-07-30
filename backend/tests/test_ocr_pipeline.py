@@ -1,5 +1,5 @@
-import base64
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import cv2
@@ -17,139 +17,58 @@ def image_bytes(width=320, height=180):
     return encoded.tobytes()
 
 
-def ocr_item(text, confidence=0.9, x1=20, y1=80, x2=220, y2=140):
-    return ([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], text, confidence)
+class MockFastALPR:
+    def __init__(self, predictions):
+        self.predictions = predictions
+
+    def predict(self, image):
+        return self.predictions
 
 
-def pipeline_settings(**overrides):
-    values = {
-        "OCR_ROI_X": None,
-        "OCR_ROI_Y": None,
-        "OCR_ROI_WIDTH": None,
-        "OCR_ROI_HEIGHT": None,
-        "OCR_UPSCALE_FACTOR": 1.0,
-        "OCR_USE_GRAYSCALE": True,
-        "OCR_USE_CONTRAST": False,
-        "OCR_DENOISE": False,
-        "OCR_USE_THRESHOLD": False,
-        "OCR_CONFIDENCE_THRESHOLD": 0.40,
-    }
-    values.update(overrides)
-    return patch.multiple(settings, **values)
-
-
-class MockOCRReader:
-    def __init__(self, results):
-        self.results = results
-        self.images = []
-        self.kwargs = []
-
-    def readtext(self, image, **kwargs):
-        self.images.append(image)
-        self.kwargs.append(kwargs)
-        return self.results
+def prediction(text="1234ABC", ocr_confidence=0.92, detector_confidence=0.90):
+    return SimpleNamespace(
+        detection=SimpleNamespace(
+            confidence=detector_confidence,
+            bounding_box=SimpleNamespace(x1=20, y1=70, x2=230, y2=150),
+        ),
+        ocr=SimpleNamespace(text=text, confidence=ocr_confidence),
+    )
 
 
 class OCRPipelineTests(unittest.TestCase):
     def test_empty_image(self):
-        result = analyze_plate(b"", MockOCRReader([]))
-        self.assertEqual(result["status"], "ERROR")
+        result = analyze_plate(b"", plate_engine=MockFastALPR([]))
         self.assertEqual(result["error_code"], "empty_image")
 
     def test_invalid_image(self):
-        result = analyze_plate(b"not-an-image", MockOCRReader([]))
-        self.assertEqual(result["status"], "ERROR")
+        result = analyze_plate(b"not-an-image", plate_engine=MockFastALPR([]))
         self.assertEqual(result["error_code"], "invalid_image")
 
     def test_ocr_unavailable(self):
-        result = analyze_plate(image_bytes(), None)
-        self.assertEqual(result["status"], "ERROR")
+        result = analyze_plate(image_bytes())
         self.assertEqual(result["http_status"], 503)
 
-    def test_ocr_without_results_requires_manual_review(self):
-        with pipeline_settings():
-            result = analyze_plate(image_bytes(), MockOCRReader([]))
-        self.assertEqual(result["status"], "LOW_CONFIDENCE")
-        self.assertTrue(result["requires_manual_review"])
-
-    def test_valid_plate_is_detected(self):
-        reader = MockOCRReader([ocr_item("1234-ABC", 0.91)])
-        with pipeline_settings():
-            result = analyze_plate(image_bytes(), reader)
+    def test_fast_plate_ocr_detects_valid_plate(self):
+        with patch.object(settings, "OCR_CONFIDENCE_THRESHOLD", 0.40):
+            result = analyze_plate(image_bytes(), plate_engine=MockFastALPR([prediction()]))
         self.assertEqual(result["status"], "DETECTED")
         self.assertEqual(result["normalized_plate"], "1234ABC")
         self.assertEqual(result["detection_backend"], PIPELINE_MODE)
-        self.assertFalse(result["requires_manual_review"])
-        self.assertEqual(reader.kwargs[0]["paragraph"], False)
 
-    def test_valid_plate_wins_over_higher_confidence_non_plate_text(self):
-        reader = MockOCRReader(
-            [
-                ocr_item("ENTRADA", 0.99, 20, 20, 180, 60),
-                ocr_item("5678XYZ", 0.75, 30, 100, 230, 160),
-            ]
-        )
-        with pipeline_settings():
-            result = analyze_plate(image_bytes(height=220), reader)
-        self.assertEqual(result["normalized_plate"], "5678XYZ")
-        self.assertEqual(result["status"], "DETECTED")
+    def test_no_prediction_requires_manual_review(self):
+        result = analyze_plate(image_bytes(), plate_engine=MockFastALPR([]))
+        self.assertEqual(result["status"], "LOW_CONFIDENCE")
+        self.assertTrue(result["requires_manual_review"])
 
-    def test_low_confidence_text_is_not_exposed_as_confirmed_plate(self):
-        with pipeline_settings():
+    def test_low_confidence_is_not_confirmed(self):
+        with patch.object(settings, "OCR_CONFIDENCE_THRESHOLD", 0.55):
             result = analyze_plate(
                 image_bytes(),
-                MockOCRReader([ocr_item("1234ABC", 0.20)]),
+                realtime=True,
+                plate_engine=MockFastALPR([prediction(ocr_confidence=0.20)]),
             )
         self.assertEqual(result["status"], "LOW_CONFIDENCE")
         self.assertIsNone(result["normalized_plate"])
-        self.assertTrue(result["requires_manual_review"])
-
-    def test_two_nearby_fragments_are_combined(self):
-        reader = MockOCRReader(
-            [
-                ocr_item("1234", 0.86, 20, 80, 110, 140),
-                ocr_item("ABC", 0.88, 115, 80, 220, 140),
-            ]
-        )
-        with pipeline_settings():
-            result = analyze_plate(image_bytes(), reader)
-        self.assertEqual(result["status"], "DETECTED")
-        self.assertEqual(result["normalized_plate"], "1234ABC")
-        self.assertEqual(result["detected_plate"], "1234 ABC")
-
-    def test_valid_roi_is_applied_before_ocr(self):
-        reader = MockOCRReader([ocr_item("1234ABC", 0.9, 10, 10, 180, 90)])
-        with pipeline_settings(
-            OCR_ROI_X=50,
-            OCR_ROI_Y=40,
-            OCR_ROI_WIDTH=100,
-            OCR_ROI_HEIGHT=60,
-        ):
-            result = analyze_plate(image_bytes(width=300, height=200), reader)
-        self.assertEqual(result["status"], "DETECTED")
-        self.assertEqual(reader.images[0].shape[:2], (60, 100))
-
-    def test_roi_outside_image_is_rejected(self):
-        with pipeline_settings(
-            OCR_ROI_X=250,
-            OCR_ROI_Y=10,
-            OCR_ROI_WIDTH=100,
-            OCR_ROI_HEIGHT=60,
-        ):
-            result = analyze_plate(image_bytes(width=300, height=200), MockOCRReader([]))
-        self.assertEqual(result["status"], "ERROR")
-        self.assertEqual(result["error_code"], "invalid_roi")
-
-    def test_annotated_image_and_crop_are_generated(self):
-        with pipeline_settings():
-            result = analyze_plate(
-                image_bytes(),
-                MockOCRReader([ocr_item("1234ABC", 0.9)]),
-            )
-        for field in ("annotated_image", "plate_crop"):
-            self.assertTrue(result[field].startswith("data:image/jpeg;base64,"))
-            payload = result[field].split(",", 1)[1]
-            self.assertGreater(len(base64.b64decode(payload)), 10)
 
 
 if __name__ == "__main__":

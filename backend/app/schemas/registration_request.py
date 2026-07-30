@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 from app.db.models import SolicitudRegistroEstadoEnum
+from app.schemas.vehicle import TipoVehiculoResponse
 
 class SolicitudRegistroResponse(BaseModel):
     id: UUID
@@ -9,12 +10,20 @@ class SolicitudRegistroResponse(BaseModel):
     imagen_id: UUID
     placa_sugerida: str
     confianza_placa: float
+    color_sugerido: str | None = None
+    confianza_color: float | None = None
+    metodo_color: str | None = None
+    tipo_sugerido_id: UUID | None = None
+    confianza_tipo: float | None = None
+    metodo_tipo: str | None = None
+    tipo_sugerido: TipoVehiculoResponse | None = None
     estado: SolicitudRegistroEstadoEnum
     creado_por_usuario_id: UUID
     revisado_por_usuario_id: UUID | None = None
     vehiculo_creado_id: UUID | None = None
     creado_el: datetime
     revisado_el: datetime | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class SolicitudRegistroApprove(BaseModel):

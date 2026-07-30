@@ -5,19 +5,21 @@
 ```text
 Webcam USB, RTSP o imagen
   -> OpenCV (captura, ROI y preprocesamiento)
-  -> EasyOCR (localizacion y lectura de textos)
+  -> FastALPR (deteccion) + FastPlateOCR (lectura)
   -> Supervision (detecciones, filtrado, recorte y anotacion)
   -> normalizacion y validacion boliviana
   -> FastAPI
 ```
 
-El proyecto ya no usa detectores entrenados ni servicios de inferencia externos. EasyOCR localiza y reconoce texto; Supervision no hace OCR, sino que convierte sus regiones a `Detections`, permite seleccionar el candidato, recortarlo y anotarlo.
+El motor usa un detector ONNX local de FastALPR y FastPlateOCR sobre el recorte;
+no se usan servicios de inferencia externos.
 
 La camara se ejecuta en un proceso separado. Esto evita que un driver USB o stream RTSP bloqueado detenga FastAPI. El agente solo envia JPEG a `POST /api/v1/plates/analyze`; no duplica OCR y nunca registra vehiculos automaticamente.
 
 ## Seleccion de candidatos
 
-El pipeline no toma el primer texto. Para cada region considera confianza de EasyOCR, formato boliviano `0000AAA`, longitud normalizada, tamano, proporcion y limites de imagen. Tambien une dos bloques cercanos cuando una placa fue separada.
+El pipeline no toma la primera lectura. Considera confianza del detector y OCR,
+formato boliviano `0000AAA`, longitud, tamaño, proporción y límites de imagen.
 
 Un candidato invalido o inferior a `OCR_CONFIDENCE_THRESHOLD` queda en `LOW_CONFIDENCE`, requiere revision manual y no expone `normalized_plate` al flujo automatico del frontend.
 
@@ -26,9 +28,6 @@ Un candidato invalido o inferior a `OCR_CONFIDENCE_THRESHOLD` queda en `LOW_CONF
 Puede usar escala de grises, CLAHE moderado, desenfoque Gaussiano suave, reescalado de imagen pequena y umbral Otsu opcional. OpenCV respeta orientacion segura al decodificar; no se aplican rotaciones heuristicas agresivas.
 
 ```dotenv
-OCR_LANGUAGES=es,en
-OCR_GPU=false
-OCR_QUANTIZE=false
 OCR_CONFIDENCE_THRESHOLD=0.40
 OCR_UPSCALE_FACTOR=2.0
 OCR_USE_GRAYSCALE=true
@@ -74,7 +73,7 @@ Terminal del backend:
 ```powershell
 cd backend
 .\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload
+python run.py
 ```
 
 Terminal de la camara:
@@ -105,7 +104,8 @@ cd backend
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-Las pruebas simulan EasyOCR, fotogramas, reconexion, fallos HTTP y cooldown.
+Las pruebas simulan FastALPR/FastPlateOCR, fotogramas,
+reconexión, fallos HTTP y cooldown.
 
 ## Recomendaciones fisicas
 
@@ -125,5 +125,5 @@ Se eliminaron dataset, pesos, scripts de entrenamiento/evaluacion y configuracio
 - No se probo una placa ni camara fisica en esta sesion.
 - OCR de imagen completa puede producir falsos positivos.
 - Suciedad, movimiento, angulo, baja resolucion y reflejos reducen la confianza.
-- EasyOCR requiere sus pesos locales disponibles en el entorno.
+- FastALPR/FastPlateOCR requiere sus pesos ONNX locales disponibles.
 - La creacion de vehiculos sigue siendo manual y validada por FastAPI.

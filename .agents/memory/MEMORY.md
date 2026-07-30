@@ -1,18 +1,33 @@
 # MEMORY
 
-## 2026-07-28 — 4R Review completa + Fixes de seguridad y robustez
+## 2026-07-29 - FastPlateOCR y sugerencia local de color
 
-- **SDD Init**: Inicializado con engram (capture_prompt: false para artefactos automáticos). Strict TDD activado. Testing capabilities detectadas.
-- **4R Review**: Ejecutadas las 4R completas (Risk, Resilience, Readability, Reliability) vía gentle-ai review sobre el último commit (26 archivos, 1372 líneas). Estado: **approved**.
-- **SEC-011 (CRITICAL)**: Se descubrió que `storage.js` guardaba el token JWT en localStorage (regresión de una migración previa a cookie httpOnly). Corregido: ahora solo guarda el usuario. El `Authorization: Bearer` header se eliminó de axios — la cookie `session_token` httpOnly con `withCredentials: true` es suficiente.
-- **SEC-012 (WARNING)**: `propietario_nombre` se devolvía en `/api/v1/plates/analyze` incluso para llamadas no autenticadas. Corregido: ahora solo se incluye si `current_user is not None`.
-- **SEC-013 (CRITICAL)**: El bloque `except Exception: await db.rollback()` en `plates.py` tragaba cualquier error de BD y devolvía una respuesta exitosa con datos incompletos. Corregido: ahora loggea con `exc_info=True` y retorna HTTP 500.
-- **SEC-014 (WARNING)**: El cooldown de accesos duplicados usaba SELECT-then-INSERT sin lock atómico (TOCTOU). Corregido: agregado `.with_for_update()` en la consulta del último acceso.
-- **ROB-001 (WARNING)**: `create_vehicle` ejecutaba 3 `db.execute` concurrentes sobre la misma `AsyncSession` vía `asyncio.gather`. Corregido: ahora ejecuta 3 awaits secuenciales. Se eliminó el import de `asyncio`.
-- **ROB-002 (WARNING)**: En `UploadPlate.jsx`, el cleanup del `useEffect` de cámara NO detenía el stream si `activeTab === 'camera'`, acumulando streams. Corregido: cleanup siempre llama `stopCamera()`, y `startCamera()` verifica y detiene stream previo.
-- **ROB-003 (WARNING)**: La limitación de TTLCache in-process documentada en auth.py con estrategias futuras.
-- **Backlog actualizado**: 7 nuevos items (SEC-011 a SEC-014, ROB-001 a ROB-003) marcados como done.
-- **Verificación**: Compileall Python y build Vite no ejecutados por falta de .venv.
+- EasyOCR fue retirado. El OCR vigente usa FastALPR 0.4.0 con detector YOLOv9
+  local y FastPlateOCR 1.1.0 (`cct-xs-v2-global-model`) sobre ONNX Runtime CPU.
+- La sugerencia de color usa RF-DETR Nano COCO para asociar una caja real del
+  vehiculo con la placa. Sin caja confiable devuelve `DESCONOCIDO`.
+- OpenCV HSV/LAB, mascaras y K-Means actua primero. CLIP ViT-B/32 ONNX INT8
+  compara un catalogo cerrado de nueve colores solo en capturas estaticas dudosas.
+- Se rechazan recortes con iluminacion insuficiente, sobreexposicion, reflejos o
+  desacuerdo sin separacion clara. La cobertura de un cluster no se trata como
+  confianza por si sola.
+- Se guardan exclusivamente `color_sugerido`, `confianza_color` y
+  `metodo_color`; las migraciones de JSON estructurado fueron revertidas y
+  Alembic quedo en `f0a1b2c3d4e5 (head)`.
+- La carga estatica devuelve color aunque no cree una solicitud o el OCR quede
+  en baja confianza. Realtime no ejecuta CLIP por fotograma.
+- Frontend muestra color, confianza y metodo tras una carga, y conserva edicion
+  manual en solicitudes. Marca, modelo y tipo no se predicen.
+- Validacion: 66 pruebas correctas, 2 omitidas, build Vite y arranque de los tres
+  motores locales correctos. No se hizo push ni merge.
+- Pendiente: calibrar con un conjunto propio de camaras finales; las dos imagenes
+  disponibles no cubren noche, movimiento ni todos los colores.
+
+## 2026-07-28 - Integración de cambios de main y Beto
+
+- Se integraron las mejoras de seguridad, robustez y documentación de main con el flujo de Beto.
+- Se conservó el flujo de análisis de placas y la lógica de autenticación opcional para el endpoint de análisis.
+- Se mantuvo la trazabilidad de los cambios de la rama Beto para el flujo USB y cámara.
 
 ## 2026-07-27 - Celular como Dispositivo de Cámara por WiFi + Simulador de Barrera SSE
 
@@ -348,3 +363,51 @@
   - dataset incompleto para entrenamiento YOLO
   - falta validar inferencia real local por ausencia de modelo
   - dependencias de IA no instaladas en este entorno de ejecucion para correr entrenamiento/ocr real
+# Mejora de deteccion a distancia - 2026-07-28
+
+- La causa principal era el doble límite de 480 px en frontend y backend, que
+  eliminaba detalle de caracteres pequeños antes de EasyOCR.
+- El modo realtime conserva ahora 960 px, solicita captura ideal 1920x1080,
+  codifica JPEG al 90% y usa `mag_ratio=1.25`.
+- El threshold adaptativo se ejecuta también cuando la pasada principal devuelve
+  cero textos, cubriendo placas distantes o con iluminación desigual.
+- Validados 13 tests del pipeline OCR y build Vite. El verificador completo queda
+  condicionado por `pytest` ausente en `backend/.venv`, un problema del entorno.
+
+## Captura de placas en movimiento
+
+- La cámara web solicita 1920x1080 a 24-30 fps y aplica enfoque y exposición
+  continuos si el navegador/dispositivo los publica como capacidades.
+- Se eliminó la conversión RGBA a gris en JavaScript; OpenCV sigue realizando la
+  conversión en backend sin bloquear la captura del siguiente fotograma.
+- El intervalo posterior a OCR se redujo a 100 ms con candidato y 250 ms sin él.
+- Una lectura válida con score combinado >= 0.88 se captura en un fotograma; las
+  lecturas menos fuertes mantienen el consenso de dos votos.
+
+## Cámara USB desde cuentas de staff
+
+- La ruta `/subir-placa` admite ADMINISTRADOR, OPERADOR y DISPOSITIVO.
+- El menú lateral de administrador y operador incluye `Escanear Placas`.
+- `UploadPlate` enumera entradas `videoinput`, reacciona a `devicechange` y usa
+  `deviceId: exact` al seleccionar una webcam USB.
+- Cambiar de cámara detiene tracks, temporizadores y petición OCR anterior antes
+  de abrir el nuevo stream. El selector solo se muestra al personal.
+
+## Sugerencia de tipo vehicular - 2026-07-29
+
+- Se reutiliza una única inferencia RF-DETR Nano por captura estática para color
+  y tipo; `realtime=true` no ejecuta ni persiste este análisis.
+- La asociación placa-vehículo combina cobertura, distancia entre cajas,
+  confianza RF-DETR, tamaño relativo y una expansión vehicular pequeña. Dos
+  candidatos similares producen `DESCONOCIDO`.
+- Solo se mapean `car`, `motorcycle`, `bus` y `truck` mediante aliases
+  normalizados contra tipos activos. Cero o varias coincidencias no sugieren.
+- Se persisten exclusivamente `tipo_sugerido_id`, `confianza_tipo` y
+  `metodo_tipo`; el tipo confirmado permanece como selección manual editable.
+- Validación: 76 pruebas correctas, 2 omitidas, build Vite correcto y una sola
+  cabeza Alembic `a0b1c2d3e4f5`. El 2026-07-30 se cambió a una nueva instancia
+  Neon, se aplicó la migración y se verificaron sus cuatro columnas. El smoke
+  local procesó una imagen y el backend quedó respondiendo HTTP 200 en 8000.
+- El 2026-07-30 se aplicó `b1c2d3e4f5a6`: el catálogo quedó con Automóvil,
+  Motocicleta, Bus y Camión activos. La revisión muestra la sugerencia RF-DETR
+  como tarjeta informativa y exige seleccionar manualmente el tipo confirmado.

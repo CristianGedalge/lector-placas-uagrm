@@ -1,5 +1,24 @@
 # Backlog
 
+## Arquitectura vigente (2026-07-29)
+
+Las entradas historicas `AI-002`, `AI-003`, `AI-004`, `COMPAT-001`,
+`DOCKER-OCR-001` y `LOCAL-004` que mencionan EasyOCR/PyTorch quedaron
+superseded por los items siguientes. Se conservan debajo solo como historial.
+
+- `OCR-FASTPLATE-001` | `done` | Prioridad `alta` | Sustituir EasyOCR por FastALPR + FastPlateOCR local sobre ONNX CPU | Dependencias: `AI-001`
+- `COMPAT-002` | `done` | Prioridad `alta` | Actualizar matriz y verificador a FastALPR/FastPlateOCR/RF-DETR/CLIP/ONNX | Dependencias: `OCR-FASTPLATE-001`
+- `COLOR-001` | `done` | Prioridad `alta` | Sugerir color con caja RF-DETR real, OpenCV principal y CLIP local de respaldo | Dependencias: `OCR-FASTPLATE-001`
+- `COLOR-DB-001` | `done` | Prioridad `alta` | Persistir solo color_sugerido, confianza_color y metodo_color; retirar JSON estructurado | Dependencias: `COLOR-001`
+- `COLOR-UPLOAD-001` | `done` | Prioridad `alta` | Analizar y devolver color en cargas estaticas aunque no se cree solicitud | Dependencias: `COLOR-001`
+- `COLOR-CALIBRATION-001` | `blocked` | Prioridad `alta` | Evaluar precision selectiva con capturas propias de dia, noche, movimiento, reflejos y todos los colores | Dependencias: camaras y vehiculos reales
+- `COLOR-SIGLIP-001` | `pending` | Prioridad `baja` | Comparar CLIP contra SigLIP solo si el conjunto real justifica el costo adicional | Dependencias: `COLOR-CALIBRATION-001`
+- `TYPE-001` | `done` | Prioridad `alta` | Sugerir Automovil/Motocicleta/Bus/Camion reutilizando una unica inferencia RF-DETR y asociacion conservadora | Dependencias: `COLOR-001`
+- `TYPE-DB-001` | `done` | Prioridad `alta` | Persistir ID relacionado, confianza y metodo sin duplicar nombre ni seleccionar automaticamente | Dependencias: `TYPE-001`
+- `TYPE-MIGRATION-001` | `done` | Prioridad `alta` | Aplicar y verificar Alembic `a0b1c2d3e4f5` en la nueva base Neon configurada | Dependencias: ninguna
+- `TYPE-CATALOG-001` | `done` | Prioridad `alta` | Sembrar de forma idempotente Automovil, Motocicleta, Bus y Camion mediante Alembic `b1c2d3e4f5a6` | Dependencias: `TYPE-MIGRATION-001`
+- `TYPE-CALIBRATION-001` | `blocked` | Prioridad `alta` | Medir precision selectiva >=95% y cobertura con capturas reales etiquetadas | Dependencias: conjunto real representativo
+
 - `DB-EXT-001` | `done` | Prioridad `alta` | PostgreSQL externo usando solo DATABASE_URL | Dependencias: ninguna
 - `DOCKER-SEC-001` | `done` | Prioridad `critica` | Excluir secretos y artefactos de contextos Docker | Dependencias: ninguna
 - `DOCKER-OCR-001` | `done` | Prioridad `alta` | PyTorch CPU y OpenCV headless en backend | Dependencias: COMPAT-001
@@ -15,6 +34,7 @@
 - `UNKNOWN-VEHICLE-PHASE1` | `done` | Prioridad `alta` | Solicitudes de registro para placas válidas no registradas con evidencia Cloudinary y bandeja staff | Dependencias: MEDIA-001
 - `UNKNOWN-VEHICLE-DB-001` | `done` | Prioridad `critica` | Alinear grafo Alembic con revisión 3aa735770818 desplegada en Neon y aplicar tabla de solicitudes | Dependencias: UNKNOWN-VEHICLE-PHASE1
 - `UNKNOWN-VEHICLE-UI-001` | `done` | Prioridad `alta` | Rediseñar revisión de solicitudes con modal y catálogos legibles | Dependencias: UNKNOWN-VEHICLE-PHASE1
+- `UNKNOWN-VEHICLE-AUTH-001` | `done` | Prioridad `critica` | Conservar autenticación Bearer móvil al crear solicitudes desconocidas | Dependencias: UNKNOWN-VEHICLE-PHASE1
 
 - `HARNESS-001` | `done` | Prioridad `alta` | Crear harness `.agents` alineado al proyecto real | Dependencias: ninguna
 - `AI-001` | `done` | Prioridad `alta` | Usar Supervision para representar, filtrar, recortar y anotar resultados EasyOCR | Dependencias: ninguna
@@ -46,6 +66,9 @@
 - `HARNESS-003` | `done` | Prioridad `media` | Ejecutar unit tests y smoke del endpoint analyze desde los scripts operativos | Dependencias: `CAM-003`
 - `OCR-ROI-001` | `done` | Prioridad `alta` | Permitir ROI opcional validada para camaras fijas | Dependencias: `AI-003`
 - `OCR-PHYSICAL-001` | `blocked` | Prioridad `alta` | Calibrar OCR, ROI e iluminacion con placas y camaras fisicas | Dependencias: hardware real
+- `OCR-DIST-001` | `done` | Prioridad `alta` | Preservar resolución y fallback sensible para placas lejanas en cámara móvil | Dependencias: `OPT-001`
+- `OCR-MOTION-001` | `done` | Prioridad `alta` | Reducir latencia de captura y habilitar confirmación fuerte de un fotograma para vehículos en movimiento | Dependencias: `OCR-DIST-001`
+- `CAM-USB-STAFF-001` | `done` | Prioridad `alta` | Permitir a operador y administrador seleccionar y usar cámaras USB desde el navegador | Dependencias: `CAM-WIFI-001`
 - `DOCKER-001` | `done` | Prioridad `alta` | Crear Dockerfile para el frontend en Node 20 alpine | Dependencias: ninguna
 - `DOCKER-002` | `done` | Prioridad `alta` | Crear docker-compose.yml orquestando Postgres 17, Backend y Frontend | Dependencias: ninguna
 - `DOCKER-003` | `done` | Prioridad `alta` | Corregir compatibilidad OpenGL en slim Debian reemplazando libgl1-mesa-glx por libgl1 | Dependencias: ninguna

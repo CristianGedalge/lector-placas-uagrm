@@ -16,23 +16,20 @@ from app.db.models import (
     Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum,
     Acceso, ArchivoMultimedia, EstadoCampus, Dispositivo,
     TipoAccesoEnum, UbicacionVehiculoEnum, MediaProviderEnum,
-    MediaTypeEnum, MediaStatusEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo
+    MediaTypeEnum, MediaStatusEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo,
+    TipoVehiculo,
 )
 from app.services.image_processing import ImageProcessingService, ImageProcessingError
 from app.services.cloudinary_storage import CloudinaryStorage
 from app.services.storage import StorageError
-from app.api.v1.auth import get_current_user
+from app.api.v1.auth import get_current_user, get_current_user_optional
 from app.services.media_tasks import process_media_record, spool_directory
+from app.services.vehicle_color import HybridVehicleColorAnalyzer
+from app.services.vehicle_detection import VehicleAssociationService
+from app.services.vehicle_type import VehicleTypeResult, VehicleTypeSuggester
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
-
-async def get_current_user_optional(request: Request, db: AsyncSession = Depends(get_db)) -> Usuario | None:
-    try:
-        return await get_current_user(request, db=db)
-    except HTTPException:
-        return None  # Solo ignoramos errores de autenticación, no de conexión/BD
-
 
 router = APIRouter()
 
@@ -76,8 +73,8 @@ async def analyze_plate_endpoint(
             detail="El archivo es demasiado grande. El límite máximo es de 5MB."
         )
     
-    ocr_reader = getattr(request.app.state, "ocr_reader", None)
-    if ocr_reader is None:
+    plate_engine = getattr(request.app.state, "fast_alpr_engine", None)
+    if plate_engine is None:
         raise HTTPException(
             status_code=503,
             detail="El motor OCR no está disponible en este momento."
@@ -86,8 +83,8 @@ async def analyze_plate_endpoint(
     result_dict = await run_in_threadpool(
         analyze_plate,
         image_bytes,
-        ocr_reader,
         realtime,
+        plate_engine,
     )
 
     if result_dict.get("status") == "ERROR":
@@ -104,7 +101,42 @@ async def analyze_plate_endpoint(
     acceso_id = None
     tipo_acceso_registrado = None
     solicitud_id = None
-    if status_val in ["DETECTED", "LOW_CONFIDENCE"]:
+    color_result = None
+    type_result = VehicleTypeResult(None, 0.0, "DESCONOCIDO")
+    suggested_type_name = None
+
+    # Una imagen estatica obtiene sugerencia aunque la placa ya este registrada,
+    # el OCR requiera revision o no termine creando una solicitud. El modo
+    # realtime evita ejecutar detector vehicular + CLIP en cada frame.
+    if not realtime and result_dict.get("plate_bbox"):
+        vehicle_detector = getattr(request.app.state, "vehicle_detector", None)
+        clip_classifier = getattr(request.app.state, "clip_color_classifier", None)
+        association = None
+        if vehicle_detector is not None:
+            association = await run_in_threadpool(
+                VehicleAssociationService(vehicle_detector).detect_bytes,
+                image_bytes,
+                result_dict.get("plate_bbox"),
+            )
+            type_catalog = list((await db.execute(
+                select(TipoVehiculo).where(TipoVehiculo.esta_activo.is_(True))
+            )).scalars().all())
+            type_result = VehicleTypeSuggester.resolve(association, type_catalog)
+            if type_result.tipo_sugerido_id is not None:
+                suggested_type_name = next(
+                    (item.nombre for item in type_catalog if item.id == type_result.tipo_sugerido_id),
+                    None,
+                )
+        if association is not None and clip_classifier is not None:
+            color_result = await run_in_threadpool(
+                HybridVehicleColorAnalyzer(vehicle_detector, clip_classifier).analyze,
+                image_bytes,
+                result_dict.get("plate_bbox"),
+                association,
+            )
+    # El análisis anónimo devuelve solo el resultado OCR. Consultas de vehículos,
+    # escaneos, accesos y evidencias requieren una identidad autenticada.
+    if status_val in ["DETECTED", "LOW_CONFIDENCE"] and current_user is not None:
         normalized = result_dict.get("normalized_plate")
         
         vehicle = None
@@ -282,7 +314,20 @@ async def analyze_plate_endpoint(
                     uploaded = await run_in_threadpool(CloudinaryStorage().upload, processed.content, MediaTypeEnum.VEHICLE_REGISTRATION.value)
                     media = ArchivoMultimedia(proveedor=MediaProviderEnum.CLOUDINARY, tipo=MediaTypeEnum.VEHICLE_REGISTRATION, estado=MediaStatusEnum.READY, asset_id=uploaded.asset_id, public_id=uploaded.public_id, resource_type=uploaded.resource_type, delivery_type=uploaded.delivery_type, formato=uploaded.format, ancho=uploaded.width, alto=uploaded.height, peso_bytes=uploaded.bytes, intentos=1)
                     db.add(media); await db.flush()
-                    solicitud = SolicitudRegistroVehiculo(escaneado_id=scan.id, imagen_id=media.id, placa_sugerida=normalized, confianza_placa=scan.confianza or 0.0, estado=SolicitudRegistroEstadoEnum.PENDING, creado_por_usuario_id=current_user.id)
+                    solicitud = SolicitudRegistroVehiculo(
+                        escaneado_id=scan.id,
+                        imagen_id=media.id,
+                        placa_sugerida=normalized,
+                        confianza_placa=scan.confianza or 0.0,
+                        color_sugerido=color_result.color_sugerido if color_result else "DESCONOCIDO",
+                        confianza_color=color_result.confianza_color if color_result else 0.0,
+                        metodo_color=color_result.metodo_color if color_result else "DESCONOCIDO",
+                        tipo_sugerido_id=type_result.tipo_sugerido_id,
+                        confianza_tipo=type_result.confianza_tipo,
+                        metodo_tipo=type_result.metodo_tipo,
+                        estado=SolicitudRegistroEstadoEnum.PENDING,
+                        creado_por_usuario_id=current_user.id,
+                    )
                     db.add(solicitud); await db.flush(); solicitud_id = solicitud.id
                 else:
                     solicitud_id = pending.id
@@ -321,6 +366,19 @@ async def analyze_plate_endpoint(
             f"{vehicle.propietario.nombre} {vehicle.propietario.apellido_paterno}".strip()
             if (vehicle and vehicle.propietario and current_user is not None) else None
         ),
+        color_sugerido=color_result.color_sugerido if color_result else (
+            "DESCONOCIDO" if not realtime else None
+        ),
+        confianza_color=color_result.confianza_color if color_result else (
+            0.0 if not realtime else None
+        ),
+        metodo_color=color_result.metodo_color if color_result else (
+            "DESCONOCIDO" if not realtime else None
+        ),
+        tipo_sugerido_id=type_result.tipo_sugerido_id if not realtime else None,
+        tipo_sugerido=suggested_type_name if not realtime else None,
+        confianza_tipo=type_result.confianza_tipo if not realtime else None,
+        metodo_tipo=type_result.metodo_tipo if not realtime else None,
         mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )
 
@@ -343,7 +401,13 @@ async def list_plate_scans(
 
 @router.get("/health")
 async def health_check(request: Request):
-    ocr_available = getattr(request.app.state, "ocr_reader", None) is not None
+    fast_alpr_available = getattr(request.app.state, "fast_alpr_engine", None) is not None
+    ocr_available = fast_alpr_available
+    active_engine = getattr(
+        request.app.state,
+        "ocr_engine_name",
+        "fast_alpr" if fast_alpr_available else "unavailable",
+    )
     pipeline = get_pipeline_status()
     ready = bool(ocr_available and pipeline["supervision_available"])
     return {
@@ -351,8 +415,10 @@ async def health_check(request: Request):
         "message": (
             "API de ALPR lista para inferencia."
             if ready
-            else "API disponible, pero EasyOCR no esta inicializado."
+            else "API disponible, pero ningun motor OCR esta inicializado."
         ),
         "ocr_available": ocr_available,
+        "active_ocr_engine": active_engine,
+        "fast_alpr_available": fast_alpr_available,
         **pipeline,
     }

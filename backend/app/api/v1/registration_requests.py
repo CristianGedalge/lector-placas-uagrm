@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from app.api.v1.auth import get_current_user, require_staff
 from app.db.models import (ArchivoMultimedia, Escaneado, Marca, RoleEnum, SolicitudRegistroEstadoEnum,
     SolicitudRegistroVehiculo, TipoVehiculo, Usuario, Vehiculo)
@@ -14,7 +15,11 @@ router = APIRouter()
 
 @router.get("", response_model=list[SolicitudRegistroResponse])
 async def list_requests(db: AsyncSession = Depends(get_db), _: Usuario = Depends(require_staff)):
-    result = await db.execute(select(SolicitudRegistroVehiculo).order_by(SolicitudRegistroVehiculo.creado_el.desc()))
+    result = await db.execute(
+        select(SolicitudRegistroVehiculo)
+        .options(selectinload(SolicitudRegistroVehiculo.tipo_sugerido))
+        .order_by(SolicitudRegistroVehiculo.creado_el.desc())
+    )
     return list(result.scalars().all())
 
 @router.post("/{request_id}/approve", response_model=SolicitudRegistroResponse)

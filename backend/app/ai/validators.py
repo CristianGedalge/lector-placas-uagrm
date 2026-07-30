@@ -31,7 +31,7 @@ def is_blocklisted(text: str) -> bool:
 # ---------------------------------------------------------------------------
 # Tablas de corrección OCR posicional — solo las 6 confusiones universales
 # ---------------------------------------------------------------------------
-# Zona NUMÉRICA (posiciones 0-3): letras que EasyOCR confunde con dígitos.
+# Zona NUMÉRICA (posiciones 0-3): letras que un OCR puede confundir con dígitos.
 # IMPORTANTE: solo incluir confusiones donde el carácter visualmente
 # se parece al dígito de forma casi universal (O↔0, I↔1, S↔5, Z↔2, G↔6, B↔8, D↔0, Q↔0).
 _NUM_ZONE_FIXES: dict[int, str] = {
@@ -45,7 +45,7 @@ _NUM_ZONE_FIXES: dict[int, str] = {
     ord("Q"): "0",  # Q → 0  (Q sin cola puede leerse como 0)
 }
 
-# Zona ALFABÉTICA (posiciones 4-6): dígitos que EasyOCR confunde con letras.
+# Zona ALFABÉTICA (posiciones 4-6): dígitos que un OCR puede confundir con letras.
 _LET_ZONE_FIXES: dict[int, str] = {
     ord("0"): "O",  # 0 → O
     ord("1"): "I",  # 1 → I

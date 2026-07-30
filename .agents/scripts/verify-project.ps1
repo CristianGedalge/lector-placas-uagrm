@@ -19,22 +19,29 @@ Write-Host "[1/5] Compilando Python"
 & $Python -m compileall -q (Join-Path $backend "app") (Join-Path $backend "tests")
 if ($LASTEXITCODE -ne 0) { throw "compileall fallo" }
 
-Write-Host "[2/5] Verificando APIs OCR de Supervision"
+Write-Host "[2/5] Verificando APIs del stack local de vision"
 $smoke = @'
 import supervision as sv
+from fast_alpr import ALPR
+from open_image_models.detection.factory import create_detector
+from app.services.clip_color import CLIPColorClassifier
 required = {
-    "Detections.from_easyocr": hasattr(sv.Detections, "from_easyocr"),
+    "Detections": hasattr(sv, "Detections"),
     "crop_image": hasattr(sv, "crop_image"),
     "ColorLookup.INDEX": hasattr(sv.ColorLookup, "INDEX"),
+    "FastALPR": ALPR is not None,
+    "create_detector": callable(create_detector),
+    "CLIP catalog": len(CLIPColorClassifier.CATALOG) == 9,
 }
 missing = [name for name, available in required.items() if not available]
 if missing:
     raise SystemExit("APIs faltantes: " + ", ".join(missing))
 sv.BoxAnnotator(thickness=2, color_lookup=sv.ColorLookup.INDEX)
 sv.LabelAnnotator(text_scale=0.5, color_lookup=sv.ColorLookup.INDEX)
-print(f"supervision={sv.__version__}; OCR_APIs=OK")
+print(f"supervision={sv.__version__}; VISION_APIs=OK")
 '@
-$smoke | & $Python -
+Push-Location $backend
+try { $smoke | & $Python - } finally { Pop-Location }
 if ($LASTEXITCODE -ne 0) { throw "smoke test de Supervision fallo" }
 
 Write-Host "[3/5] Comprobando dependencias locales"
@@ -45,8 +52,9 @@ $versions = @'
 from importlib import metadata
 expected = {
     "supervision": "0.29.1",
-    "opencv-python": "4.10.0.84",
     "opencv-python-headless": "4.10.0.84",
+    "fast-alpr": "0.4.0",
+    "fast-plate-ocr": "1.1.0",
 }
 errors = []
 for package, wanted in expected.items():
@@ -58,7 +66,7 @@ for package, wanted in expected.items():
     print(f"{package}={current}")
     if current != wanted:
         errors.append(f"{package}: esperado {wanted}, actual {current}")
-for required in ("easyocr", "numpy", "httpx"):
+for required in ("numpy", "httpx", "onnxruntime", "open-image-models", "tokenizers", "huggingface-hub"):
     try:
         print(f"{required}={metadata.version(required)}")
     except metadata.PackageNotFoundError:
@@ -70,11 +78,11 @@ $versions | & $Python -
 if ($LASTEXITCODE -ne 0) { throw "las dependencias instaladas no coinciden con la arquitectura OCR" }
 }
 
-Write-Host "[4/5] Ejecutando pruebas unitarias del backend"
+Write-Host "[4/5] Ejecutando pytest del backend"
 Push-Location $backend
 try {
-    & $Python -m unittest discover -s tests -v
-    if ($LASTEXITCODE -ne 0) { throw "pruebas unitarias del backend fallaron" }
+    & $Python -m pytest -q
+    if ($LASTEXITCODE -ne 0) { throw "pytest del backend fallo" }
 } finally { Pop-Location }
 
 Write-Host "[5/5] Construyendo frontend"

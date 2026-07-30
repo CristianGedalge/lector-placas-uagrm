@@ -18,6 +18,7 @@ class MarcaResponse(BaseModel):
 class TipoVehiculoResponse(BaseModel):
     id: UUID
     nombre: str
+    esta_activo: bool = True
     creado_el: datetime
 
     model_config = ConfigDict(from_attributes=True)
