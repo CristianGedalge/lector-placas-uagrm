@@ -25,20 +25,23 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir --no-deps --force-reinstall \
       opencv-python-headless==4.10.0.84
 
-# Descarga los modelos ONNX durante el build para no depender de Internet al arrancar.
-RUN python -c "from fast_alpr import ALPR; ALPR(detector_model='yolo-v9-t-384-license-plate-end2end', detector_providers=['CPUExecutionProvider'], ocr_model='cct-xs-v2-global-model', ocr_device='cpu', ocr_providers=['CPUExecutionProvider'])"
-
-# Preinstala tambien el detector vehicular y CLIP para operar sin red al arrancar.
-RUN python -c "from open_image_models.detection.factory import create_detector; create_detector('rf-detr-nano-384-coco', conf_thresh=.45, providers=['CPUExecutionProvider'])" && \
-    python -c "from huggingface_hub import hf_hub_download; files=['onnx/model_quantized.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','preprocessor_config.json','config.json']; [hf_hub_download(repo_id='Xenova/clip-vit-base-patch32', revision='d15189d7028b43f1d3e65039190477f6af591c2a', filename=f, local_dir='/app/.runtime/models/clip-vit-b-32') for f in files]"
-
 # Copiar el código fuente de la aplicación
 COPY . .
 
 RUN addgroup --system app && adduser --system --ingroup app app && \
     mkdir -p /app/.runtime && chown -R app:app /app
 
+# Forzar el cache de HuggingFace en la ruta del runtime propiedad del usuario app
+ENV HF_HOME=/app/.runtime/huggingface
+
 USER app
+
+# Descarga los modelos ONNX durante el build para no depender de Internet al arrancar.
+RUN python -c "from fast_alpr import ALPR; ALPR(detector_model='yolo-v9-t-384-license-plate-end2end', detector_providers=['CPUExecutionProvider'], ocr_model='cct-xs-v2-global-model', ocr_device='cpu', ocr_providers=['CPUExecutionProvider'])"
+
+# Preinstala tambien el detector vehicular y CLIP para operar sin red al arrancar.
+RUN python -c "from open_image_models.detection.factory import create_detector; create_detector('rf-detr-nano-384-coco', conf_thresh=.45, providers=['CPUExecutionProvider'])" && \
+    python -c "from huggingface_hub import hf_hub_download; files=['onnx/model_quantized.onnx','tokenizer.json','tokenizer_config.json','special_tokens_map.json','preprocessor_config.json','config.json']; [hf_hub_download(repo_id='Xenova/clip-vit-base-patch32', revision='d15189d7028b43f1d3e65039190477f6af591c2a', filename=f, local_dir='/app/.runtime/models/clip-vit-b-32') for f in files]"
 
 # Puerto de la aplicación
 EXPOSE 8000
