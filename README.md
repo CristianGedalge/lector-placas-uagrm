@@ -18,7 +18,8 @@ del operador.
 
 ## Funcionalidades principales
 
-- autenticación mediante cookie segura y roles;
+- autenticación por JWT, actualmente compatible con cookie HttpOnly y Bearer,
+  con autorización backend por roles;
 - lectura local de placas bolivianas desde imagen, cámara web, USB o agente RTSP;
 - consulta de vehículo y propietario autorizado;
 - registro de entrada/salida con protección contra duplicados cercanos;
@@ -40,7 +41,7 @@ modelo exactos.
 ```text
 React 18 + Vite
         |
-        | HTTPS / JSON / multipart / cookie HttpOnly
+        | HTTPS / JSON / multipart / JWT (cookie HttpOnly o Bearer)
         v
 FastAPI + SQLAlchemy + Alembic
    |          |               |
@@ -214,9 +215,10 @@ Alembic obtiene la URL exclusivamente desde `backend/.env`/entorno. Desde
 .\.venv\Scripts\alembic.exe check
 ```
 
-La única cabeza del repositorio es `c2d3e4f5a6b7`. Antes de `upgrade head` sobre
-una base existente, haga backup o cree una rama de Neon. No edite ni elimine
-migraciones que ya hayan sido aplicadas.
+La única cabeza del repositorio es `c2d3e4f5a6b7`. La instancia Neon verificada
+el 2026-07-30 está alineada con esa revisión y `alembic check` no detectó nuevas
+operaciones. Para otra base o una migración futura, haga backup o cree una rama
+de Neon antes de `upgrade head`. No edite ni elimine migraciones aplicadas.
 
 Una base nueva no dispone de un bootstrap vigente para el primer administrador.
 El endpoint de registro exige un administrador autenticado. El propietario debe
@@ -389,7 +391,7 @@ El repositorio puede servir el backend como contenedor y el frontend como sitio
 estático. Antes de producción son obligatorios:
 
 1. rotar `SECRET_KEY`, credenciales Neon y Cloudinary;
-2. backup de la base y `alembic upgrade head`;
+2. comprobar `alembic current/check` y respaldar la base antes de futuras migraciones;
 3. configurar el origen HTTPS exacto en `ALLOWED_ORIGINS`;
 4. probar login, roles, Cloudinary, cámara, barrera y retención;
 5. medir memoria y latencia de OCR/RF-DETR/CLIP;
@@ -453,6 +455,9 @@ y los logs sin copiar secretos. Los endpoints autorizados permiten reintento.
 
 - No existe bootstrap vigente y automatizado para el primer administrador.
 - El logout borra la cookie, pero no hay revocación JWT en servidor.
+- El frontend vigente conserva el JWT en `localStorage` para enviarlo como
+  Bearer entre dominios; esto aumenta el impacto potencial de una vulnerabilidad
+  XSS y debe revisarse antes de producción.
 - El rate limit y la caché de usuario son locales al proceso, no distribuidos.
 - Las tareas multimedia en segundo plano no sustituyen una cola durable.
 - El health de Railway debería separar liveness y readiness.

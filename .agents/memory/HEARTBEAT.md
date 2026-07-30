@@ -21,8 +21,9 @@
   Ruff 0, Bandit 0 y pip-audit 0 vulnerabilidades conocidas.
 - Frontend: build Vite correcto con React Router 7.18.2. npm audit conserva un
   advisory alto duplicado para modo RSC; este SPA no usa RSC/SSR/actions.
-- Alembic: una cabeza local `c2d3e4f5a6b7`; Neon permanece en
-  `b1c2d3e4f5a6` hasta un despliegue autorizado. No aplicar código sin upgrade.
+- Alembic: repositorio y Neon alineados en la cabeza `c2d3e4f5a6b7`.
+  `alembic current/check` correctos tras convertir a `timestamptz` los tres
+  timestamps de solicitudes; se conservaron las 16 filas existentes.
 - Decisión de release: NO-GO hasta rotar secretos históricos, aplicar/verificar
   migración y ejecutar E2E real de servicios, cámara y barrera.
 

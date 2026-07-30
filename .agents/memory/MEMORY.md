@@ -1,5 +1,14 @@
 # MEMORY
 
+## 2026-07-30 - Migracion UTC aplicada en Neon
+
+- Tras integrar `origin/main`, se aplico `c2d3e4f5a6b7` sobre Neon desde
+  `b1c2d3e4f5a6`.
+- `creado_el`, `revisado_el` y `actualizado_el` de
+  `solicitudes_registro_vehiculo` quedaron como `timestamp with time zone`.
+- `alembic current` devuelve `c2d3e4f5a6b7 (head)` y `alembic check` indica
+  que no existen nuevas operaciones. Las 16 filas previas se conservaron.
+
 ## 2026-07-30 - Auditoría técnica y estabilización
 
 - Se generaron `QUALITY_AUDIT.md`, `SECURITY_AUDIT.md`,

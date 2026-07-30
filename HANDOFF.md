@@ -11,7 +11,7 @@ React por roles.
 
 El sistema funciona en desarrollo local y supera la suite automatizada actual,
 pero la decisión de release es **NO-GO para producción**. Antes de desplegar se
-deben rotar secretos, actualizar y comprobar Neon, validar las imágenes Docker,
+deben rotar secretos, validar las imágenes Docker,
 resolver la estrategia de cookies/dominios y completar E2E con servicios y
 hardware reales.
 
@@ -21,20 +21,22 @@ controles aplicables de OWASP ASVS. No está certificado por ISO.
 ## 2. Estado actual de la entrega
 
 - Hay una única cabeza Alembic local: `c2d3e4f5a6b7`.
-- La base Neon configurada respondió en `b1c2d3e4f5a6` durante esta entrega.
-- No se aplicaron migraciones ni se modificaron datos en esta documentación.
-- No se hizo push ni merge.
+- La base Neon configurada fue migrada y verificada en `c2d3e4f5a6b7 (head)`.
+- `alembic check` no detecta operaciones pendientes y las 16 solicitudes
+  existentes se conservaron.
+- Se integró `origin/main` localmente; no se hizo push.
 
 ## 3. Rama actual y último commit relevante
 
 - Rama actual: `main`.
-- Implementación base relevante: commit `24aac6b` (`se arreglaron problemas de seguridad`).
-- Este HANDOFF y README se entregan en un commit documental posterior; use
-  `git log -1 --oneline` para obtener su identificador.
+- HEAD local observado: `081bc39`, merge que integra `origin/main`.
+- Último commit remoto integrado: `64c74bb` (`fix(frontend): persist JWT token
+  and inject Authorization header in Axios`).
+- Implementación de seguridad relevante en el historial: `1549779` y `24aac6b`.
 
 ## 4. Funcionalidades terminadas
 
-- login, cookie HttpOnly y autorización backend por roles;
+- login JWT, cookie HttpOnly/Bearer y autorización backend por roles;
 - administración autenticada de usuarios;
 - vistas de dashboard, vehículos y accesos filtradas por rol/propiedad;
 - lectura FastALPR + FastPlateOCR local;
@@ -140,18 +142,17 @@ sube evidencias.
 
 ```text
 Cabeza del repositorio: c2d3e4f5a6b7
-Revisión observada en Neon: b1c2d3e4f5a6
-alembic check: FAILED - Target database is not up to date
+Revisión verificada en Neon: c2d3e4f5a6b7 (head)
+alembic check: No new upgrade operations detected
 ```
 
-La migración pendiente convierte tres timestamps de
-`solicitudes_registro_vehiculo` a timestamps con zona horaria. No desplegar el
-código esperando `c2d3e4f5a6b7` hasta hacer backup/branch de Neon, revisar datos y
-ejecutar:
+La migración `c2d3e4f5a6b7` se aplicó el 2026-07-30. Convirtió `creado_el`,
+`revisado_el` y `actualizado_el` de `solicitudes_registro_vehiculo` a
+`timestamp with time zone`; se verificó la conservación de las 16 filas. Para
+comprobar el estado:
 
 ```powershell
 cd backend
-.\.venv\Scripts\alembic.exe upgrade head
 .\.venv\Scripts\alembic.exe current
 .\.venv\Scripts\alembic.exe check
 ```
@@ -245,8 +246,8 @@ local vigente:
 | build frontend | correcto; 108 módulos; JS 437.93 kB, gzip 116.51 kB |
 | npm audit | 2 altas por el mismo advisory de React Router RSC; la SPA no usa RSC/SSR/actions |
 | Alembic heads | `c2d3e4f5a6b7` |
-| Alembic current | Neon en `b1c2d3e4f5a6` |
-| Alembic check | falla: base no actualizada |
+| Alembic current | Neon en `c2d3e4f5a6b7 (head)` |
+| Alembic check | correcto; sin nuevas operaciones |
 | verify-project | correcto; stack de visión, pytest y build aprobados |
 | smoke-local | correcto; health `ok`, 34 rutas, OCR disponible y analyze anónimo 401 |
 | Docker build | no verificado: daemon Docker Desktop inactivo |
@@ -258,8 +259,7 @@ afectado no está habilitado en esta aplicación; no ejecutar `npm audit fix
 
 ## 13. Guía corta de demostración
 
-1. Configure `.env`, confirme Neon y Cloudinary, y aplique la migración sólo con
-   backup autorizado.
+1. Configure `.env` y confirme Neon, Cloudinary y `alembic check`.
 2. Inicie backend y frontend.
 3. Inicie sesión con una cuenta de demostración entregada por el propietario; no
    escriba credenciales en este archivo.
@@ -305,12 +305,12 @@ personales reales durante la demostración.
 ## 16. Riesgos pendientes
 
 - revocación JWT inexistente después de logout;
+- JWT persistido por el frontend en `localStorage`, con mayor exposición ante XSS;
 - posible pérdida o atasco de spool ante reinicio sin reconciliador;
 - Docker Linux no construido en la última sesión;
 - cookies `SameSite=Lax` requieren diseño de dominios compatible en despliegue;
 - React Router conserva un advisory alto duplicado para RSC no utilizado;
 - falta observabilidad, alertas y plan operativo formal de incidentes;
-- Neon permanece una migración detrás de la cabeza del código.
 
 ## 17. Credenciales que debe rotar el propietario
 
@@ -359,11 +359,9 @@ arranque después de cada rotación.
 ### P0
 
 - Rotar secretos de sesión, Neon, Cloudinary y cualquier RTSP expuesto.
-- Crear backup/branch de Neon antes de tocar la migración pendiente.
 
 ### P1
 
-- Aplicar y verificar `c2d3e4f5a6b7` en Neon.
 - Diseñar/probar cookies y dominios para Railway + Netlify.
 - Crear procedimiento seguro de bootstrap del primer administrador.
 - Construir las imágenes Docker y ejecutar smoke en Linux.
@@ -390,11 +388,11 @@ arranque después de cada rotación.
 ## 20. Próximos pasos recomendados
 
 1. Rotar todas las credenciales y verificar que no existan secretos versionados.
-2. Crear branch/backup Neon, ensayar la migración y ejecutar E2E sobre staging.
+2. Crear branch/backup Neon antes de futuras migraciones y ejecutar E2E sobre staging.
 3. Arrancar Docker Desktop, construir ambas imágenes y medir recursos reales.
 4. Elegir dominios propios para frontend/API y validar cookies en navegadores.
 5. Preparar configuración reproducible de Railway/Netlify sin desplegar todavía.
 6. Añadir recuperación durable de medios y health readiness.
 7. Repetir Ruff, Bandit, pip-audit, npm audit, pytest, verify-project y smoke.
 8. Realizar demostración controlada y obtener aprobación del propietario antes de
-   cualquier push, migración o despliegue productivo.
+   cualquier push o despliegue productivo.

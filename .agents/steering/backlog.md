@@ -1,7 +1,7 @@
 # Backlog
 
 - `AUDIT-ROTATE-001` | `pending` | Prioridad `critica` | Rotar todos los secretos presentes históricamente en Git y coordinar actualización de entornos | Dependencias: acceso Neon/Cloudinary
-- `AUDIT-MIG-001` | `pending` | Prioridad `alta` | Backup, aplicar `c2d3e4f5a6b7` en Neon y verificar `alembic current/check` | Dependencias: ventana de despliegue
+- `AUDIT-MIG-001` | `done` | Prioridad `alta` | Aplicada `c2d3e4f5a6b7` en Neon; `alembic current/check` y conservación de 16 filas verificados | Dependencias: ninguna
 - `AUDIT-E2E-001` | `pending` | Prioridad `alta` | Ejecutar E2E real de roles, Cloudinary, cámara USB/RTSP/celular y barrera | Dependencias: hardware y servicios externos
 - `AUDIT-COV-001` | `pending` | Prioridad `media` | Elevar cobertura de autorización/transacciones en access_logs, media_tasks y vehicles | Dependencias: fixtures PostgreSQL
 
