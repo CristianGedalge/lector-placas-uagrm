@@ -20,7 +20,7 @@
 - [x] pip-audit sin vulnerabilidades conocidas.
 - [x] Build Vite.
 - [x] `verify-project.ps1` con entorno local.
-- [ ] `smoke-local.ps1` final.
+- [x] `smoke-local.ps1`: analyze 200, health `ok`, 34 rutas y puerto liberado.
 - [ ] npm audit sin avisos: quedan 2 entradas por el mismo advisory RSC no aplicable
       al SPA; revaluar al publicarse una versión corregida.
 

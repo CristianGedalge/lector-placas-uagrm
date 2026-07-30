@@ -3,10 +3,9 @@ import os
 import time
 import unittest
 
-from PIL import Image
-
 from app.services.cloudinary_storage import CloudinaryStorage
 from app.services.image_processing import ImageProcessingService
+from PIL import Image
 
 
 @unittest.skipUnless(

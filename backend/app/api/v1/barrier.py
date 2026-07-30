@@ -14,8 +14,8 @@ Uso:
 
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
-from typing import AsyncGenerator
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse, StreamingResponse

@@ -5,9 +5,10 @@ if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import RoleEnum, UniversityPerson
 from app.db.session import AsyncSessionLocal
-from app.db.models import UniversityPerson, RoleEnum
+
 
 async def seed():
     async with AsyncSessionLocal() as session:

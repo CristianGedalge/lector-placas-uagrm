@@ -1,5 +1,5 @@
 param(
-    [string]$Python = "python",
+    [string]$Python = "",
     [switch]$SkipVersionCheck
 )
 
@@ -9,6 +9,10 @@ $backend = Join-Path $root "backend"
 $frontend = Join-Path $root "frontend"
 if (-not (Test-Path (Join-Path $backend "app"))) { throw "Backend no encontrado en $backend" }
 if (-not (Test-Path (Join-Path $frontend "package.json"))) { throw "Frontend no encontrado o incompleto en $frontend" }
+if (-not $Python) {
+    $projectPython = Join-Path $backend ".venv\Scripts\python.exe"
+    $Python = if (Test-Path $projectPython) { $projectPython } else { "python" }
+}
 if (Test-Path $Python) { $Python = (Resolve-Path $Python).Path }
 $runtime = Join-Path $backend ".runtime"
 $matplotlibRuntime = Join-Path $runtime "matplotlib"

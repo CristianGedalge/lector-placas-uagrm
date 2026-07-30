@@ -5,12 +5,11 @@ import os
 import unittest
 from uuid import UUID, uuid4
 
-from fastapi.testclient import TestClient
-from sqlalchemy import delete
-
 from app.db.models import Usuario
 from app.db.session import AsyncSessionLocal, check_database_connection, engine
 from app.main import app
+from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
 
 @unittest.skipUnless(

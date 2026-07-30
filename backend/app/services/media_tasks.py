@@ -5,8 +5,6 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from sqlalchemy import select
-
 from app.config.settings import BACKEND_DIR, settings
 from app.db.models import ArchivoMultimedia, MediaStatusEnum
 from app.db.session import AsyncSessionLocal

@@ -1,9 +1,7 @@
 import cv2
 import numpy as np
 import pytest
-
 from app.services.vehicle_color import VehicleColorAnalyzer
-
 
 PLATE_BOX = [270, 235, 370, 270]
 VEHICLE_BOX = [80, 45, 560, 325]

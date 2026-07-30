@@ -111,7 +111,8 @@ class CloudinaryStorage(StorageService):
     def exists(self, public_id: str) -> bool:
         try:
             import cloudinary.api
-            from cloudinary.exceptions import Error as CloudinaryError, NotFound
+            from cloudinary.exceptions import Error as CloudinaryError
+            from cloudinary.exceptions import NotFound
 
             cloudinary.api.resource(
                 public_id,

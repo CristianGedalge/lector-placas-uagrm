@@ -1,26 +1,30 @@
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from cachetools import TTLCache
-
 from app.config.settings import settings
-from app.core.security import ALGORITHM, create_access_token, hash_password, verify_password
+from app.core.limiter import limiter
+from app.core.security import (
+    ALGORITHM,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.db.models import RoleEnum, Usuario
 from app.db.session import get_db
 from app.schemas.auth import (
     AuthResponse,
-    UsuarioResponse,
+    UsuarioAdminUpdateRequest,
     UsuarioLoginRequest,
     UsuarioProfileUpdateRequest,
     UsuarioRegisterRequest,
-    UsuarioAdminUpdateRequest,
+    UsuarioResponse,
 )
-from app.core.limiter import limiter
+from cachetools import TTLCache
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
@@ -363,4 +367,3 @@ async def delete_user_by_admin(
     await db.delete(user)
     await db.commit()
     user_cache.pop(user.id, None)
-    return

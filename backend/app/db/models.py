@@ -2,11 +2,22 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from app.db.session import Base
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import Uuid
-
-from app.db.session import Base
 
 
 class RoleEnum(str, enum.Enum):
@@ -124,9 +135,13 @@ class Vehiculo(Base):
 
 class EstadoCampus(Base):
     __tablename__ = "estado_campus"
+    __table_args__ = (
+        UniqueConstraint("vehiculo_id", name="estado_campus_vehiculo_id_key"),
+        Index("ix_estado_campus_vehiculo_id", "vehiculo_id"),
+    )
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), unique=True, nullable=False, index=True)
+    vehiculo_id = Column(Uuid, ForeignKey("vehiculos.id"), nullable=False)
     estado = Column(Enum(UbicacionVehiculoEnum), nullable=False)
     ultimo_acceso_id = Column(Uuid, ForeignKey("accesos.id"), nullable=False)
     actualizado_el = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True, nullable=False)

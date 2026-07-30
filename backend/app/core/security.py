@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 
 import jwt
-
 from app.config.settings import settings
 
 ALGORITHM = "HS256"

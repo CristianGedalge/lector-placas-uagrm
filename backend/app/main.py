@@ -6,9 +6,9 @@ import asyncio
 import logging
 import os
 import sys
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIR = PROJECT_ROOT / ".runtime"
@@ -31,17 +31,16 @@ except ImportError:  # pragma: no cover
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import plates
-from app.api.v1.auth import router as auth_router
-from app.api.v1.dashboard import router as dashboard_router
-from app.api.v1.vehicles import router as vehicles_router
 from app.api.v1.access_logs import router as access_logs_router
+from app.api.v1.auth import router as auth_router
+from app.api.v1.barrier import router as barrier_router
+from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.devices import router as devices_router
 from app.api.v1.media import router as media_router
-from app.api.v1.barrier import router as barrier_router
 from app.api.v1.registration_requests import router as registration_requests_router
+from app.api.v1.vehicles import router as vehicles_router
 from app.config.settings import settings
 from app.db.session import database_target
 from app.services.clip_color import CLIPColorClassifier
@@ -84,8 +83,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 settings.FAST_PLATE_OCR_MODEL,
                 settings.FAST_ALPR_EXECUTION_PROVIDER,
             )
-        except Exception as exc:
-            logger.exception("FastALPR/FastPlateOCR no pudo inicializarse: %s", exc)
+        except Exception:
+            logger.exception("FastALPR/FastPlateOCR no pudo inicializarse")
 
     try:
         if create_detector is None:
@@ -97,8 +96,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         app.state.clip_color_classifier = CLIPColorClassifier()
         logger.info("Color vehicular listo: OpenCV + CLIP local, detector=%s", settings.VEHICLE_DETECTOR_MODEL)
-    except Exception as exc:
-        logger.exception("Detector vehicular/CLIP no pudo inicializarse: %s", exc)
+    except Exception:
+        logger.exception("Detector vehicular/CLIP no pudo inicializarse")
 
     app.state.ocr_engine_name = "fast_alpr" if app.state.fast_alpr_engine is not None else "unavailable"
     yield
@@ -120,6 +119,7 @@ app = FastAPI(
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+
 from app.core.limiter import limiter
 
 app.state.limiter = limiter
@@ -152,6 +152,7 @@ app.include_router(barrier_router, prefix="/api/v1/barrier", tags=["Barrier Simu
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 from starlette.responses import Response as StarletteResponse
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: StarletteRequest, call_next):

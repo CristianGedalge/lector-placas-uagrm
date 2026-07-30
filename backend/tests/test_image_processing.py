@@ -2,9 +2,8 @@ import io
 import unittest
 from unittest.mock import patch
 
-from PIL import Image
-
 from app.services.image_processing import ImageProcessingError, ImageProcessingService
+from PIL import Image
 
 
 def encoded(fmt="JPEG", size=(120, 80), exif=None):
@@ -60,9 +59,8 @@ class ImageProcessingTests(unittest.TestCase):
     def test_oversized_file_is_rejected_before_decode(self):
         with patch(
             "app.services.image_processing.settings.MEDIA_MAX_UPLOAD_BYTES", 4
-        ):
-            with self.assertRaises(ImageProcessingError):
-                self.service.process(b"12345", "ACCESS_ENTRY")
+        ), self.assertRaises(ImageProcessingError):
+            self.service.process(b"12345", "ACCESS_ENTRY")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@ import threading
 import unittest
 
 import numpy as np
-
 from app.services.camera_capture import (
     CameraCaptureAgent,
     CameraCaptureConfig,
@@ -74,6 +73,10 @@ class MultipartRequestTests(unittest.TestCase):
         self.assertIn("multipart/form-data", content_type)
         self.assertIn(b'name="file"', request.data)
         self.assertIn(b"jpeg-data", request.data)
+
+    def test_request_rejects_non_http_scheme(self):
+        with self.assertRaises(ValueError):
+            _build_multipart_request("file:///tmp/capture", b"jpeg-data")
 
 
 class CameraCaptureAgentTests(unittest.TestCase):

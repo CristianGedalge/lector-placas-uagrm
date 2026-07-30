@@ -3,7 +3,6 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 import pytest
-
 from app.services.clip_color import CLIPColorResult
 from app.services.vehicle_color import HybridVehicleColorAnalyzer
 

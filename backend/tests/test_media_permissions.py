@@ -4,10 +4,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-from fastapi import HTTPException
-
 from app.api.v1.media import _authorize_media
 from app.db.models import MediaTypeEnum, RoleEnum
+from fastapi import HTTPException
 
 
 class MediaPermissionTests(unittest.TestCase):

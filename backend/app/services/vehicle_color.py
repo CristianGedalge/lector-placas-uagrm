@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import cv2
 import numpy as np
@@ -96,8 +96,8 @@ class VehicleColorAnalyzer:
     UNKNOWN = ColorSuggestion("DESCONOCIDO", 0.0, 0.0)
     MAX_DIMENSION = 640
     MIN_VALID_PIXELS = 500
-    NEUTRAL_COLORS = {"BLANCO", "PLATEADO", "GRIS"}
-    CHROMATIC_BGR = {
+    NEUTRAL_COLORS: ClassVar[set[str]] = {"BLANCO", "PLATEADO", "GRIS"}
+    CHROMATIC_BGR: ClassVar[dict[str, tuple[int, int, int]]] = {
         "ROJO": (40, 40, 190),
         "AZUL": (180, 85, 35),
         "VERDE": (65, 145, 65),
@@ -368,7 +368,7 @@ class VehicleColorAnalyzer:
     def _classify_center(self, center):
         lab_pixel = np.uint8(np.clip(center, 0, 255)).reshape(1, 1, 3)
         bgr = cv2.cvtColor(lab_pixel, cv2.COLOR_LAB2BGR)
-        h, s, v = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).reshape(3).astype(float)
+        _h, s, v = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV).reshape(3).astype(float)
         # Metales gris/plateado adquieren tintes del cielo, cesped o edificios;
         # una saturacion moderada no basta para convertirlos en marron/verde.
         if s <= 90:

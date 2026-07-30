@@ -6,9 +6,11 @@ import signal
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 import cv2
@@ -53,7 +55,7 @@ class CameraCaptureConfig:
             raise ValueError("CAMERA_JPEG_QUALITY debe estar entre 1 y 100.")
 
     @classmethod
-    def from_settings(cls) -> "CameraCaptureConfig":
+    def from_settings(cls) -> CameraCaptureConfig:
         return cls(
             camera_index=settings.CAMERA_INDEX,
             rtsp_url=settings.CAMERA_RTSP_URL.strip(),
@@ -104,6 +106,9 @@ class PlateDeduplicator:
 
 
 def _build_multipart_request(api_url: str, jpeg_bytes: bytes) -> Request:
+    parsed_url = urlsplit(api_url)
+    if parsed_url.scheme not in {"http", "https"} or not parsed_url.hostname:
+        raise ValueError("CAMERA_API_URL debe usar http o https y contener un host valido.")
     boundary = f"----plate-camera-{uuid.uuid4().hex}"
     body = (
         f"--{boundary}\r\n"
@@ -124,7 +129,8 @@ def _build_multipart_request(api_url: str, jpeg_bytes: bytes) -> Request:
 def post_jpeg(api_url: str, jpeg_bytes: bytes, timeout_seconds: float) -> dict[str, Any]:
     request = _build_multipart_request(api_url, jpeg_bytes)
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:
+        # _build_multipart_request restringe el destino a HTTP(S) con host valido.
+        with urlopen(request, timeout=timeout_seconds) as response:  # nosec B310
             payload = response.read()
     except HTTPError as exc:
         payload = exc.read()

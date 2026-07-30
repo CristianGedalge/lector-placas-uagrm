@@ -1,9 +1,8 @@
 import unittest
 from unittest.mock import patch
 
-from cloudinary.exceptions import NotFound
-
 from app.services.cloudinary_storage import CloudinaryStorage
+from cloudinary.exceptions import NotFound
 
 
 class CloudinaryStorageTests(unittest.TestCase):

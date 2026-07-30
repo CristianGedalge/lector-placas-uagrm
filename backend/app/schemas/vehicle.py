@@ -1,10 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from app.ai.validators import normalize_plate_text, validate_bolivian_plate
 from app.schemas.auth import UsuarioResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MarcaResponse(BaseModel):

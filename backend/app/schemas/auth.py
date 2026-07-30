@@ -2,9 +2,8 @@ import re
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 from app.db.models import RoleEnum
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UsuarioRegisterRequest(BaseModel):

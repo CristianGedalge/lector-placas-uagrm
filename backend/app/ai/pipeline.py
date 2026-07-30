@@ -8,8 +8,11 @@ from typing import Any
 import cv2
 import numpy as np
 import supervision as sv
-
-from app.ai.validators import is_blocklisted, normalize_plate_text, validate_bolivian_plate
+from app.ai.validators import (
+    is_blocklisted,
+    normalize_plate_text,
+    validate_bolivian_plate,
+)
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -117,8 +120,8 @@ def _encode_image(image: np.ndarray) -> str | None:
 def _analyze_with_fast_alpr(image: np.ndarray, analysis_region: np.ndarray, offset: tuple[int, int], plate_engine: Any, realtime: bool) -> dict:
     try:
         predictions = plate_engine.predict(analysis_region)
-    except Exception as exc:
-        logger.exception("FastALPR/FastPlateOCR fallo durante la inferencia: %s", exc)
+    except Exception:
+        logger.exception("FastALPR/FastPlateOCR fallo durante la inferencia")
         return _error("Error durante la inferencia FastPlateOCR.", 500, "ocr_inference_error")
 
     raw_bboxes: list[list[float]] = []
