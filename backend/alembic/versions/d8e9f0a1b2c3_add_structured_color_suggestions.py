@@ -1,13 +1,12 @@
 """add structured vehicle color suggestions"""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "d8e9f0a1b2c3"
-down_revision: Union[str, Sequence[str], None] = "c7d8e9f0a1b2"
+down_revision: str | Sequence[str] | None = "c7d8e9f0a1b2"
 branch_labels = None
 depends_on = None
 

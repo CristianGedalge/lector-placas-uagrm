@@ -1,15 +1,26 @@
 from datetime import datetime, timezone
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.ai.validators import normalize_plate_text, validate_bolivian_plate
+from app.api.v1.auth import require_staff
+from app.db.models import (
+    Marca,
+    SolicitudRegistroEstadoEnum,
+    SolicitudRegistroVehiculo,
+    TipoVehiculo,
+    Usuario,
+    Vehiculo,
+)
+from app.db.session import get_db
+from app.schemas.registration_request import (
+    SolicitudRegistroApprove,
+    SolicitudRegistroReject,
+    SolicitudRegistroResponse,
+)
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.api.v1.auth import get_current_user, require_staff
-from app.db.models import (ArchivoMultimedia, Escaneado, Marca, RoleEnum, SolicitudRegistroEstadoEnum,
-    SolicitudRegistroVehiculo, TipoVehiculo, Usuario, Vehiculo)
-from app.db.session import get_db
-from app.schemas.registration_request import SolicitudRegistroApprove, SolicitudRegistroReject, SolicitudRegistroResponse
-from app.ai.validators import normalize_plate_text, validate_bolivian_plate
 
 router = APIRouter()
 

@@ -1,28 +1,27 @@
 import uuid
-from typing import List
+
+from app.api.v1.auth import get_current_user, require_admin
+from app.db.models import Dispositivo, TipoDispositivo, Usuario
+from app.db.session import get_db
+from app.schemas.device import (
+    DispositivoCreate,
+    DispositivoResponse,
+    DispositivoUpdate,
+    TipoDispositivoCreate,
+    TipoDispositivoResponse,
+)
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from app.db.models import RoleEnum, Dispositivo, TipoDispositivo, Usuario
-from app.db.session import get_db
-from app.schemas.device import (
-    TipoDispositivoCreate,
-    TipoDispositivoResponse,
-    DispositivoCreate,
-    DispositivoUpdate,
-    DispositivoResponse
-)
-from app.api.v1.auth import get_current_user, require_admin
-
 router = APIRouter()
 
 
 # ── TIPOS DE DISPOSITIVOS ──────────────────────────────────────────
 
-@router.get("/types", response_model=List[TipoDispositivoResponse])
+@router.get("/types", response_model=list[TipoDispositivoResponse])
 async def list_device_types(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user)
@@ -86,7 +85,7 @@ async def delete_device_type(
 
 # ── DISPOSITIVOS ──────────────────────────────────────────────────
 
-@router.get("/", response_model=List[DispositivoResponse])
+@router.get("/", response_model=list[DispositivoResponse])
 async def list_devices(
     db: AsyncSession = Depends(get_db),
     current_user: Usuario = Depends(get_current_user)

@@ -79,6 +79,32 @@ const Icons = {
   )
 };
 
+const kpiCardBase = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: "1rem",
+  borderRadius: "16px",
+  padding: "1.5rem",
+  background: "#ffffff",
+  boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
+  border: "1px solid rgba(15, 23, 42, 0.08)",
+};
+
+const kpiLabelStyle = {
+  margin: 0,
+  fontSize: "0.85rem",
+  color: "#64748b",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+};
+
+const kpiValueStyle = {
+  fontSize: "2.5rem",
+  fontWeight: "800",
+  lineHeight: 1,
+};
+
 function BarChart({ data, labelKey, valueKey, title, icon, color = "#153e75" }) {
   const max = Math.max(...data.map(d => d[valueKey]), 1);
   return (
@@ -307,7 +333,7 @@ function Dashboard() {
       <div className="details-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1.5rem" }}>
         
         {/* KPI 1: Vehículos Registrados */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid var(--color-primary)" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid var(--color-primary)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Vehículos Registrados</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "var(--color-primary)" }}>
@@ -323,7 +349,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 2: Vehículos Activos */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid green" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid green" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Vehículos Activos</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "green" }}>
@@ -339,7 +365,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 3: Lecturas Hoy */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #f2a104" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #f2a104" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Lecturas (Últimas 24h)</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#f2a104" }}>
@@ -355,7 +381,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 4: Total Lecturas */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #722ed1" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #722ed1" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Escaneos Históricos</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#722ed1" }}>
@@ -371,7 +397,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 5: Confianza Promedio */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #13c2c2" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #13c2c2" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Confianza OCR Promedio</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#13c2c2" }}>
@@ -387,7 +413,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 6: Operadores UAGRM */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #fa8c16" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #fa8c16" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Operadores UAGRM</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#fa8c16" }}>
@@ -403,7 +429,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 7: Accesos Registrados */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #eb2f96" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #eb2f96" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Accesos Totales</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#eb2f96" }}>
@@ -419,7 +445,7 @@ function Dashboard() {
         </div>
 
         {/* KPI 8: Vehículos Dentro */}
-        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", borderLeft: "4px solid #096dd9" }}>
+        <div className="card" style={{ ...kpiCardBase, borderLeft: "4px solid #096dd9" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             <p className="eyebrow" style={{ margin: 0 }}>Vehículos Adentro</p>
             <span style={{ fontSize: "2.5rem", fontWeight: "bold", color: "#096dd9" }}>

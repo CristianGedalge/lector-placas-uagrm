@@ -8,12 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sqlalchemy import select
-
 from app.db.models import ArchivoMultimedia, MediaStatusEnum, MediaTypeEnum
 from app.db.session import AsyncSessionLocal, engine
 from app.services.cloudinary_storage import CloudinaryStorage
 from app.services.storage import StorageError
+from sqlalchemy import select
 
 
 async def cleanup(dry_run: bool) -> tuple[int, int]:

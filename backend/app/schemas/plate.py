@@ -1,19 +1,19 @@
-from typing import Optional
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, field_validator
+
 from app.db.models import EstadoEscaneoEnum
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class EscaneadoResponse(BaseModel):
     id: UUID
-    ruta_imagen: Optional[str] = None
-    placa_detectada: Optional[str] = None
-    placa_normalizada: Optional[str] = None
-    confianza: Optional[float] = None
+    ruta_imagen: str | None = None
+    placa_detectada: str | None = None
+    placa_normalizada: str | None = None
+    confianza: float | None = None
     estado: EstadoEscaneoEnum
-    dispositivo_id: Optional[UUID] = None
-    vehiculo_id: Optional[UUID] = None
+    dispositivo_id: UUID | None = None
+    vehiculo_id: UUID | None = None
     creado_el: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -29,25 +29,25 @@ class EscaneadoResponse(BaseModel):
 
 class PlateAnalysisResponse(BaseModel):
     estado: str  # DETECTADO | BAJA_CONFIANZA | ERROR | MANUAL
-    placa_detectada: Optional[str] = None
-    placa_normalizada: Optional[str] = None
+    placa_detectada: str | None = None
+    placa_normalizada: str | None = None
     es_formato_valido: bool = False
-    confianza: Optional[float] = None
-    ruta_imagen: Optional[str] = None
-    mensaje: Optional[str] = None
-    plate_bbox: Optional[list[float]] = None
-    raw_bboxes: Optional[list[list[float]]] = None
-    solicitud_id: Optional[UUID] = None
-    vehiculo_id: Optional[UUID] = None
-    acceso_id: Optional[UUID] = None
-    tipo_acceso: Optional[str] = None  # ENTRADA | SALIDA
+    confianza: float | None = None
+    ruta_imagen: str | None = None
+    mensaje: str | None = None
+    plate_bbox: list[float] | None = None
+    raw_bboxes: list[list[float]] | None = None
+    solicitud_id: UUID | None = None
+    vehiculo_id: UUID | None = None
+    acceso_id: UUID | None = None
+    tipo_acceso: str | None = None  # ENTRADA | SALIDA
     es_registrado: bool = False
-    propietario_nombre: Optional[str] = None
-    color_sugerido: Optional[str] = None
-    confianza_color: Optional[float] = None
-    metodo_color: Optional[str] = None
-    tipo_sugerido_id: Optional[UUID] = None
-    tipo_sugerido: Optional[str] = None
-    confianza_tipo: Optional[float] = None
-    metodo_tipo: Optional[str] = None
+    propietario_nombre: str | None = None
+    color_sugerido: str | None = None
+    confianza_color: float | None = None
+    metodo_color: str | None = None
+    tipo_sugerido_id: UUID | None = None
+    tipo_sugerido: str | None = None
+    confianza_tipo: float | None = None
+    metodo_tipo: str | None = None
 

@@ -1,13 +1,12 @@
 """remove structured color suggestions"""
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = "e9f0a1b2c3d4"
-down_revision: Union[str, Sequence[str], None] = "d8e9f0a1b2c3"
+down_revision: str | Sequence[str] | None = "d8e9f0a1b2c3"
 branch_labels = None
 depends_on = None
 

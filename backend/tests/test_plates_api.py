@@ -4,12 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import cv2
 import numpy as np
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 from app.api.v1 import plates
 from app.schemas.plate import PlateAnalysisResponse
 from app.services.vehicle_detection import VehicleAssociation
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 class PlatesAPITests(unittest.TestCase):

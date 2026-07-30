@@ -1,5 +1,10 @@
 # Backlog
 
+- `AUDIT-ROTATE-001` | `pending` | Prioridad `critica` | Rotar todos los secretos presentes históricamente en Git y coordinar actualización de entornos | Dependencias: acceso Neon/Cloudinary
+- `AUDIT-MIG-001` | `pending` | Prioridad `alta` | Backup, aplicar `c2d3e4f5a6b7` en Neon y verificar `alembic current/check` | Dependencias: ventana de despliegue
+- `AUDIT-E2E-001` | `pending` | Prioridad `alta` | Ejecutar E2E real de roles, Cloudinary, cámara USB/RTSP/celular y barrera | Dependencias: hardware y servicios externos
+- `AUDIT-COV-001` | `pending` | Prioridad `media` | Elevar cobertura de autorización/transacciones en access_logs, media_tasks y vehicles | Dependencias: fixtures PostgreSQL
+
 ## Arquitectura vigente (2026-07-29)
 
 Las entradas historicas `AI-002`, `AI-003`, `AI-004`, `COMPAT-001`,

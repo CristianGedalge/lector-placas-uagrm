@@ -1,8 +1,10 @@
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field
+
 from app.db.models import SolicitudRegistroEstadoEnum
 from app.schemas.vehicle import TipoVehiculoResponse
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class SolicitudRegistroResponse(BaseModel):
     id: UUID

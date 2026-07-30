@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from app.db.models import RecordStatusEnum, RoleEnum
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PersonBase(BaseModel):

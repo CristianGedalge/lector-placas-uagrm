@@ -3,7 +3,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
 from app.services.vehicle_detection import VehicleAssociation, VehicleAssociationService
 from app.services.vehicle_type import VehicleTypeSuggester
 

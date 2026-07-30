@@ -4,7 +4,6 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-
 from app.ai.pipeline import PIPELINE_MODE, analyze_plate
 from app.config.settings import settings
 

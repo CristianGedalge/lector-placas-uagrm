@@ -1,9 +1,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
-
 from app.db.models import MediaStatusEnum, MediaTypeEnum
+from pydantic import BaseModel
 
 
 class MediaStatusResponse(BaseModel):

@@ -7,16 +7,15 @@ Create Date: 2026-07-28
 Agrega indices en columnas de alta frecuencia de busqueda/join que faltaban.
 Impacto esperado: elimina full-table-scans en listados de accesos, vehiculos y usuarios.
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers
 revision: str = "b9c1d2e3f4a5"
-down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | Sequence[str] | None = "a1b2c3d4e5f6"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import hypot
-from typing import Any
+from typing import Any, ClassVar
 
 import cv2
 import numpy as np
@@ -22,7 +22,7 @@ class VehicleAssociation:
 class VehicleAssociationService:
     """Ejecuta RF-DETR una vez y asocia una placa con un vehiculo."""
 
-    VEHICLE_LABELS = {"car", "motorcycle", "bus", "truck"}
+    VEHICLE_LABELS: ClassVar[set[str]] = {"car", "motorcycle", "bus", "truck"}
     MIN_ASSOCIATION = 0.58
     AMBIGUITY_MARGIN = 0.08
 
@@ -45,7 +45,7 @@ class VehicleAssociationService:
         if best_score < self.MIN_ASSOCIATION:
             return None
         if len(candidates) > 1:
-            second_score, second = candidates[1]
+            second_score, _second = candidates[1]
             if second_score >= self.MIN_ASSOCIATION and best_score - second_score < self.AMBIGUITY_MARGIN:
                 return None
         return best

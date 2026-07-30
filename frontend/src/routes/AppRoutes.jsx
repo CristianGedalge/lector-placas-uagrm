@@ -112,6 +112,7 @@ function AppRoutes() {
       <Route path="/registro" element={<Register />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<HomeRoute />} />
+        <Route path="/dashboard" element={<HomeRoute />} />
         <Route path="/subir-placa" element={<PlateScannerRoute><UploadPlate /></PlateScannerRoute>} />
         <Route path="/perfil" element={<Profile />} />
         <Route path="/usuarios" element={<AdminRoute><Users /></AdminRoute>} />

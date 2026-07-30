@@ -94,6 +94,7 @@ class CLIPColorClassifier:
                 hf_hub_download(
                     repo_id=settings.CLIP_COLOR_REPO,
                     filename=filename,
+                    revision=settings.CLIP_COLOR_REVISION,
                     local_dir=self.model_dir,
                 )
 

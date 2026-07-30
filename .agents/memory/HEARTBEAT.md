@@ -1,6 +1,17 @@
 # HEARTBEAT
 
-## Estado vigente - 2026-07-29
+## Estado vigente - 2026-07-30
+
+- Auditoría ISO/IEC 25010:2023, OWASP ASVS 5.0 L2, NIST SSDF 1.1 e ISO/IEC
+  25059:2023 documentada en `docs/`.
+- Validación automatizada: 77 pruebas correctas, 2 omitidas, cobertura 63%,
+  Ruff 0, Bandit 0 y pip-audit 0 vulnerabilidades conocidas.
+- Frontend: build Vite correcto con React Router 7.18.2. npm audit conserva un
+  advisory alto duplicado para modo RSC; este SPA no usa RSC/SSR/actions.
+- Alembic: una cabeza local `c2d3e4f5a6b7`; Neon permanece en
+  `b1c2d3e4f5a6` hasta un despliegue autorizado. No aplicar código sin upgrade.
+- Decisión de release: NO-GO hasta rotar secretos históricos, aplicar/verificar
+  migración y ejecutar E2E real de servicios, cámara y barrera.
 
 - Foco actual: OCR local y sugerencias conservadoras de color y tipo vehicular
   para cargas estaticas y solicitudes de registro.
@@ -26,8 +37,8 @@
   permanece editable por el operador en la bandeja de solicitudes.
 - Base de datos: la nueva instancia Neon esta en Alembic `b1c2d3e4f5a6 (head)`;
   Automovil, Motocicleta, Bus y Camion estan activos y sin UUID hardcodeados.
-- Validacion mas reciente: 76 pruebas correctas, 2 omitidas, build Vite correcto
-  y grafo Alembic con una sola cabeza `a0b1c2d3e4f5`.
+- Validacion mas reciente: 77 pruebas correctas, 2 omitidas, build Vite y smoke
+  HTTP correctos; grafo Alembic con una sola cabeza `c2d3e4f5a6b7`.
 - Licencias seleccionadas: OpenCV/RF-DETR Nano Apache-2.0; Supervision,
   Open Image Models, ONNX Runtime y CLIP MIT. Conservar avisos de terceros.
 - Limitaciones: las capturas reales disponibles son insuficientes para calibrar

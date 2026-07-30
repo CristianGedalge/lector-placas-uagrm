@@ -11,7 +11,7 @@ function Sidebar({ isOpen, onClose }) {
 
   if (user?.rol === "ADMINISTRADOR") {
     links.push(
-      { to: "/", label: "Dashboard" },
+      { to: "/dashboard", label: "Dashboard" },
       { to: "/subir-placa", label: "Escanear Placas" },
       { to: "/vehiculos", label: "Gestionar Vehiculos" },
       { to: "/usuarios", label: "Gestionar Usuarios" },

@@ -1,26 +1,30 @@
 from uuid import UUID
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from cachetools import TTLCache
-
 from app.config.settings import settings
-from app.core.security import ALGORITHM, create_access_token, hash_password, verify_password
+from app.core.limiter import limiter
+from app.core.security import (
+    ALGORITHM,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from app.db.models import RoleEnum, Usuario
 from app.db.session import get_db
 from app.schemas.auth import (
     AuthResponse,
-    UsuarioResponse,
+    UsuarioAdminUpdateRequest,
     UsuarioLoginRequest,
     UsuarioProfileUpdateRequest,
     UsuarioRegisterRequest,
-    UsuarioAdminUpdateRequest,
+    UsuarioResponse,
 )
-from app.core.limiter import limiter
+from cachetools import TTLCache
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
@@ -61,13 +65,14 @@ async def get_current_user(
 
     try:
         payload = jwt.decode(active_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Token invalido.")
+    except (jwt.PyJWTError, ValueError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token invalido.",
         )
-
-    user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,7 +118,7 @@ async def get_current_user_optional(
         user = await _get_cached_user(user_uuid, db)
         if user and user.esta_activo:
             return user
-    except Exception:
+    except (jwt.PyJWTError, ValueError):
         return None
     return None
 
@@ -221,7 +226,7 @@ async def login_user(
         key="session_token",
         value=access_token,
         httponly=True,
-        secure=False,
+        secure=not settings.DEBUG,
         samesite="lax",
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         path="/",
@@ -362,4 +367,3 @@ async def delete_user_by_admin(
     await db.delete(user)
     await db.commit()
     user_cache.pop(user.id, None)
-    return

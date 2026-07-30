@@ -5,13 +5,13 @@ Revises: 6784f2a204a1
 Create Date: 2026-07-24
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "9d8f2a1c4b77"
-down_revision: Union[str, Sequence[str], None] = "6784f2a204a1"
+down_revision: str | Sequence[str] | None = "6784f2a204a1"
 branch_labels = None
 depends_on = None
 

@@ -1,17 +1,14 @@
-import json
 import uuid
-from typing import List
 
+from app.api.v1.auth import get_current_user, require_admin
+from app.db.models import Marca, RoleEnum, TipoVehiculo, Usuario, Vehiculo
+from app.db.session import get_db
+from app.schemas.vehicle import VehiculoCreate, VehiculoResponse
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-
-from app.db.models import RoleEnum, Vehiculo, Usuario, Marca, TipoVehiculo
-from app.db.session import get_db
-from app.schemas.vehicle import VehiculoCreate, VehiculoResponse
-from app.api.v1.auth import get_current_user, require_admin, require_staff
 
 router = APIRouter()
 
@@ -29,7 +26,7 @@ async def get_vehicle_with_relations(vehicle_id: uuid.UUID, db: AsyncSession):
     return result.scalars().first()
 
 
-@router.get("/", response_model=List[VehiculoResponse])
+@router.get("/", response_model=list[VehiculoResponse])
 async def list_vehicles(
     propietario_usuario_id: str | None = None,
     skip: int = 0,
@@ -78,17 +75,16 @@ async def get_vehicle_by_plate(plate: str, db: AsyncSession = Depends(get_db), c
 
 
 from app.schemas.vehicle import (
-    VehiculoCreate,
-    VehiculoResponse,
-    MarcaResponse,
-    TipoVehiculoResponse,
     MarcaCreate,
-    TipoVehiculoCreate
+    MarcaResponse,
+    TipoVehiculoCreate,
+    TipoVehiculoResponse,
+    VehiculoResponse,
 )
 
 # ...
 
-@router.get("/brands", response_model=List[MarcaResponse])
+@router.get("/brands", response_model=list[MarcaResponse])
 async def list_brands(db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     result = await db.execute(select(Marca).order_by(Marca.nombre))
     return list(result.scalars().all())
@@ -147,7 +143,7 @@ async def delete_brand(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/types", response_model=List[TipoVehiculoResponse])
+@router.get("/types", response_model=list[TipoVehiculoResponse])
 async def list_vehicle_types(db: AsyncSession = Depends(get_db), current_user: Usuario = Depends(get_current_user)):
     result = await db.execute(
         select(TipoVehiculo).where(TipoVehiculo.esta_activo.is_(True)).order_by(TipoVehiculo.nombre)
@@ -218,12 +214,14 @@ async def get_vehicle_detail(vehicle_id: uuid.UUID, db: AsyncSession = Depends(g
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Vehículo no encontrado.",
         )
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]:
-        if vehicle.propietario_usuario_id != current_user.id:
-            raise HTTPException(
+    if (
+        current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.DISPOSITIVO]
+        and vehicle.propietario_usuario_id != current_user.id
+    ):
+        raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para ver los detalles de este vehículo.",
-            )
+        )
     return vehicle
 
 
@@ -299,12 +297,14 @@ async def update_vehicle(
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehículo no encontrado.")
 
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]:
-        if vehicle.propietario_usuario_id != current_user.id:
-            raise HTTPException(
+    if (
+        current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]
+        and vehicle.propietario_usuario_id != current_user.id
+    ):
+        raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para actualizar este vehículo.",
-            )
+        )
 
     owner_result = await db.execute(select(Usuario).where(Usuario.id == vehicle_in.propietario_usuario_id))
     owner = owner_result.scalars().first()
@@ -363,12 +363,14 @@ async def delete_vehicle(
     if not vehicle:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vehículo no encontrado.")
 
-    if current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]:
-        if vehicle.propietario_usuario_id != current_user.id:
-            raise HTTPException(
+    if (
+        current_user.rol not in [RoleEnum.ADMINISTRADOR, RoleEnum.OPERADOR]
+        and vehicle.propietario_usuario_id != current_user.id
+    ):
+        raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No tienes permiso para eliminar este vehículo.",
-            )
+        )
 
     await db.delete(vehicle)
     await db.commit()

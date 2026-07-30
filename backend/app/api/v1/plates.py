@@ -1,33 +1,56 @@
-import uuid
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends, BackgroundTasks
-from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload
-from app.schemas.plate import PlateAnalysisResponse, EscaneadoResponse
+
 from app.ai.pipeline import analyze_plate, get_pipeline_status
-from app.core.limiter import limiter
-from app.db.session import get_db
-from app.db.models import (
-    Usuario, Escaneado, RoleEnum, Vehiculo, EstadoEscaneoEnum,
-    Acceso, ArchivoMultimedia, EstadoCampus, Dispositivo,
-    TipoAccesoEnum, UbicacionVehiculoEnum, MediaProviderEnum,
-    MediaTypeEnum, MediaStatusEnum, SolicitudRegistroEstadoEnum, SolicitudRegistroVehiculo,
-    TipoVehiculo,
-)
-from app.services.image_processing import ImageProcessingService, ImageProcessingError
-from app.services.cloudinary_storage import CloudinaryStorage
-from app.services.storage import StorageError
 from app.api.v1.auth import get_current_user, get_current_user_optional
+from app.config.settings import settings
+from app.core.limiter import limiter
+from app.db.models import (
+    Acceso,
+    ArchivoMultimedia,
+    Dispositivo,
+    Escaneado,
+    EstadoCampus,
+    EstadoEscaneoEnum,
+    MediaProviderEnum,
+    MediaStatusEnum,
+    MediaTypeEnum,
+    RoleEnum,
+    SolicitudRegistroEstadoEnum,
+    SolicitudRegistroVehiculo,
+    TipoAccesoEnum,
+    TipoVehiculo,
+    UbicacionVehiculoEnum,
+    Usuario,
+    Vehiculo,
+)
+from app.db.session import get_db
+from app.schemas.plate import EscaneadoResponse, PlateAnalysisResponse
+from app.services.cloudinary_storage import CloudinaryStorage
+from app.services.image_processing import ImageProcessingError, ImageProcessingService
 from app.services.media_tasks import process_media_record, spool_directory
+from app.services.storage import StorageError
 from app.services.vehicle_color import HybridVehicleColorAnalyzer
 from app.services.vehicle_detection import VehicleAssociationService
 from app.services.vehicle_type import VehicleTypeResult, VehicleTypeSuggester
-from app.config.settings import settings
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +67,7 @@ async def _trigger_barrier_webhook(url: str, direction: str) -> None:
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             await client.post(url, json={"action": "open", "direction": direction})
-    except Exception:
+    except httpx.HTTPError:
         pass  # Barrera offline no es error critico del sistema
 
 
@@ -332,12 +355,12 @@ async def analyze_plate_endpoint(
                 else:
                     solicitud_id = pending.id
             await db.commit()
-        except (ImageProcessingError, StorageError):
+        except (ImageProcessingError, StorageError, SQLAlchemyError):
             await db.rollback()
             raise HTTPException(status_code=503, detail="No se pudo guardar la evidencia de la solicitud")
-        except Exception as exc:
+        except Exception:
             await db.rollback()
-            logger.error("Error inesperado al persistir escaneo/solicitud: %s", exc, exc_info=True)
+            logger.exception("Error inesperado al persistir escaneo/solicitud")
             return JSONResponse(
                 status_code=500,
                 content=PlateAnalysisResponse(

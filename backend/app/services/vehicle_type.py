@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
+from typing import ClassVar
 from uuid import UUID
 
 from app.services.vehicle_detection import VehicleAssociation
@@ -15,7 +16,7 @@ class VehicleTypeResult:
 
 
 class VehicleTypeSuggester:
-    ALIASES = {
+    ALIASES: ClassVar[dict[str, set[str]]] = {
         "car": {"AUTOMOVIL", "AUTO", "COCHE", "VEHICULO LIVIANO"},
         "motorcycle": {"MOTOCICLETA", "MOTO", "SCOOTER"},
         "bus": {"BUS", "AUTOBUS"},

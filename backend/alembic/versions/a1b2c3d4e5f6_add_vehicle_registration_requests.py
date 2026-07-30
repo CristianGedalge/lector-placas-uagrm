@@ -1,10 +1,11 @@
 """add unknown vehicle registration requests"""
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = "a1b2c3d4e5f6"
-down_revision: Union[str, Sequence[str], None] = "3aa735770818"
+down_revision: str | Sequence[str] | None = "3aa735770818"
 branch_labels = None
 depends_on = None
 

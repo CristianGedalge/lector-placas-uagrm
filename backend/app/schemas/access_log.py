@@ -1,8 +1,8 @@
 from datetime import datetime
 from uuid import UUID
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, model_validator
+
 from app.db.models import MediaStatusEnum, TipoAccesoEnum
+from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class AccesoCreate(BaseModel):
@@ -30,7 +30,7 @@ class AccesoResponse(BaseModel):
     direction: str
     zone: str
     timestamp: datetime
-    vehicle: Optional[dict] = None
+    vehicle: dict | None = None
     image_id: UUID | None = None
     image_status: MediaStatusEnum | None = None
 

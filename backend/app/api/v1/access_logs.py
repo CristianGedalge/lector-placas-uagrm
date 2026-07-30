@@ -2,22 +2,40 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from app.api.v1.auth import get_current_user
+from app.config.settings import settings
+from app.db.models import (
+    Acceso,
+    ArchivoMultimedia,
+    Dispositivo,
+    Escaneado,
+    EstadoCampus,
+    EstadoEscaneoEnum,
+    MediaProviderEnum,
+    MediaStatusEnum,
+    MediaTypeEnum,
+    RoleEnum,
+    TipoAccesoEnum,
+    UbicacionVehiculoEnum,
+    Vehiculo,
+)
+from app.db.session import get_db
+from app.schemas.access_log import AccesoAutoCreate, AccesoCreate, AccesoResponse
+from app.schemas.media import AccessCreationResponse
+from app.services.media_tasks import process_media_record, spool_directory
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload, contains_eager
-
-from app.db.models import (
-    Acceso, ArchivoMultimedia, Escaneado, MediaProviderEnum, MediaStatusEnum,
-    MediaTypeEnum, RoleEnum, TipoAccesoEnum, EstadoCampus,
-    UbicacionVehiculoEnum, Dispositivo, Vehiculo, EstadoEscaneoEnum
-)
-from app.config.settings import settings
-from app.db.session import get_db
-from app.schemas.access_log import AccesoCreate, AccesoResponse, AccesoAutoCreate
-from app.schemas.media import AccessCreationResponse
-from app.api.v1.auth import get_current_user
-from app.services.media_tasks import process_media_record, spool_directory
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
