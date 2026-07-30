@@ -51,13 +51,17 @@ export default function VehicleRegistrationRequests() {
   }, [load]);
 
   const open = (item) => {
+    const suggestedColor = item.color_sugerido && item.color_sugerido !== "DESCONOCIDO"
+      ? item.color_sugerido
+      : "";
     setSelected(item);
     setForm({
       ...emptyForm,
       placa: item.placa_sugerida,
       propietario_usuario_id: users[0]?.id || "",
       marca_id: brands[0]?.id || "",
-      tipo_vehiculo_id: types[0]?.id || ""
+      tipo_vehiculo_id: types[0]?.id || "",
+      color: suggestedColor
     });
     setError("");
   };
@@ -196,8 +200,22 @@ export default function VehicleRegistrationRequests() {
                   ))}
                 </select>
               </label>
-              <label>Color
+              <label>Color sugerido
                 <input value={form.color} onChange={e => update("color", e.target.value)} required />
+                <small className="muted-text">
+                  Sugerencia automática editable; confirma el color observando la evidencia.
+                </small>
+              </label>
+              <label>Confianza del color
+                <input
+                  value={selected.confianza_color != null
+                    ? `${Math.round(selected.confianza_color * 100)}%`
+                    : "No disponible"}
+                  readOnly
+                />
+                <small className="muted-text">
+                  Método: {selected.metodo_color || "No disponible"}
+                </small>
               </label>
             </div>
             <div className="modal-actions">

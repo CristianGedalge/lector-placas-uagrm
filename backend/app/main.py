@@ -24,6 +24,11 @@ try:
 except ImportError:  # pragma: no cover - depends on the installed environment
     ALPR = None
 
+try:
+    from open_image_models.detection.factory import create_detector
+except ImportError:  # pragma: no cover
+    create_detector = None
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +44,7 @@ from app.api.v1.barrier import router as barrier_router
 from app.api.v1.registration_requests import router as registration_requests_router
 from app.config.settings import settings
 from app.db.session import database_target
+from app.services.clip_color import CLIPColorClassifier
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +63,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         target["database"],
     )
     app.state.fast_alpr_engine = None
+    app.state.vehicle_detector = None
+    app.state.clip_color_classifier = None
     if ALPR is None:
         logger.error("FastALPR/FastPlateOCR no esta instalado.")
     else:
@@ -79,9 +87,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.exception("FastALPR/FastPlateOCR no pudo inicializarse: %s", exc)
 
+    try:
+        if create_detector is None:
+            raise RuntimeError("open-image-models no esta instalado")
+        app.state.vehicle_detector = create_detector(
+            settings.VEHICLE_DETECTOR_MODEL,
+            conf_thresh=settings.VEHICLE_DETECTOR_CONFIDENCE,
+            providers=[settings.FAST_ALPR_EXECUTION_PROVIDER],
+        )
+        app.state.clip_color_classifier = CLIPColorClassifier()
+        logger.info("Color vehicular listo: OpenCV + CLIP local, detector=%s", settings.VEHICLE_DETECTOR_MODEL)
+    except Exception as exc:
+        logger.exception("Detector vehicular/CLIP no pudo inicializarse: %s", exc)
+
     app.state.ocr_engine_name = "fast_alpr" if app.state.fast_alpr_engine is not None else "unavailable"
     yield
-    for state_name in ("fast_alpr_engine", "ocr_engine_name"):
+    for state_name in ("fast_alpr_engine", "vehicle_detector", "clip_color_classifier", "ocr_engine_name"):
         if hasattr(app.state, state_name):
             delattr(app.state, state_name)
 

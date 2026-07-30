@@ -23,6 +23,7 @@ from app.services.cloudinary_storage import CloudinaryStorage
 from app.services.storage import StorageError
 from app.api.v1.auth import get_current_user, get_current_user_optional
 from app.services.media_tasks import process_media_record, spool_directory
+from app.services.vehicle_color import HybridVehicleColorAnalyzer
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,20 @@ async def analyze_plate_endpoint(
     acceso_id = None
     tipo_acceso_registrado = None
     solicitud_id = None
+    color_result = None
+
+    # Una imagen estatica obtiene sugerencia aunque la placa ya este registrada,
+    # el OCR requiera revision o no termine creando una solicitud. El modo
+    # realtime evita ejecutar detector vehicular + CLIP en cada frame.
+    if not realtime and result_dict.get("plate_bbox"):
+        vehicle_detector = getattr(request.app.state, "vehicle_detector", None)
+        clip_classifier = getattr(request.app.state, "clip_color_classifier", None)
+        if vehicle_detector is not None and clip_classifier is not None:
+            color_result = await run_in_threadpool(
+                HybridVehicleColorAnalyzer(vehicle_detector, clip_classifier).analyze,
+                image_bytes,
+                result_dict.get("plate_bbox"),
+            )
     # El análisis anónimo devuelve solo el resultado OCR. Consultas de vehículos,
     # escaneos, accesos y evidencias requieren una identidad autenticada.
     if status_val in ["DETECTED", "LOW_CONFIDENCE"] and current_user is not None:
@@ -277,7 +292,17 @@ async def analyze_plate_endpoint(
                     uploaded = await run_in_threadpool(CloudinaryStorage().upload, processed.content, MediaTypeEnum.VEHICLE_REGISTRATION.value)
                     media = ArchivoMultimedia(proveedor=MediaProviderEnum.CLOUDINARY, tipo=MediaTypeEnum.VEHICLE_REGISTRATION, estado=MediaStatusEnum.READY, asset_id=uploaded.asset_id, public_id=uploaded.public_id, resource_type=uploaded.resource_type, delivery_type=uploaded.delivery_type, formato=uploaded.format, ancho=uploaded.width, alto=uploaded.height, peso_bytes=uploaded.bytes, intentos=1)
                     db.add(media); await db.flush()
-                    solicitud = SolicitudRegistroVehiculo(escaneado_id=scan.id, imagen_id=media.id, placa_sugerida=normalized, confianza_placa=scan.confianza or 0.0, estado=SolicitudRegistroEstadoEnum.PENDING, creado_por_usuario_id=current_user.id)
+                    solicitud = SolicitudRegistroVehiculo(
+                        escaneado_id=scan.id,
+                        imagen_id=media.id,
+                        placa_sugerida=normalized,
+                        confianza_placa=scan.confianza or 0.0,
+                        color_sugerido=color_result.color_sugerido if color_result else "DESCONOCIDO",
+                        confianza_color=color_result.confianza_color if color_result else 0.0,
+                        metodo_color=color_result.metodo_color if color_result else "DESCONOCIDO",
+                        estado=SolicitudRegistroEstadoEnum.PENDING,
+                        creado_por_usuario_id=current_user.id,
+                    )
                     db.add(solicitud); await db.flush(); solicitud_id = solicitud.id
                 else:
                     solicitud_id = pending.id
@@ -315,6 +340,15 @@ async def analyze_plate_endpoint(
         propietario_nombre=(
             f"{vehicle.propietario.nombre} {vehicle.propietario.apellido_paterno}".strip()
             if (vehicle and vehicle.propietario and current_user is not None) else None
+        ),
+        color_sugerido=color_result.color_sugerido if color_result else (
+            "DESCONOCIDO" if not realtime else None
+        ),
+        confianza_color=color_result.confianza_color if color_result else (
+            0.0 if not realtime else None
+        ),
+        metodo_color=color_result.metodo_color if color_result else (
+            "DESCONOCIDO" if not realtime else None
         ),
         mensaje=("Vehiculo desconocido. Solicitud enviada a revision" if solicitud_id else result_dict.get("message"))
     )

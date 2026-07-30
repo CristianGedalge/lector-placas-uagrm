@@ -1,5 +1,28 @@
 # MEMORY
 
+## 2026-07-29 - FastPlateOCR y sugerencia local de color
+
+- EasyOCR fue retirado. El OCR vigente usa FastALPR 0.4.0 con detector YOLOv9
+  local y FastPlateOCR 1.1.0 (`cct-xs-v2-global-model`) sobre ONNX Runtime CPU.
+- La sugerencia de color usa RF-DETR Nano COCO para asociar una caja real del
+  vehiculo con la placa. Sin caja confiable devuelve `DESCONOCIDO`.
+- OpenCV HSV/LAB, mascaras y K-Means actua primero. CLIP ViT-B/32 ONNX INT8
+  compara un catalogo cerrado de nueve colores solo en capturas estaticas dudosas.
+- Se rechazan recortes con iluminacion insuficiente, sobreexposicion, reflejos o
+  desacuerdo sin separacion clara. La cobertura de un cluster no se trata como
+  confianza por si sola.
+- Se guardan exclusivamente `color_sugerido`, `confianza_color` y
+  `metodo_color`; las migraciones de JSON estructurado fueron revertidas y
+  Alembic quedo en `f0a1b2c3d4e5 (head)`.
+- La carga estatica devuelve color aunque no cree una solicitud o el OCR quede
+  en baja confianza. Realtime no ejecuta CLIP por fotograma.
+- Frontend muestra color, confianza y metodo tras una carga, y conserva edicion
+  manual en solicitudes. Marca, modelo y tipo no se predicen.
+- Validacion: 66 pruebas correctas, 2 omitidas, build Vite y arranque de los tres
+  motores locales correctos. No se hizo push ni merge.
+- Pendiente: calibrar con un conjunto propio de camaras finales; las dos imagenes
+  disponibles no cubren noche, movimiento ni todos los colores.
+
 ## 2026-07-28 - Integración de cambios de main y Beto
 
 - Se integraron las mejoras de seguridad, robustez y documentación de main con el flujo de Beto.
@@ -95,10 +118,6 @@
 - **Mapeo de Errores Pydantic (auth.js)**: Se modificó `mapAuthError` para interceptar respuestas Pydantic del backend y traducirlas a mensajes amigables en español.
 - **Carga de Fotos de Vehículos (Vehicles.jsx / Profile.jsx)**: Se implementó la subida opcional de fotos privadas de vehículos al registrarlos o editarlos en el panel de gestión. Se añadió también la sección "Mis Vehículos Registrados" en la vista de perfil (`Profile.jsx`) para que los usuarios visualicen y carguen/eliminen fotos directamente desde allí.
 
-<<<<<<< HEAD
->>>>>>> Stashed changes
-=======
->>>>>>> origin/main
 ## 2026-07-25 - Validacion integral local/Docker, Neon, Cloudinary y datos operativos
 
 - PostgreSQL es externo: Compose usa `backend/.env`, no sobrescribe

@@ -43,4 +43,7 @@ class PlateAnalysisResponse(BaseModel):
     tipo_acceso: Optional[str] = None  # ENTRADA | SALIDA
     es_registrado: bool = False
     propietario_nombre: Optional[str] = None
+    color_sugerido: Optional[str] = None
+    confianza_color: Optional[float] = None
+    metodo_color: Optional[str] = None
 

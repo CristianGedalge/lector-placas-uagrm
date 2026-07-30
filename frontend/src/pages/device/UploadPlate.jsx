@@ -1260,6 +1260,15 @@ function UploadPlate() {
                     {" "}(confianza: {Math.round((analysisPreview.confianza || 0) * 100)}%)
                   </p>
                 )}
+                {analysisPreview.color_sugerido && (
+                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>
+                    Color sugerido: <strong>{analysisPreview.color_sugerido}</strong>
+                    {analysisPreview.confianza_color != null && (
+                      <> ({Math.round(analysisPreview.confianza_color * 100)}%)</>
+                    )}
+                    {analysisPreview.metodo_color && <> · Método: {analysisPreview.metodo_color}</>}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1439,6 +1448,15 @@ function UploadPlate() {
                   <p className="muted-text" style={{ marginTop: "1rem" }}>
                     Texto OCR: <strong>{analysisPreview.placa_detectada}</strong>
                     {" "}(confianza: {Math.round((analysisPreview.confianza || 0) * 100)}%)
+                  </p>
+                )}
+                {analysisPreview.color_sugerido && (
+                  <p className="muted-text" style={{ marginTop: "0.5rem" }}>
+                    Color sugerido: <strong>{analysisPreview.color_sugerido}</strong>
+                    {analysisPreview.confianza_color != null && (
+                      <> ({Math.round(analysisPreview.confianza_color * 100)}%)</>
+                    )}
+                    {analysisPreview.metodo_color && <> · Método: {analysisPreview.metodo_color}</>}
                   </p>
                 )}
               </div>

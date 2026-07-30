@@ -8,7 +8,10 @@ Backend y base de coordinacion del proyecto "Lector de Placas UAGRM". El objetiv
 
 - Backend: FastAPI
 - Base de datos: PostgreSQL + SQLAlchemy + Alembic
-- IA actual: OpenCV + EasyOCR + Supervision, completamente local
+- OCR local: FastALPR (detector YOLOv9) + FastPlateOCR sobre ONNX Runtime
+- Color vehicular: RF-DETR Nano para caja real + OpenCV HSV/LAB/K-Means +
+  CLIP ViT-B/32 ONNX cuantizado como respaldo conservador
+- Supervision: representacion, recorte y anotacion de detecciones
 - Captura automatica: agente separado para webcam USB o RTSP
 - Medios privados: Cloudinary autenticado con WebP y URLs temporales firmadas
 - Frontend separado: React 18 + JavaScript/JSX + CSS, construido con Vite
@@ -85,13 +88,24 @@ Al cerrar una sesion:
 
 ## Reglas de IA
 
-- EasyOCR es responsable de localizar y leer texto.
-- Supervision representa, filtra, recorta y anota los resultados de EasyOCR; no es un motor OCR.
-- El pipeline no usa detectores, entrenamiento, datasets ni servicios cloud.
+- FastALPR localiza placas y FastPlateOCR reconoce sus caracteres; EasyOCR fue
+  retirado y no debe reintroducirse sin una decision explicita.
+- Supervision representa, recorta y anota resultados; no es un motor OCR ni un
+  clasificador de color.
+- RF-DETR Nano se usa para obtener una caja real del vehiculo asociada con la
+  placa. Sin una caja confiable, el color debe ser `DESCONOCIDO`.
+- OpenCV es la primera evaluacion de color. CLIP local solo actua como respaldo
+  en imagenes estaticas ambiguas; el polling realtime no ejecuta CLIP por frame.
+- El catalogo de color es cerrado: BLANCO, NEGRO, GRIS, PLATEADO, ROJO, AZUL,
+  VERDE, AMARILLO y MARRON. Un resultado dudoso nunca debe forzar una clase.
+- No implementar marca, modelo o tipo con CLIP sin una solicitud explicita.
+- Los tres campos persistidos son `color_sugerido`, `confianza_color` y
+  `metodo_color`; no guardar arrays JSON de colores.
 - Preferir una ROI configurada para camaras fijas y reducir falsos positivos.
 - Preferir rutas portables con `pathlib.Path`.
 - Mantener la matriz documentada en `.agents/compatibility/supervision.md`.
-- No ampliar versiones de Supervision, EasyOCR, NumPy u OpenCV sin ejecutar el verificador.
+- No cambiar Supervision, FastALPR, FastPlateOCR, ONNX Runtime, NumPy u OpenCV
+  sin actualizar la matriz y ejecutar el verificador.
 - La captura automatica debe ejecutarse fuera del proceso FastAPI y reutilizar `POST /api/v1/plates/analyze`.
 - No usar `cv2.imshow()` ni registrar URLs RTSP, porque pueden contener credenciales.
 

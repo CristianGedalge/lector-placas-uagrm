@@ -9,12 +9,16 @@ class SolicitudRegistroResponse(BaseModel):
     imagen_id: UUID
     placa_sugerida: str
     confianza_placa: float
+    color_sugerido: str | None = None
+    confianza_color: float | None = None
+    metodo_color: str | None = None
     estado: SolicitudRegistroEstadoEnum
     creado_por_usuario_id: UUID
     revisado_por_usuario_id: UUID | None = None
     vehiculo_creado_id: UUID | None = None
     creado_el: datetime
     revisado_el: datetime | None = None
+
     model_config = ConfigDict(from_attributes=True)
 
 class SolicitudRegistroApprove(BaseModel):

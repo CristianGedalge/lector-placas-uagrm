@@ -1,16 +1,19 @@
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-import pytest
 from starlette.requests import Request
 
 from app.api.v1.auth import get_current_user_optional, user_cache
 from app.core.security import create_access_token
 
 
-@pytest.mark.asyncio
-async def test_optional_auth_accepts_mobile_bearer_token():
+def test_optional_auth_accepts_mobile_bearer_token():
+    asyncio.run(_assert_optional_auth_accepts_mobile_bearer_token())
+
+
+async def _assert_optional_auth_accepts_mobile_bearer_token():
     user_cache.clear()
     user_id = uuid4()
     user = SimpleNamespace(id=user_id, esta_activo=True)

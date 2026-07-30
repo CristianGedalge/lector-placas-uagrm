@@ -1,5 +1,19 @@
 # Backlog
 
+## Arquitectura vigente (2026-07-29)
+
+Las entradas historicas `AI-002`, `AI-003`, `AI-004`, `COMPAT-001`,
+`DOCKER-OCR-001` y `LOCAL-004` que mencionan EasyOCR/PyTorch quedaron
+superseded por los items siguientes. Se conservan debajo solo como historial.
+
+- `OCR-FASTPLATE-001` | `done` | Prioridad `alta` | Sustituir EasyOCR por FastALPR + FastPlateOCR local sobre ONNX CPU | Dependencias: `AI-001`
+- `COMPAT-002` | `done` | Prioridad `alta` | Actualizar matriz y verificador a FastALPR/FastPlateOCR/RF-DETR/CLIP/ONNX | Dependencias: `OCR-FASTPLATE-001`
+- `COLOR-001` | `done` | Prioridad `alta` | Sugerir color con caja RF-DETR real, OpenCV principal y CLIP local de respaldo | Dependencias: `OCR-FASTPLATE-001`
+- `COLOR-DB-001` | `done` | Prioridad `alta` | Persistir solo color_sugerido, confianza_color y metodo_color; retirar JSON estructurado | Dependencias: `COLOR-001`
+- `COLOR-UPLOAD-001` | `done` | Prioridad `alta` | Analizar y devolver color en cargas estaticas aunque no se cree solicitud | Dependencias: `COLOR-001`
+- `COLOR-CALIBRATION-001` | `blocked` | Prioridad `alta` | Evaluar precision selectiva con capturas propias de dia, noche, movimiento, reflejos y todos los colores | Dependencias: camaras y vehiculos reales
+- `COLOR-SIGLIP-001` | `pending` | Prioridad `baja` | Comparar CLIP contra SigLIP solo si el conjunto real justifica el costo adicional | Dependencias: `COLOR-CALIBRATION-001`
+
 - `DB-EXT-001` | `done` | Prioridad `alta` | PostgreSQL externo usando solo DATABASE_URL | Dependencias: ninguna
 - `DOCKER-SEC-001` | `done` | Prioridad `critica` | Excluir secretos y artefactos de contextos Docker | Dependencias: ninguna
 - `DOCKER-OCR-001` | `done` | Prioridad `alta` | PyTorch CPU y OpenCV headless en backend | Dependencias: COMPAT-001

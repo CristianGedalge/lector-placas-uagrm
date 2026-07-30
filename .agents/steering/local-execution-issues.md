@@ -1,5 +1,14 @@
 # Issues de ejecucion local - 2026-07-14
 
+## Estado de arquitectura - 2026-07-29
+
+- EasyOCR y PyTorch fueron retirados del runtime.
+- El pipeline vigente es `FAST_ALPR_FAST_PLATE_OCR` sobre ONNX Runtime.
+- Supervision conserva recortes/anotaciones; RF-DETR Nano obtiene la caja del
+  vehiculo y CLIP ONNX respalda la sugerencia de color.
+- Las incidencias historicas que mencionan EasyOCR se conservan como trazabilidad
+  y no describen el runtime vigente.
+
 ## LOCAL-001 - Cache global de Matplotlib no escribible
 
 - Estado: resuelto.
